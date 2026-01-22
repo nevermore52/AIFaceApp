@@ -1974,14 +1974,12 @@ func (b *Bot) handleCallback(callback *tgbotapi.CallbackQuery) {
 			return
 		}
 		b.sendBuySubscription(chatID)
-	case "sub:mini":
-		b.handleSubscriptionStub(chatID, userID, "mini")
-	case "sub:start":
-		b.handleSubscriptionStub(chatID, userID, "start")
-	case "sub:pro":
-		b.handleSubscriptionStub(chatID, userID, "pro")
-	case "sub:none":
-		b.handleSubscriptionStub(chatID, userID, "")
+	case "buy_sub:mini":
+		b.sendBuySubscriptionPayment(chatID, userID, "mini")
+	case "buy_sub:start":
+		b.sendBuySubscriptionPayment(chatID, userID, "start")
+	case "buy_sub:pro":
+		b.sendBuySubscriptionPayment(chatID, userID, "pro")
 	case "buy:text":
 		if !b.ensureCategoryEnabled(chatID, ModelCategoryChat) {
 			return
@@ -2059,12 +2057,6 @@ func (b *Bot) handleCallback(callback *tgbotapi.CallbackQuery) {
 		if err := b.toggleSubscriptions(chatID); err != nil {
 			b.sendErrorMessage(chatID, "Не удалось переключить подписки")
 		}
-	case "sub:info":
-		b.sendSubscriptionInfo(chatID, userID)
-	case "sub:disable":
-		// Заглушка: автопродление выключено, подписка остается до конца оплаченного периода
-		b.sendText(chatID, "✅ Автопродление отключено . Подписка действует до даты окончания.")
-		b.sendSubscriptionInfo(chatID, userID)
 	case "admin:help":
 		if !b.ensureAdmin(chatID, userID) {
 			return
@@ -2461,8 +2453,7 @@ func (b *Bot) sendMainMenu(chatID int64, userID int64) {
 
 	text := fmt.Sprintf(`🍌 Ваш айди: %d
 ⭐ Тип подписки: %s
-🧠 Текущая модель: %s %s — %s
-🔄 Автопродление: ❌`,
+🧠 Текущая модель: %s %s — %s`,
 		userID,
 		subLabel,
 		currentCategory,
@@ -2481,14 +2472,6 @@ func (b *Bot) sendMainMenu(chatID int64, userID int64) {
 			tgbotapi.NewInlineKeyboardButtonData("🧠 Выбрать модель", "models_menu"),
 		),
 	)
-	// Если есть активная подписка — показываем кнопку управления
-	if lbl, ok, _ := b.userService.GetSubscriptionInfo(userID); ok && lbl != "" && lbl != "Free" {
-		keyboard.InlineKeyboard = append(keyboard.InlineKeyboard,
-			tgbotapi.NewInlineKeyboardRow(
-				tgbotapi.NewInlineKeyboardButtonData(fmt.Sprintf("🪄 Подписка %s", lbl), "sub:info"),
-			),
-		)
-	}
 	// Админ-кнопка только для админов
 	if isAdmin, err := b.userService.IsUserAdmin(userID); err == nil && isAdmin {
 		b.setChatCommands(chatID, true)
@@ -2538,7 +2521,6 @@ func (b *Bot) sendAccount(chatID int64, userID int64) {
 		`ID Пользователя: %d
 ⭐ Тип подписки: %s
 📅 Действует до: %s
-💳 Метод оплаты: -
 ------------------------------
 📝 Текстовые генерации (24 ч): %d
 🖼️ Картинок осталось (нед): %d
@@ -2646,8 +2628,10 @@ func (b *Bot) sendBuyExtrasMenu(chatID int64) {
 	}
 }
 
-// sendBuySubscription отправляет информацию о покупке подписки
 func (b *Bot) sendBuySubscription(chatID int64) {
+	if !b.ensurePaymentsEnabled(chatID) {
+		return
+	}
 	if ok, _ := b.userService.IsSubscriptionsEnabled(); !ok {
 		b.sendErrorMessage(chatID, "Подписки временно недоступны")
 		return
@@ -2656,38 +2640,34 @@ func (b *Bot) sendBuySubscription(chatID int64) {
 	text := `⭐ Подписки
 
 ✨ Mini — 250 ₽ в неделю
-• 50 текстовых/день
-• 30 изображений/нед
-• 5 песен/нед
+• 50 текстовых/24ч
+• 30 изображений
+• 5 песен
 • Скидка 10% на доп. запросы
 
 🚀 Start — 550 ₽ в неделю
-• 100 текстовых/день
-• 70 изображений/нед
-• 10 песен/нед
-• 3 видео/нед
+• 100 текстовых/24ч
+• 70 изображений
+• 10 песен
+• x2 контекст
+• 3 видео
 • Скидка 20% на доп. запросы
 
 👑 Pro — 799 ₽ в неделю
-• 300 текстовых/день
-• 70 изображений/нед
-• 15 песен/нед
-• 7 видео/нед
+• 300 текстовых/24ч
+• 70 изображений
+• 15 песен
+• 7 видео
 • 6 стилей общения GPT, x3 контекст, без рекламы
-• Скидка 25% на доп. запросы
-
-Нажмите на план, чтобы выдать подписку сразу (без оплаты).`
+• Скидка 25% на доп. запросы`
 
 	keyboard := tgbotapi.NewInlineKeyboardMarkup(
 		tgbotapi.NewInlineKeyboardRow(
-			tgbotapi.NewInlineKeyboardButtonData("⭐ Mini", "sub:mini"),
-			tgbotapi.NewInlineKeyboardButtonData("🚀 Start", "sub:start"),
+			tgbotapi.NewInlineKeyboardButtonData("⭐ Mini", "buy_sub:mini"),
+			tgbotapi.NewInlineKeyboardButtonData("🚀 Start", "buy_sub:start"),
 		),
 		tgbotapi.NewInlineKeyboardRow(
-			tgbotapi.NewInlineKeyboardButtonData("👑 Pro", "sub:pro"),
-		),
-		tgbotapi.NewInlineKeyboardRow(
-			tgbotapi.NewInlineKeyboardButtonData("❌ Убрать подписку", "sub:none"),
+			tgbotapi.NewInlineKeyboardButtonData("👑 Pro", "buy_sub:pro"),
 		),
 		tgbotapi.NewInlineKeyboardRow(
 			tgbotapi.NewInlineKeyboardButtonData("◀️ Назад", "buy"),
@@ -2695,11 +2675,47 @@ func (b *Bot) sendBuySubscription(chatID int64) {
 		),
 	)
 
-	reply := tgbotapi.NewMessage(chatID, text)
-	reply.ReplyMarkup = keyboard
+	msg := tgbotapi.NewMessage(chatID, text)
+	msg.ReplyMarkup = keyboard
+	if _, err := b.api.Send(msg); err != nil {
+		log.Printf("Failed to send buy subscription: %v", err)
+	}
+}
 
-	if _, err := b.api.Send(reply); err != nil {
-		log.Printf("Failed to send buy subscription menu: %v", err)
+func (b *Bot) sendBuySubscriptionPayment(chatID int64, userID int64, plan string) {
+	if b.paymentService == nil {
+		b.sendErrorMessage(chatID, "Платёжный сервис не настроен")
+		return
+	}
+	if !b.ensurePaymentsEnabled(chatID) {
+		return
+	}
+	if ok, _ := b.userService.IsSubscriptionsEnabled(); !ok {
+		b.sendErrorMessage(chatID, "Подписки временно недоступны")
+		return
+	}
+
+	resp, err := b.paymentService.CreateSubscriptionPayment(userID, plan, 7)
+	if err != nil {
+		b.sendErrorMessage(chatID, fmt.Sprintf("Не удалось создать платеж: %v", err))
+		return
+	}
+
+	label := strings.Title(plan)
+	text := fmt.Sprintf("✅ Вы выбрали подписку %s.\nПерейдите по ссылке для оплаты:\n%s", label, resp.CheckoutURL)
+	keyboard := tgbotapi.NewInlineKeyboardMarkup(
+		tgbotapi.NewInlineKeyboardRow(
+			tgbotapi.NewInlineKeyboardButtonData("◀️ Назад к подпискам", "buy:sub"),
+		),
+		tgbotapi.NewInlineKeyboardRow(
+			tgbotapi.NewInlineKeyboardButtonData("🏠 Меню", "menu"),
+		),
+	)
+
+	msg := tgbotapi.NewMessage(chatID, text)
+	msg.ReplyMarkup = keyboard
+	if _, err := b.api.Send(msg); err != nil {
+		log.Printf("Failed to send buy subscription payment: %v", err)
 	}
 }
 
@@ -3286,6 +3302,13 @@ func (b *Bot) sendLongText(chatID int64, text string) {
 
 // notifyPaymentSuccess отправляет уведомление о зачислении запросов
 func (b *Bot) notifyPaymentSuccess(userID int64, category string, qty int) {
+	if strings.HasPrefix(category, "subscription:") {
+		plan := strings.TrimPrefix(category, "subscription:")
+		plan = strings.Title(plan)
+		text := fmt.Sprintf("✅ Подписка %s активирована!\nСрок: %d дней", plan, qty)
+		b.sendText(userID, text)
+		return
+	}
 	label := categoryLabelByKey(category)
 	if label == "" {
 		label = category
@@ -3295,6 +3318,7 @@ func (b *Bot) notifyPaymentSuccess(userID int64, category string, qty int) {
 }
 
 // sendSubscriptionInfo показывает инфо о текущей подписке и кнопки управления
+
 func (b *Bot) sendSubscriptionInfo(chatID int64, userID int64) {
 	lbl, ok, subEnd := b.userService.GetSubscriptionInfo(userID)
 	if !ok || lbl == "" || lbl == "Free" {
@@ -3306,11 +3330,8 @@ func (b *Bot) sendSubscriptionInfo(chatID int64, userID int64) {
 		msk := time.FixedZone("MSK", 3*3600)
 		endStr = subEnd.In(msk).Format("02.01.2006 15:04")
 	}
-	text := fmt.Sprintf("🪄 Подписка: %s\n📅 Действует до: %s\n\nАвтопродление: включено", lbl, endStr)
+	text := fmt.Sprintf("🪄 Подписка: %s\n📅 Действует до: %s", lbl, endStr)
 	kb := tgbotapi.NewInlineKeyboardMarkup(
-		tgbotapi.NewInlineKeyboardRow(
-			tgbotapi.NewInlineKeyboardButtonData("🛑 Отключить автопродление", "sub:disable"),
-		),
 		tgbotapi.NewInlineKeyboardRow(
 			tgbotapi.NewInlineKeyboardButtonData("🏠 Меню", "menu"),
 		),
@@ -3318,28 +3339,6 @@ func (b *Bot) sendSubscriptionInfo(chatID int64, userID int64) {
 	msg := tgbotapi.NewMessage(chatID, text)
 	msg.ReplyMarkup = kb
 	b.api.Send(msg)
-}
-
-// handleSubscriptionStub выдает/снимает подписку без оплаты
-func (b *Bot) handleSubscriptionStub(chatID int64, userID int64, subType string) {
-	const defaultDays = 7
-	// Гарантируем наличие пользователя
-	if _, err := b.userService.GetOrCreateUser(userID, "", "", "", ""); err != nil {
-		b.sendErrorMessage(chatID, "Не удалось создать пользователя")
-		return
-	}
-
-	if err := b.userService.SetSubscription(userID, subType, defaultDays); err != nil {
-		b.sendErrorMessage(chatID, "Не удалось обновить подписку")
-		return
-	}
-
-	status := "подписка снята"
-	if strings.TrimSpace(subType) != "" {
-		status = fmt.Sprintf("подписка %s активирована на %d дней", strings.Title(subType), defaultDays)
-	}
-	b.sendText(chatID, "✅ "+status)
-	b.sendAccount(chatID, userID)
 }
 
 // statusInfo возвращает emoji и текст статуса

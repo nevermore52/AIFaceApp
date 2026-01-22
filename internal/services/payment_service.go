@@ -14,6 +14,7 @@ type PaymentService struct {
 	provider    *payments.PaymentProvider
 	userService *UserService
 	priceTable  map[string]map[int]int
+	subPrices   map[string]int
 	notifier    func(userID int64, category string, qty int)
 }
 
@@ -51,6 +52,11 @@ func NewPaymentService(provider *payments.PaymentProvider, userService *UserServ
 				100: 3899,
 			},
 		},
+		subPrices: map[string]int{
+			"mini":  250,
+			"start": 550,
+			"pro":   799,
+		},
 	}
 }
 
@@ -79,6 +85,28 @@ func (s *PaymentService) CreateExtrasPayment(userID int64, category string, qty 
 	return s.provider.CreatePayment(req)
 }
 
+func (s *PaymentService) CreateSubscriptionPayment(userID int64, plan string, days int) (*payments.PaymentResponse, error) {
+	plan = strings.ToLower(strings.TrimSpace(plan))
+	price, ok := s.subPrices[plan]
+	if !ok {
+		return nil, fmt.Errorf("unknown subscription plan: %s", plan)
+	}
+	if days < 1 {
+		days = 7
+	}
+	req := payments.PaymentRequest{
+		UserID:   userID,
+		Amount:   float64(price),
+		Currency: "RUB",
+		Metadata: map[string]any{
+			"user_id":  userID,
+			"category": "subscription:" + plan,
+			"qty":      days,
+		},
+	}
+	return s.provider.CreatePayment(req)
+}
+
 func (s *PaymentService) priceFor(category string, qty int) (int, error) {
 	if catPrices, ok := s.priceTable[category]; ok {
 		if price, ok := catPrices[qty]; ok {
@@ -103,7 +131,16 @@ func (s *PaymentService) ProcessSuccessfulPayment(userID int64, category string,
 	if _, err := s.userService.GetOrCreateUser(userID, "", "", "", ""); err != nil {
 		return fmt.Errorf("ensure user: %w", err)
 	}
-
+	if strings.HasPrefix(category, "subscription:") {
+		plan := strings.TrimPrefix(category, "subscription:")
+		if err := s.userService.SetSubscription(userID, plan, qty); err != nil {
+			return err
+		}
+		if s.notifier != nil {
+			s.notifier(userID, category, qty)
+		}
+		return nil
+	}
 	var qCat models.QuotaCategory
 	switch category {
 	case "text":
