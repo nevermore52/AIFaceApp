@@ -119,10 +119,10 @@ func (c *Client) CreateImageTask(model, prompt string, images []string, callback
 func normalizeEndpoint(baseURL string) string {
 	trimmed := strings.TrimRight(baseURL, "/")
 	lower := strings.ToLower(trimmed)
-	if strings.HasSuffix(lower, "/image/generate") || strings.HasSuffix(lower, "/image-generation") || strings.HasSuffix(lower, "/generate") {
+	if strings.HasSuffix(lower, "/api/image/gen") || strings.HasSuffix(lower, "/image/generate") || strings.HasSuffix(lower, "/image-generation") || strings.HasSuffix(lower, "/generate") {
 		return trimmed
 	}
-	return trimmed + "/image/generate"
+	return trimmed + "/api/image/gen"
 }
 
 func findFirstHTTP(v any) string {
