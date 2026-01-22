@@ -48,7 +48,7 @@ func NewClient(apiKey, baseURL string) *Client {
 	}
 }
 
-func (c *Client) CreateImageTask(model, prompt string, images []string, callbackURL string) (string, error) {
+func (c *Client) CreateImageTask(model, prompt string, images []string, callbackURL string, aspectRatio string) (string, error) {
 	if c == nil {
 		return "", fmt.Errorf("defapi client is nil")
 	}
@@ -73,6 +73,9 @@ func (c *Client) CreateImageTask(model, prompt string, images []string, callback
 		"prompt":       prompt,
 		"images":       images,
 		"callback_url": callbackURL,
+	}
+	if aspectRatio != "" {
+		payload["aspect_ratio"] = aspectRatio
 	}
 
 	body, err := json.Marshal(payload)

@@ -42,6 +42,7 @@ type GenerationOptions struct {
 	ChatID      int64
 	Model       string
 	UseDefAPI   bool
+	AspectRatio string
 }
 
 func NewGenerationService(db *sql.DB, client *openrouter.Client) *GenerationService {
@@ -138,7 +139,7 @@ func (s *GenerationService) processGeneration(req *models.GenerationRequest, opt
 	}
 
 	debugLog("Calling OpenRouter API for type: %s", opts.Type)
-	resultURL, err = s.client.ChangeImage(opts.Model, images, opts.Prompt)
+	resultURL, err = s.client.ChangeImage(opts.Model, images, opts.Prompt, opts.AspectRatio)
 
 	if err != nil {
 		debugLog("processGeneration FAILED: requestID=%d, error=%v, duration=%v", req.ID, err, time.Since(startTime))
@@ -326,7 +327,7 @@ func (s *GenerationService) createDefAPITask(requestID int64, opts GenerationOpt
 		return "", fmt.Errorf("DEF_CALLBACK_URL is not set")
 	}
 
-	taskID, err := s.defAPI.CreateImageTask(opts.Model, opts.Prompt, images, callbackURL)
+	taskID, err := s.defAPI.CreateImageTask(opts.Model, opts.Prompt, images, callbackURL, opts.AspectRatio)
 	if err != nil {
 		return "", err
 	}

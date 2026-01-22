@@ -69,6 +69,23 @@ func (c *Client) GetUserModel(userID int64) (string, error) {
 	return model, nil
 }
 
+func (c *Client) SetUserAspectRatio(userID int64, ratio string) error {
+	key := fmt.Sprintf("user:%d:aspect_ratio", userID)
+	return c.rdb.Set(c.ctx, key, ratio, 0).Err()
+}
+
+func (c *Client) GetUserAspectRatio(userID int64) (string, error) {
+	key := fmt.Sprintf("user:%d:aspect_ratio", userID)
+	ratio, err := c.rdb.Get(c.ctx, key).Result()
+	if err == redis.Nil {
+		return "", nil
+	}
+	if err != nil {
+		return "", err
+	}
+	return ratio, nil
+}
+
 func NewClient(cfg config.RedisConfig) (*Client, error) {
 	rdb := redis.NewClient(&redis.Options{
 		Addr:     cfg.URL,
@@ -81,7 +98,7 @@ func NewClient(cfg config.RedisConfig) (*Client, error) {
 	if err != nil {
 		return nil, fmt.Errorf("failed to connect to Redis: %w", err)
 	}
-	
+
 	return &Client{
 		rdb: rdb,
 		ctx: ctx,

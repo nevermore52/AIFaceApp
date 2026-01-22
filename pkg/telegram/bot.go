@@ -42,6 +42,34 @@ type Bot struct {
 	sunoInstrumental  map[int64]bool // userID -> true (instrumental), false (with vocal)
 }
 
+func (b *Bot) getUserAspectRatio(userID int64) string {
+	ratio, err := b.redisClient.GetUserAspectRatio(userID)
+	if err != nil {
+		log.Printf("getUserAspectRatio err: %v", err)
+	}
+	if ratio == "" {
+		return "1:1"
+	}
+	switch ratio {
+	case "16:9", "9:16", "1:1":
+		return ratio
+	default:
+		return "1:1"
+	}
+}
+
+func (b *Bot) setUserAspectRatio(userID int64, ratio string) {
+	switch ratio {
+	case "16:9", "9:16", "1:1":
+		// valid
+	default:
+		ratio = "1:1"
+	}
+	if err := b.redisClient.SetUserAspectRatio(userID, ratio); err != nil {
+		log.Printf("setUserAspectRatio err: %v", err)
+	}
+}
+
 func (b *Bot) sendNanoBananaAPIStatus(chatID int64) {
 	enabled, err := b.userService.IsNanoBananaDefAPIEnabled()
 	if err != nil {
@@ -2129,6 +2157,8 @@ func (b *Bot) handleCallback(callback *tgbotapi.CallbackQuery) {
 		b.sendSettingsMenu(chatID, userID)
 	case "settings:style":
 		b.sendChatStyleMenu(chatID, userID)
+	case "aspect_menu":
+		b.sendAspectRatioMenu(chatID, userID)
 	case "set_style":
 		// default style
 		b.setUserChatStyle(userID, "normal")
@@ -2165,6 +2195,10 @@ func (b *Bot) handleCallback(callback *tgbotapi.CallbackQuery) {
 			if len(parts) >= 2 {
 				b.confirmGeneration(chatID, userID, parts[1])
 			}
+		} else if strings.HasPrefix(data, "aspect_set:") {
+			ratio := strings.TrimPrefix(data, "aspect_set:")
+			b.setUserAspectRatio(userID, ratio)
+			b.sendAspectRatioMenu(chatID, userID)
 		} else if strings.HasPrefix(data, "models_menu:") {
 			cat := ModelCategory(strings.TrimPrefix(data, "models_menu:"))
 			b.sendModelMenu(chatID, userID, cat)
@@ -2308,6 +2342,9 @@ func (b *Bot) processGeneration(chatID int64, userID int64, photoURLs []string, 
 		TokensCost:  requestCost,
 		ChatID:      chatID,
 		Model:       modelOpt.ID,
+	}
+	if modelOpt.ID == "google/nano-banana" || modelOpt.ID == "google/nano-banana-pro" {
+		opts.AspectRatio = b.getUserAspectRatio(userID)
 	}
 	if useDef, err := b.userService.IsNanoBananaDefAPIEnabled(); err == nil {
 		opts.UseDefAPI = useDef
@@ -2900,6 +2937,13 @@ func (b *Bot) sendModelMenu(chatID int64, userID int64, category ModelCategory) 
 			tgbotapi.NewInlineKeyboardButtonData(instrBtn, "suno_instr_toggle"),
 		))
 	}
+	if category == ModelCategoryPhoto && (current == "google/nano-banana" || current == "google/nano-banana-pro") {
+		ratio := b.getUserAspectRatio(userID)
+		label := "📐 Формат: " + ratio
+		rows = append(rows, tgbotapi.NewInlineKeyboardRow(
+			tgbotapi.NewInlineKeyboardButtonData(label, "aspect_menu"),
+		))
+	}
 	text += "\n\n" + modelsDescription
 
 	keyboard := tgbotapi.NewInlineKeyboardMarkup(rows...)
@@ -2932,6 +2976,35 @@ func (b *Bot) sendHelpMessage(chatID int64) {
 	if err != nil {
 		log.Printf("Failed to send help message: %v", err)
 	}
+}
+
+func (b *Bot) sendAspectRatioMenu(chatID int64, userID int64) {
+	current := b.getUserAspectRatio(userID)
+	rows := [][]tgbotapi.InlineKeyboardButton{
+		{
+			aspectOptionButton("Портрет 16:9", "16:9", current),
+			aspectOptionButton("Пейзаж 9:16", "9:16", current),
+		},
+		{
+			aspectOptionButton("Аватар 1:1", "1:1", current),
+		},
+		{
+			tgbotapi.NewInlineKeyboardButtonData("◀️ Назад", "models_menu"),
+		},
+	}
+	text := "📐 Выберите соотношение сторон для Nano Banana"
+	msg := tgbotapi.NewMessage(chatID, text)
+	msg.ReplyMarkup = tgbotapi.NewInlineKeyboardMarkup(rows...)
+	if _, err := b.api.Send(msg); err != nil {
+		log.Printf("Failed to send aspect ratio menu: %v", err)
+	}
+}
+
+func aspectOptionButton(label, ratio, current string) tgbotapi.InlineKeyboardButton {
+	if ratio == current {
+		label = "✅ " + label
+	}
+	return tgbotapi.NewInlineKeyboardButtonData(label, "aspect_set:"+ratio)
 }
 
 // sendPrivacyMessage отправляет ссылку на политику конфиденциальности
