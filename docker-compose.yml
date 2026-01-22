@@ -1,0 +1,63 @@
+
+services:
+  postgres:
+    image: postgres:15-alpine
+    container_name: aifacebot_postgres
+    environment:
+      POSTGRES_DB: aifacebot
+      POSTGRES_USER: aifacebot_user
+      POSTGRES_PASSWORD: aifacebot_password
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./docker/init.sql:/docker-entrypoint-initdb.d/init.sql
+    networks:
+      - aifacebot_network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U aifacebot_user -d aifacebot"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  redis:
+    image: redis:7-alpine
+    container_name: aifacebot_redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    networks:
+      - aifacebot_network
+    command: redis-server --appendonly yes
+
+  bot:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: aifacebot_bot
+    ports:
+      - "8080:8080"
+    env_file:
+      - .env
+    environment:
+      DATABASE_URL: "postgres://aifacebot_user:aifacebot_password@postgres:5432/aifacebot?sslmode=disable"
+      REDIS_URL: redis:6379
+      SERVER_HOST: 0.0.0.0
+      SERVER_PORT: 8080
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_started
+    networks:
+      - aifacebot_network
+    restart: unless-stopped
+
+volumes:
+  postgres_data:
+  redis_data:
+
+networks:
+  aifacebot_network:
+    driver: bridge
