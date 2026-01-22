@@ -14,6 +14,7 @@ type Config struct {
 	DatabaseURL   string
 	Redis         RedisConfig
 	OpenRouter    OpenRouterConfig
+	DefAPI        DefAPIConfig
 	Payment       PaymentConfig
 	AdminIDs      []int64
 	Server        ServerConfig
@@ -31,6 +32,11 @@ type OpenRouterConfig struct {
 	BaseURL      string
 	Model        string
 	DebugLogging bool
+}
+
+type DefAPIConfig struct {
+	APIKey  string
+	BaseURL string
 }
 
 type PaymentConfig struct {
@@ -65,6 +71,11 @@ func Load() (*Config, error) {
 		BaseURL:      getEnv("PIAPI_BASE_URL", "https://api.piapi.ai/api/v1"),
 		Model:        getEnv("OPENROUTER_IMAGE_MODEL", "gemini"),
 		DebugLogging: getEnvBool("DEBUG_LOGGING", true),
+	}
+
+	cfg.DefAPI = DefAPIConfig{
+		APIKey:  getEnv("DEF_API_KEY", ""),
+		BaseURL: getEnv("DEF_BASE_URL", ""),
 	}
 
 	cfg.Payment = PaymentConfig{

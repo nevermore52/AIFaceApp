@@ -42,6 +42,45 @@ type Bot struct {
 	sunoInstrumental  map[int64]bool // userID -> true (instrumental), false (with vocal)
 }
 
+func (b *Bot) sendNanoBananaAPIStatus(chatID int64) {
+	enabled, err := b.userService.IsNanoBananaDefAPIEnabled()
+	if err != nil {
+		b.sendErrorMessage(chatID, "Не удалось получить состояние Nano Banana API")
+		return
+	}
+	state := "PIAPI"
+	toggleLabel := "Переключить на DefAPI"
+	if enabled {
+		state = "DefAPI"
+		toggleLabel = "Переключить на PiAPI"
+	}
+	text := fmt.Sprintf("🍌 Nano Banana API: %s", state)
+	kb := tgbotapi.NewInlineKeyboardMarkup(
+		tgbotapi.NewInlineKeyboardRow(
+			tgbotapi.NewInlineKeyboardButtonData(toggleLabel, "admin:nano_api_toggle"),
+			tgbotapi.NewInlineKeyboardButtonData("🏠 Меню", "menu"),
+		),
+	)
+	msg := tgbotapi.NewMessage(chatID, text)
+	msg.ReplyMarkup = kb
+	if _, err := b.api.Send(msg); err != nil {
+		log.Printf("Failed to send nano banana api status: %v", err)
+	}
+}
+
+func (b *Bot) toggleNanoBananaAPI(chatID int64) {
+	enabled, err := b.userService.IsNanoBananaDefAPIEnabled()
+	if err != nil {
+		b.sendErrorMessage(chatID, "Не удалось проверить Nano Banana API")
+		return
+	}
+	if err := b.userService.SetNanoBananaDefAPIEnabled(!enabled); err != nil {
+		b.sendErrorMessage(chatID, "Не удалось переключить Nano Banana API")
+		return
+	}
+	b.sendNanoBananaAPIStatus(chatID)
+}
+
 type albumBuffer struct {
 	chatID  int64
 	userID  int64
@@ -322,6 +361,7 @@ func (b *Bot) sendAdminMenu(chatID int64) {
 		),
 		tgbotapi.NewInlineKeyboardRow(
 			tgbotapi.NewInlineKeyboardButtonData("💰 Баланс API", "admin:suno_balance"),
+			tgbotapi.NewInlineKeyboardButtonData("🍌 Nano Banana API", "admin:nano_api"),
 		),
 		tgbotapi.NewInlineKeyboardRow(
 			tgbotapi.NewInlineKeyboardButtonData("🔒 Подписки", "admin:subs"),
@@ -427,8 +467,8 @@ func (b *Bot) isUserAllowed(userID int64) bool {
 
 // Доступные модели для выбора
 var modelOptions = []ModelOption{
-	{ID: "gemini-2.5-flash-image", Label: "🚀 Nano Banana", Desc: "Фото: среднее качество. До 5 минут и дешево.", Category: ModelCategoryPhoto, RequestCost: 1},
-	{ID: "nano-banana-pro", Label: "🌟 Nano Banana Pro", Desc: "Фото: лучшее качество. До 10 минут и дороже.", Category: ModelCategoryPhoto, RequestCost: 4},
+	{ID: "google/nano-banana", Label: "🚀 Nano Banana", Desc: "Фото: среднее качество. До 5 минут и дешево.", Category: ModelCategoryPhoto, RequestCost: 1},
+	{ID: "google/nano-banana-pro", Label: "🌟 Nano Banana Pro", Desc: "Фото: лучшее качество. До 10 минут и дороже.", Category: ModelCategoryPhoto, RequestCost: 4},
 	{ID: "hug-video", ApiModel: "Qubico/hug-video", Label: "🤗 Обнимашки", Desc: "Видео: оживление фото с обнимашками.", Category: ModelCategoryVideo, RequestCost: 1, TaskType: "image_to_video"},
 	{ID: "music-suno", ApiModel: "suno", Label: "🎵 Suno Music", Desc: "Музыка: генерация песни. Долго.", Category: ModelCategoryMusic, RequestCost: 1, TaskType: "music"},
 	{ID: "chat-gpt-4.1mini", ApiModel: "gpt-4.1-mini", Label: "💬 GPT-4.1 mini", Desc: "Чат-бот: быстрые ответы на текстовые запросы.", Category: ModelCategoryChat, RequestCost: 1, TaskType: "chat"},
@@ -932,7 +972,7 @@ func (b *Bot) flushAlbum(mediaGroupID string) {
 	}
 
 	// Для моделей, отличных от Nano Banana / Pro, используем только первое фото
-	if modelOpt.ID != "gemini-2.5-flash-image" && modelOpt.ID != "nano-banana-pro" && len(imageURLs) > 1 {
+	if modelOpt.ID != "google/nano-banana" && modelOpt.ID != "google/nano-banana-pro" && len(imageURLs) > 1 {
 		imageURLs = imageURLs[:1]
 	}
 
@@ -1163,8 +1203,11 @@ func findModelOption(id string) (ModelOption, bool) {
 		return ModelOption{}, false
 	}
 	// Алиасы
-	if strings.EqualFold(id, "gemini") {
-		id = "gemini-2.5-flash-image"
+	if strings.EqualFold(id, "gemini") || strings.EqualFold(id, "gemini-2.5-flash-image") || strings.EqualFold(id, "nano-banana") {
+		id = "google/nano-banana"
+	}
+	if strings.EqualFold(id, "nano-banana-pro") {
+		id = "google/nano-banana-pro"
 	}
 	for _, m := range modelOptions {
 		if strings.EqualFold(m.ID, id) {
@@ -1222,7 +1265,7 @@ func instructionForModel(m ModelOption) string {
 		categoryLabel(m.Category), modelLabel(m.ID), modelDescription(m.ID), cost, categoryUnit(m.Category))
 
 	switch m.ID {
-	case "gemini-2.5-flash-image":
+	case "google/nano-banana":
 		return base + `Принимает фото с подписью и возвращает изображение среднего качества.
 
 Как отправить:
@@ -1235,7 +1278,7 @@ func instructionForModel(m ModelOption) string {
 • "Добавь лёгкий теплый фильтр"
 
 Используйте /menu для выбора другой модели.`
-	case "nano-banana-pro":
+	case "google/nano-banana-pro":
 		return base + `Принимает фото с подписью и возвращает улучшенное изображение (лучшее качество, но дольше).
 
 Как отправить:
@@ -2045,6 +2088,11 @@ func (b *Bot) handleCallback(callback *tgbotapi.CallbackQuery) {
 			return
 		}
 		b.sendPaymentsStatus(chatID)
+	case "admin:nano_api":
+		if !b.ensureAdmin(chatID, userID) {
+			return
+		}
+		b.sendNanoBananaAPIStatus(chatID)
 	case "admin:subs":
 		if !b.ensureAdmin(chatID, userID) {
 			return
@@ -2067,6 +2115,11 @@ func (b *Bot) handleCallback(callback *tgbotapi.CallbackQuery) {
 			return
 		}
 		b.togglePayments(chatID)
+	case "admin:nano_api_toggle":
+		if !b.ensureAdmin(chatID, userID) {
+			return
+		}
+		b.toggleNanoBananaAPI(chatID)
 	case "admin:suno_balance":
 		if !b.ensureAdmin(chatID, userID) {
 			return
@@ -2255,6 +2308,9 @@ func (b *Bot) processGeneration(chatID int64, userID int64, photoURLs []string, 
 		TokensCost:  requestCost,
 		ChatID:      chatID,
 		Model:       modelOpt.ID,
+	}
+	if useDef, err := b.userService.IsNanoBananaDefAPIEnabled(); err == nil {
+		opts.UseDefAPI = useDef
 	}
 
 	req, err := b.generationService.StartGeneration(userID, opts)
@@ -3048,6 +3104,8 @@ func (b *Bot) handleAdminCommand(msg *tgbotapi.Message) {
 		b.sendAdminCategories(msg.Chat.ID)
 	case "payments":
 		b.sendPaymentsStatus(msg.Chat.ID)
+	case "nano":
+		b.sendNanoBananaAPIStatus(msg.Chat.ID)
 	case "help":
 		b.handleAdminHelp(msg.Chat.ID)
 	default:
@@ -3155,6 +3213,7 @@ func (b *Bot) handleAdminHelp(chatID int64) {
 /admin users - Список последних пользователей
 /admin categories - Управление доступностью категорий
 /admin payments - Управление платежами
+/admin nano - Переключение Nano Banana API
 /admin help - Эта справка
 `
 

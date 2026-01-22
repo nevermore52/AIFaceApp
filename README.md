@@ -35,6 +35,9 @@ go build -o bin/bot ./cmd/bot
 | `YOOKASSA_RETURN_URL` | URL возврата после оплаты |
 | `PIAPI_API_KEY` | Ключ PIAPI |
 | `PIAPI_BASE_URL` | URL PIAPI |
+| `DEF_API_KEY` | Ключ DefAPI |
+| `DEF_BASE_URL` | URL DefAPI |
+| `DEF_CALLBACK_URL` | Callback URL для DefAPI (например, https://your-host/defapi/callback) |
 | `SUNO_API_KEY` | Ключ Suno |
 | `SUNO_CALLBACK_URL` | Callback для Suno |
 | `PAYMENT_PROVIDER` | Провайдер платежей (youkassa) |

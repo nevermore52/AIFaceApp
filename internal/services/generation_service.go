@@ -12,6 +12,7 @@ import (
 	"strings"
 	"time"
 
+	"telegram-ai-face-bot/internal/defapi"
 	"telegram-ai-face-bot/internal/models"
 	"telegram-ai-face-bot/internal/openrouter"
 )
@@ -27,6 +28,7 @@ func debugLog(format string, v ...any) {
 type GenerationService struct {
 	db     *sql.DB
 	client *openrouter.Client
+	defAPI *defapi.Client
 	http   *http.Client
 	notify func(chatID int64, req *models.GenerationRequest)
 }
@@ -39,6 +41,7 @@ type GenerationOptions struct {
 	TokensCost  int
 	ChatID      int64
 	Model       string
+	UseDefAPI   bool
 }
 
 func NewGenerationService(db *sql.DB, client *openrouter.Client) *GenerationService {
@@ -47,6 +50,10 @@ func NewGenerationService(db *sql.DB, client *openrouter.Client) *GenerationServ
 		client: client,
 		http:   &http.Client{Timeout: 30 * time.Second},
 	}
+}
+
+func (s *GenerationService) SetDefAPIClient(client *defapi.Client) {
+	s.defAPI = client
 }
 func (s *GenerationService) StartGeneration(userID int64, opts GenerationOptions) (*models.GenerationRequest, error) {
 	debugLog("StartGeneration: userID=%d, type=%s, prompt=%s", userID, opts.Type, opts.Prompt)
@@ -113,6 +120,23 @@ func (s *GenerationService) processGeneration(req *models.GenerationRequest, opt
 	var resultURL string
 	var err error
 
+	if useDefAPIModel(opts.Model) && opts.UseDefAPI {
+		taskID, err := s.createDefAPITask(req.ID, opts, images)
+		if err != nil {
+			debugLog("processGeneration DefAPI FAILED: requestID=%d, error=%v", req.ID, err)
+			_ = s.updateRequestStatus(req.ID, "failed", err.Error())
+			req.Status = "failed"
+			errMsg := err.Error()
+			req.ErrorMsg = &errMsg
+			if s.notify != nil {
+				s.notify(opts.ChatID, req)
+			}
+			return
+		}
+		debugLog("processGeneration DefAPI task created: requestID=%d taskID=%s", req.ID, taskID)
+		return
+	}
+
 	debugLog("Calling OpenRouter API for type: %s", opts.Type)
 	resultURL, err = s.client.ChangeImage(opts.Model, images, opts.Prompt)
 
@@ -148,6 +172,39 @@ func (s *GenerationService) processGeneration(req *models.GenerationRequest, opt
 
 func (s *GenerationService) SetNotifier(fn func(chatID int64, req *models.GenerationRequest)) {
 	s.notify = fn
+}
+func (s *GenerationService) HandleDefAPICallback(payload defapi.CallbackPayload) error {
+	if payload.Status != "success" {
+		return nil
+	}
+	if payload.TaskID == "" {
+		return fmt.Errorf("defapi callback missing task_id")
+	}
+	url := payload.ResultURL()
+	if url == "" {
+		return fmt.Errorf("defapi callback missing result url")
+	}
+
+	req, err := s.getGenerationRequestByExternalTaskID(payload.TaskID)
+	if err != nil {
+		return err
+	}
+	if req.Status == "completed" {
+		return nil
+	}
+	if err := s.completeRequest(req.ID, url); err != nil {
+		return err
+	}
+
+	req.Status = "completed"
+	req.ErrorMsg = nil
+	req.OutputImage = &url
+	now := time.Now()
+	req.CompletedAt = &now
+	if s.notify != nil {
+		s.notify(req.UserID, req)
+	}
+	return nil
 }
 func (s *GenerationService) GenerateAudio(text, model, taskType, stylePrompt string) (string, error) {
 	return s.client.GenerateAudio(model, text, taskType, stylePrompt)
@@ -253,6 +310,51 @@ func (s *GenerationService) GenerateMusicSuno(prompt, vocalGender string, instru
 
 func (s *GenerationService) HealthCheckPiAPI() error {
 	return s.client.HealthCheck()
+}
+
+func useDefAPIModel(model string) bool {
+	model = strings.ToLower(strings.TrimSpace(model))
+	return model == "google/nano-banana" || model == "google/nano-banana-pro"
+}
+
+func (s *GenerationService) createDefAPITask(requestID int64, opts GenerationOptions, images []string) (string, error) {
+	if s.defAPI == nil {
+		return "", fmt.Errorf("defapi client is not configured")
+	}
+	callbackURL := os.Getenv("DEF_CALLBACK_URL")
+	if callbackURL == "" {
+		return "", fmt.Errorf("DEF_CALLBACK_URL is not set")
+	}
+
+	taskID, err := s.defAPI.CreateImageTask(opts.Model, opts.Prompt, images, callbackURL)
+	if err != nil {
+		return "", err
+	}
+
+	if err := s.updateExternalTaskID(requestID, taskID); err != nil {
+		return "", err
+	}
+
+	return taskID, nil
+}
+
+func (s *GenerationService) updateExternalTaskID(requestID int64, taskID string) error {
+	_, err := s.db.Exec(`UPDATE generation_requests SET external_task_id = $2 WHERE id = $1`, requestID, taskID)
+	return err
+}
+
+func (s *GenerationService) getGenerationRequestByExternalTaskID(taskID string) (*models.GenerationRequest, error) {
+	query := `
+		SELECT id, user_id, type, status, input_image, output_image, prompt, error_msg, tokens_used, created_at, completed_at
+		FROM generation_requests WHERE external_task_id = $1`
+
+	req := &models.GenerationRequest{}
+	err := s.db.QueryRow(query, taskID).Scan(
+		&req.ID, &req.UserID, &req.Type, &req.Status, &req.InputImage, &req.OutputImage,
+		&req.Prompt, &req.ErrorMsg, &req.TokensUsed, &req.CreatedAt, &req.CompletedAt,
+	)
+
+	return req, err
 }
 
 func findStringByKeys(v any, keys ...string) string {

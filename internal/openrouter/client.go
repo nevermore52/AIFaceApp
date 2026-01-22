@@ -112,10 +112,10 @@ func (c *Client) ChangeImage(model string, inputImageURLs []string, hairDescript
 
 	taskType := model
 	switch model {
-	case "nano-banana-pro":
+	case "nano-banana-pro", "google/nano-banana-pro":
 		taskType = "nano-banana-pro"
 		model = "gemini"
-	case "gemini-2.5-flash-image", "Nano Banana", "nano-banana":
+	case "gemini-2.5-flash-image", "Nano Banana", "nano-banana", "google/nano-banana":
 		taskType = "gemini-2.5-flash-image"
 		model = "gemini"
 	}

@@ -44,6 +44,7 @@ func RunMigrations(db *sql.DB) error {
 		status VARCHAR(50) DEFAULT 'pending',
 		input_image TEXT,
 		output_image TEXT,
+		external_task_id TEXT,
 		prompt TEXT,
 		error_msg TEXT,
 		tokens_used INTEGER DEFAULT 0,
@@ -110,6 +111,9 @@ func RunMigrations(db *sql.DB) error {
 		END IF;
 	END $$;`
 
+	defapiMigrationSQL := `
+	ALTER TABLE generation_requests ADD COLUMN IF NOT EXISTS external_task_id TEXT;`
+
 	subscriptionSQL := `
 	ALTER TABLE users ADD COLUMN IF NOT EXISTS subscription_type VARCHAR(20) DEFAULT '';
 	ALTER TABLE users ADD COLUMN IF NOT EXISTS subscription_started_at TIMESTAMP WITH TIME ZONE;
@@ -121,6 +125,7 @@ func RunMigrations(db *sql.DB) error {
 	CREATE INDEX IF NOT EXISTS idx_users_referral_code ON users(referral_code);
 	CREATE INDEX IF NOT EXISTS idx_generation_requests_user_id ON generation_requests(user_id);
 	CREATE INDEX IF NOT EXISTS idx_generation_requests_status ON generation_requests(status);
+	CREATE INDEX IF NOT EXISTS idx_generation_requests_external_task_id ON generation_requests(external_task_id);
 	CREATE INDEX IF NOT EXISTS idx_user_quotas_telegram_id ON user_quotas(telegram_id);`
 
 	tables := []string{
@@ -132,6 +137,7 @@ func RunMigrations(db *sql.DB) error {
 		referralMigrationSQL,
 		dropTokensSQL,
 		upgradeQuotasSQL,
+		defapiMigrationSQL,
 		subscriptionSQL,
 		indexesSQL,
 	}

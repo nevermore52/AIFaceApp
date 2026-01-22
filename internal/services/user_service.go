@@ -363,6 +363,8 @@ func (s *UserService) ensureAppSettings() error {
 		ON CONFLICT (key) DO NOTHING;
 		INSERT INTO app_settings (key, value) VALUES ('subscriptions_enabled', 'true')
 		ON CONFLICT (key) DO NOTHING;
+		INSERT INTO app_settings (key, value) VALUES ('nano_banana_defapi', 'false')
+		ON CONFLICT (key) DO NOTHING;
 	`); err != nil {
 		return err
 	}
@@ -393,6 +395,34 @@ func (s *UserService) IsPaymentsEnabled() (bool, error) {
 	enabled, err := strconv.ParseBool(strings.TrimSpace(raw))
 	if err != nil {
 		return true, nil
+	}
+	return enabled, nil
+}
+
+func (s *UserService) SetNanoBananaDefAPIEnabled(enabled bool) error {
+	if err := s.ensureAppSettings(); err != nil {
+		return err
+	}
+	_, err := s.db.Exec(`INSERT INTO app_settings (key, value) VALUES ('nano_banana_defapi', $1)
+		ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value`, strconv.FormatBool(enabled))
+	return err
+}
+
+func (s *UserService) IsNanoBananaDefAPIEnabled() (bool, error) {
+	if err := s.ensureAppSettings(); err != nil {
+		return false, err
+	}
+	var raw string
+	err := s.db.QueryRow(`SELECT value FROM app_settings WHERE key = 'nano_banana_defapi'`).Scan(&raw)
+	if err == sql.ErrNoRows {
+		return false, nil
+	}
+	if err != nil {
+		return false, err
+	}
+	enabled, err := strconv.ParseBool(strings.TrimSpace(raw))
+	if err != nil {
+		return false, nil
 	}
 	return enabled, nil
 }

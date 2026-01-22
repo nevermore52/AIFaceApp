@@ -9,6 +9,7 @@ import (
 	"strings"
 
 	"telegram-ai-face-bot/internal/config"
+	"telegram-ai-face-bot/internal/defapi"
 	"telegram-ai-face-bot/internal/models"
 	"telegram-ai-face-bot/internal/openrouter"
 	"telegram-ai-face-bot/internal/payments"
@@ -33,6 +34,9 @@ func NewBot(cfg *config.Config, db *sql.DB) (*Bot, error) {
 	userService := services.NewUserService(db)
 	openRouterClient := openrouter.NewClient(cfg.OpenRouter)
 	generationService := services.NewGenerationService(db, openRouterClient)
+	if cfg.DefAPI.APIKey != "" && cfg.DefAPI.BaseURL != "" {
+		generationService.SetDefAPIClient(defapi.NewClient(cfg.DefAPI.APIKey, cfg.DefAPI.BaseURL))
+	}
 	paymentProvider := payments.NewPaymentProvider(cfg.Payment)
 	paymentService := services.NewPaymentService(paymentProvider, userService)
 
@@ -80,6 +84,38 @@ func (b *Bot) startWebhookServer() {
 			return
 		}
 		log.Printf("yookassa webhook handled OK from %s", r.RemoteAddr)
+		w.WriteHeader(http.StatusOK)
+	})
+
+	mux.HandleFunc("/defapi/callback", func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost {
+			log.Printf("defapi callback bad method: %s from %s", r.Method, r.RemoteAddr)
+			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+			return
+		}
+		body, err := io.ReadAll(r.Body)
+		if err != nil {
+			http.Error(w, "bad request", http.StatusBadRequest)
+			return
+		}
+
+		var payload defapi.CallbackPayload
+		if err := json.Unmarshal(body, &payload); err != nil {
+			log.Printf("defapi callback parse error: %v body=%s", err, truncateForLog(string(body), 300))
+			http.Error(w, "bad request", http.StatusBadRequest)
+			return
+		}
+		if payload.TaskID == "" {
+			log.Printf("defapi callback missing task_id body=%s", truncateForLog(string(body), 300))
+			http.Error(w, "bad request", http.StatusBadRequest)
+			return
+		}
+		if err := b.generationService.HandleDefAPICallback(payload); err != nil {
+			log.Printf("defapi callback error: %v", err)
+			http.Error(w, "error", http.StatusBadRequest)
+			return
+		}
+		log.Printf("defapi callback handled OK task=%s from %s", payload.TaskID, r.RemoteAddr)
 		w.WriteHeader(http.StatusOK)
 	})
 
