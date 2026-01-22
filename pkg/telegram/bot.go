@@ -2982,8 +2982,8 @@ func (b *Bot) sendAspectRatioMenu(chatID int64, userID int64) {
 	current := b.getUserAspectRatio(userID)
 	rows := [][]tgbotapi.InlineKeyboardButton{
 		{
-			aspectOptionButton("Портрет 16:9", "16:9", current),
-			aspectOptionButton("Пейзаж 9:16", "9:16", current),
+			aspectOptionButton("Пейзаж 16:9", "16:9", current),
+			aspectOptionButton("Портрет 9:16", "9:16", current),
 		},
 		{
 			aspectOptionButton("Аватар 1:1", "1:1", current),

@@ -126,15 +126,7 @@ func (c *Client) ChangeImage(model string, inputImageURLs []string, hairDescript
 	c.debugLog("ChangeImage input URLs: %s", truncate(joinedURLs, 200))
 
 	input := map[string]any{
-		"prompt": fmt.Sprintf(`Ты — точный фоторедактор. Правила:
-
-Меняй ТОЛЬКО то, что просят. Всё остальное (лицо, фон, освещение, стиль) сохраняй максимально нетронутым.
-
-Безупречно интегрируй изменения: новый элемент должен точно соответствовать исходному свету, текстурам и качеству изображения.
-
-Избегай лишнего: не меняй композицию, не добавляй элементы, не применяй фильтры ко всему кадру.
-
-Вот то что ты должен сделать: %s`, hairDescription),
+		"prompt": hairDescription,
 		"image_urls":    inputImageURLs,
 		"output_format": "png",
 	}
