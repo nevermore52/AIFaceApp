@@ -40,6 +40,8 @@ type Bot struct {
 	sunoTasks         map[string]sunoTask
 	sunoInstrMu       sync.Mutex
 	sunoInstrumental  map[int64]bool // userID -> true (instrumental), false (with vocal)
+	sunoVoiceMu       sync.Mutex
+	sunoVoice         map[int64]string // userID -> m/f
 }
 
 func (b *Bot) extrasPrice(category string, qty int) (int, bool) {
@@ -534,6 +536,7 @@ func NewBot(token string, userService *services.UserService, generationService *
 		recentPhotos:      make(map[int64][]photoRecord),
 		sunoTasks:         make(map[string]sunoTask),
 		sunoInstrumental:  make(map[int64]bool),
+		sunoVoice:         make(map[int64]string),
 	}
 
 	// Уведомление после успешного платежа
@@ -1499,6 +1502,7 @@ func (b *Bot) processAudioMessage(msg *tgbotapi.Message, modelOpt ModelOption) {
 	}
 
 	instrumental := b.getSunoInstrumental(userID)
+	voice := b.getSunoVoice(userID)
 
 	if err := b.userService.ConsumeQuota(userID, models.QuotaCategoryMusic, requestCost); err != nil {
 		b.sendInsufficientQuotaMessage(chatID, models.QuotaCategoryMusic, requestCost, err)
@@ -1509,8 +1513,12 @@ func (b *Bot) processAudioMessage(msg *tgbotapi.Message, modelOpt ModelOption) {
 	if instrumental {
 		modeLine = "Режим: инструментал (без голоса)"
 	}
-	startText := fmt.Sprintf("🔄 Озвучка запущена\nМодель: %s\nСписано: %d музыкальных запрос(ов)\n%s\nОжидание до 15 минут\n\nТекст:\n%s",
-		modelOpt.Label, requestCost, modeLine, truncate(text, 700))
+	voiceLine := "Голос: мужской"
+	if voice == "f" {
+		voiceLine = "Голос: женский"
+	}
+	startText := fmt.Sprintf("🔄 Озвучка запущена\nМодель: %s\nСписано: %d музыкальных запрос(ов)\n%s\n%s\nОжидание до 15 минут\n\nТекст:\n%s",
+		modelOpt.Label, requestCost, modeLine, voiceLine, truncate(text, 700))
 	b.sendText(chatID, truncate(startText, 1000))
 
 	// Асинхронно выполняем озвучку, чтобы не блокировать обработчик
@@ -1541,7 +1549,7 @@ func (b *Bot) processAudioMessage(msg *tgbotapi.Message, modelOpt ModelOption) {
 		var taskID string
 		var err error
 		if apiModel == "music-suno" || strings.Contains(strings.ToLower(apiModel), "suno") {
-			resultURL, taskID, err = b.generationService.GenerateMusicSuno(text, "m", instrumental)
+			resultURL, taskID, err = b.generationService.GenerateMusicSuno(text, voice, instrumental)
 		} else if modelOpt.Category == ModelCategoryMusic {
 			_ = b.userService.AddExtraQuota(userID, models.QuotaCategoryMusic, requestCost)
 			b.sendErrorMessage(chatID, "Музыкальная генерация доступна только через Suno.")
@@ -1645,6 +1653,29 @@ func (b *Bot) setSunoInstrumental(userID int64, v bool) {
 	b.sunoInstrMu.Lock()
 	b.sunoInstrumental[userID] = v
 	b.sunoInstrMu.Unlock()
+}
+
+func (b *Bot) getSunoVoice(userID int64) string {
+	b.sunoVoiceMu.Lock()
+	defer b.sunoVoiceMu.Unlock()
+	voice, ok := b.sunoVoice[userID]
+	if !ok {
+		b.sunoVoice[userID] = "m"
+		return "m"
+	}
+	if voice != "f" {
+		return "m"
+	}
+	return voice
+}
+
+func (b *Bot) setSunoVoice(userID int64, v string) {
+	b.sunoVoiceMu.Lock()
+	if v != "f" {
+		v = "m"
+	}
+	b.sunoVoice[userID] = v
+	b.sunoVoiceMu.Unlock()
 }
 
 // labelWithCheck оставлено для совместимости, сейчас не используется
@@ -2084,8 +2115,8 @@ func (b *Bot) handleCallback(callback *tgbotapi.CallbackQuery) {
 	// Мгновенно отвечаем, чтобы убрать индикатор ожидания
 	_, _ = b.api.Request(tgbotapi.NewCallback(callback.ID, ""))
 
-	// Кулдаун на любые запросы (кроме настроек инструментала)
-	if !strings.HasPrefix(data, "suno_instr") {
+	// Кулдаун на любые запросы (кроме настроек Suno)
+	if !strings.HasPrefix(data, "suno_instr") && !strings.HasPrefix(data, "suno_voice") {
 		if !b.checkCooldown(chatID, userID) {
 			return
 		}
@@ -2102,6 +2133,14 @@ func (b *Bot) handleCallback(callback *tgbotapi.CallbackQuery) {
 	case "suno_instr_toggle":
 		cur := b.getSunoInstrumental(userID)
 		b.setSunoInstrumental(userID, !cur)
+		b.sendModelMenu(chatID, userID, ModelCategoryMusic)
+	case "suno_voice_toggle":
+		cur := b.getSunoVoice(userID)
+		if cur == "f" {
+			b.setSunoVoice(userID, "m")
+		} else {
+			b.setSunoVoice(userID, "f")
+		}
 		b.sendModelMenu(chatID, userID, ModelCategoryMusic)
 	case "buy:extras":
 		if !b.ensurePaymentsEnabled(chatID) {
@@ -3011,17 +3050,29 @@ func (b *Bot) sendModelMenu(chatID int64, userID int64, category ModelCategory) 
 		}
 	}
 	if category == ModelCategoryMusic {
-		instrOn := b.getSunoInstrumental(userID)
-		instrText := "режим: с голосом"
-		instrBtn := "🎹 Режим: с голосом"
-		if instrOn {
-			instrText = "режим: инструментал (без голоса)"
-			instrBtn = "🎹 Режим: инструментал"
+		if opt, ok := findModelOption(current); ok && (opt.ID == "music-suno" || strings.Contains(strings.ToLower(opt.ApiModel), "suno")) {
+			instrOn := b.getSunoInstrumental(userID)
+			instrText := "режим: с голосом"
+			instrBtn := "🎹 Режим: с голосом"
+			if instrOn {
+				instrText = "режим: инструментал (без голоса)"
+				instrBtn = "🎹 Режим: инструментал"
+			}
+			voice := b.getSunoVoice(userID)
+			voiceText := "голос: мужской"
+			voiceBtn := "🗣️ Голос: мужской"
+			if voice == "f" {
+				voiceText = "голос: женский"
+				voiceBtn = "🗣️ Голос: женский"
+			}
+			text += "\n" + instrText + "\n" + voiceText
+			rows = append(rows, tgbotapi.NewInlineKeyboardRow(
+				tgbotapi.NewInlineKeyboardButtonData(instrBtn, "suno_instr_toggle"),
+			))
+			rows = append(rows, tgbotapi.NewInlineKeyboardRow(
+				tgbotapi.NewInlineKeyboardButtonData(voiceBtn, "suno_voice_toggle"),
+			))
 		}
-		text += "\n" + instrText
-		rows = append(rows, tgbotapi.NewInlineKeyboardRow(
-			tgbotapi.NewInlineKeyboardButtonData(instrBtn, "suno_instr_toggle"),
-		))
 	}
 	if category == ModelCategoryPhoto && (current == "google/nano-banana" || current == "google/nano-banana-pro") {
 		ratio := b.getUserAspectRatio(userID)
