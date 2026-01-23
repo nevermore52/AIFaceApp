@@ -164,25 +164,50 @@ func (b *Bot) Config() *config.Config {
 	return b.cfg
 }
 
-func (b *Bot) sendBuyExtrasCategory(chatID int64, title string, callbackPrefix string) {
-	packs := []int{10, 50, 100, 250, 500}
-	if strings.Contains(callbackPrefix, "music") || strings.Contains(callbackPrefix, "video") {
-		packs = []int{1, 5, 10, 50, 100}
-	}
-	category := strings.TrimPrefix(callbackPrefix, "buy_package:")
+func (b *Bot) sendBuyExtrasCategory(chatID int64, userID int64, category string, callbackPrefix string) {
+	loc := b.getLocalization(userID)
+	packs := []int{10, 20, 50, 100, 200, 500}
 
-	var sb strings.Builder
-	sb.WriteString(fmt.Sprintf("💰 %s\n\nС подпиской скидка до 20%%\nЦены указаны без учета скидки\n\nВыберите пакет:\n", title))
-	for _, p := range packs {
-		if price, ok := b.extrasPrice(category, p); ok {
-			sb.WriteString(fmt.Sprintf("• %d запросов — %d ₽\n", p, price))
+	if category == "" {
+		parts := strings.Split(callbackPrefix, ":")
+		if len(parts) >= 2 && parts[1] != "" {
+			category = parts[1]
 		} else {
-			sb.WriteString(fmt.Sprintf("• %d запросов\n", p))
+			category = "text"
 		}
 	}
-	text := sb.String()
 
-	// Формируем кнопки по два в ряд
+	if category == "music" || category == "video" {
+		packs = []int{1, 5, 10, 50, 100}
+	}
+
+	var header, unit string
+	switch category {
+	case "image":
+		header = loc.ExtrasImage
+		unit = loc.BuyPackageLabelImage
+	case "music":
+		header = loc.ExtrasMusico
+		unit = loc.BuyPackageLabelMusic
+	case "video":
+		header = loc.ExtrasVideos
+		unit = loc.BuyPackageLabelVideo
+	default:
+		header = loc.ExtrasTexts
+		unit = loc.BuyPackageLabelText
+	}
+
+	var sb strings.Builder
+	sb.WriteString(header + "\n\n" + loc.BuySelectAction + "\n")
+	for _, p := range packs {
+		if price, ok := b.extrasPrice(category, p); ok {
+			sb.WriteString(fmt.Sprintf("• %d %s — %d ₽\n", p, unit, price))
+		} else {
+			sb.WriteString(fmt.Sprintf("• %d %s\n", p, unit))
+		}
+	}
+	text := sb.String() + "\n" + loc.BuyConsentNote
+
 	var rows [][]tgbotapi.InlineKeyboardButton
 	for i := 0; i < len(packs); i += 2 {
 		btn1 := tgbotapi.NewInlineKeyboardButtonData(fmt.Sprintf("%d", packs[i]), fmt.Sprintf("%s:%d", callbackPrefix, packs[i]))
@@ -194,19 +219,18 @@ func (b *Bot) sendBuyExtrasCategory(chatID int64, title string, callbackPrefix s
 		}
 	}
 	rows = append(rows, tgbotapi.NewInlineKeyboardRow(
-		tgbotapi.NewInlineKeyboardButtonData("◀️ Назад", "buy:extras"),
+		tgbotapi.NewInlineKeyboardButtonData(loc.BackBtn, "buy:extras"),
 	))
 	rows = append(rows, tgbotapi.NewInlineKeyboardRow(
-		tgbotapi.NewInlineKeyboardButtonData("🏠 Меню", "menu"),
+		tgbotapi.NewInlineKeyboardButtonData(loc.MenuBtn, "menu"),
 	))
 
 	keyboard := tgbotapi.NewInlineKeyboardMarkup(rows...)
-
 	reply := tgbotapi.NewMessage(chatID, text)
 	reply.ReplyMarkup = keyboard
 
 	if _, err := b.api.Send(reply); err != nil {
-		log.Printf("Failed to send buy extras category menu: %v", err)
+		log.Printf("Failed to send buy extras category: %v", err)
 	}
 }
 
@@ -245,34 +269,33 @@ func (b *Bot) sendBuyPackageInfo(chatID int64, userID int64, category string, pa
 		}
 	}
 
+	loc := b.getLocalization(userID)
 	resp, err := b.paymentService.CreateExtrasPayment(userID, category, qty)
 	if err != nil {
-		b.sendErrorMessage(chatID, fmt.Sprintf("Не удалось создать платеж: %v", err))
+		b.sendErrorMessage(chatID, fmt.Sprintf(loc.ErrCreatePayment, err))
 		return
 	}
 
-	label := "запросы"
+	label := loc.BuyPackageLabelText
 	switch category {
 	case "text":
-		label = "текстовые запросы"
+		label = loc.BuyPackageLabelText
 	case "image":
-		label = "запросы на изображения"
+		label = loc.BuyPackageLabelImage
 	case "music":
-		label = "музыкальные запросы"
+		label = loc.BuyPackageLabelMusic
 	case "video":
-		label = "видео-запросы"
+		label = loc.BuyPackageLabelVideo
 	}
 
-	text := fmt.Sprintf(`✅ Вы выбрали пакет %s: %d шт.
-Перейдите по ссылке для оплаты:
-%s`, label, qty, resp.CheckoutURL)
+	text := fmt.Sprintf(loc.BuyPackageTitle, label, qty, resp.CheckoutURL) + "\n\n" + loc.BuyConsentNote
 
 	keyboard := tgbotapi.NewInlineKeyboardMarkup(
 		tgbotapi.NewInlineKeyboardRow(
-			tgbotapi.NewInlineKeyboardButtonData("◀️ Назад к категориям", "buy:extras"),
+			tgbotapi.NewInlineKeyboardButtonData(loc.BuyPackageBackBtn, "buy:extras"),
 		),
 		tgbotapi.NewInlineKeyboardRow(
-			tgbotapi.NewInlineKeyboardButtonData("🏠 Меню", "menu"),
+			tgbotapi.NewInlineKeyboardButtonData(loc.MenuBtn, "menu"),
 		),
 	)
 
@@ -472,19 +495,17 @@ const modelsDescription = `Категории моделей:
 const chatSystemPrompt = "Отвечай чётко как тебя просят, избегай излишних предисловий и не нарушай правила бота (никакого 18+, насилия, нелегала)."
 
 type chatStyle struct {
-	ID     string
-	Label  string
-	Prompt string
+	ID string
 }
 
 var chatStyles = []chatStyle{
-	{ID: "normal", Label: "🙂 Обычный", Prompt: "Отвечай нейтрально и лаконично."},
-	{ID: "formal", Label: "📘 Формальный", Prompt: "Держи деловой и уважительный тон."},
-	{ID: "humor", Label: "😂 Юмористический", Prompt: "Отвечай с лёгким дружелюбным юмором без сарказма и оскорблений."},
-	{ID: "informal", Label: "😎 Неформальный", Prompt: "Пиши в расслабленном разговорном тоне, без канцелярита и без грубости."},
-	{ID: "friendly", Label: "🤝 Дружеский", Prompt: "Будь тёплым и поддерживающим, но не многословным."},
-	{ID: "expert", Label: "🧠 Экспертный", Prompt: "Давай чёткие, структурированные и экспертные ответы по делу."},
-	{ID: "empathetic", Label: "❤️ Сочувствующий", Prompt: "Отвечай заботливо и поддерживающе, избегай резкости."},
+	{ID: "normal"},
+	{ID: "formal"},
+	{ID: "humor"},
+	{ID: "informal"},
+	{ID: "friendly"},
+	{ID: "expert"},
+	{ID: "empathetic"},
 }
 
 type ModelCategory string
@@ -522,14 +543,14 @@ func (b *Bot) isUserAllowed(userID int64) bool {
 
 // Доступные модели для выбора
 var modelOptions = []ModelOption{
-	{ID: "google/nano-banana", Label: "🚀 Nano Banana", Desc: "Фото: Старая модель, среднее качество, плохо работает с большими запросами и двумя фотографиями. Среднее время ожидания 1-2 минуты, максимум до 10 минут", Category: ModelCategoryPhoto, RequestCost: 1},
-	{ID: "google/nano-banana-pro", Label: "🌟 Nano Banana Pro", Desc: "Фото: Новейшая модель, лучшее качество. Среднее время ожидания 1-2 минуты, максимум до 10 минут", Category: ModelCategoryPhoto, RequestCost: 3},
-	{ID: "hug-video", ApiModel: "Qubico/hug-video", Label: "🤗 Обнимашки", Desc: "Видео: оживление фото с обнимашками.", Category: ModelCategoryVideo, RequestCost: 1, TaskType: "image_to_video"},
-	{ID: "music-suno", ApiModel: "suno", Label: "🎵 Suno Music", Desc: "Музыка: генерация песни. До 10-15 минут.", Category: ModelCategoryMusic, RequestCost: 1, TaskType: "music"},
-	{ID: "google/gemini-3-flash", Label: "💬 Gemini 3 Flash", Desc: "Текст: быстрые ответы. Доступно с подпиской Mini+.", Category: ModelCategoryChat, RequestCost: 1},
-	{ID: "openai/gpt-5-mini", Label: "💬 GPT-5 mini", Desc: "Текст: быстрые ответы. Доступно с подпиской Mini+.", Category: ModelCategoryChat, RequestCost: 1},
-	{ID: "openai/gpt-5-nano", Label: "💬 GPT-5 nano", Desc: "Текст: дольше ответы. Доступно с подпиской Mini+.", Category: ModelCategoryChat, RequestCost: 1},
-	{ID: "chat-gpt-4.1mini", ApiModel: "gpt-4.1-mini", Label: "💬 GPT-4.1 mini", Desc: "Чат-бот: быстрые ответы на текстовые запросы.", Category: ModelCategoryChat, RequestCost: 1, TaskType: "chat"},
+	{ID: "google/nano-banana", Label: "🚀 Nano Banana", Desc: locRU.ModelNanoBanana, Category: ModelCategoryPhoto, RequestCost: 1},
+	{ID: "google/nano-banana-pro", Label: "🌟 Nano Banana Pro", Desc: locRU.ModelNanoBananaPro, Category: ModelCategoryPhoto, RequestCost: 3},
+	{ID: "hug-video", ApiModel: "Qubico/hug-video", Label: "🤗 Обнимашки", Desc: locRU.ModelHugVideo, Category: ModelCategoryVideo, RequestCost: 1, TaskType: "image_to_video"},
+	{ID: "music-suno", ApiModel: "suno", Label: "🎵 Suno Music", Desc: locRU.ModelSunoMusic, Category: ModelCategoryMusic, RequestCost: 1, TaskType: "music"},
+	{ID: "google/gemini-3-flash", Label: "💬 Gemini 3 Flash", Desc: "", Category: ModelCategoryChat, RequestCost: 1},
+	{ID: "openai/gpt-5-mini", Label: "💬 GPT-5 mini", Desc: locRU.ModelGPT5Mini, Category: ModelCategoryChat, RequestCost: 1},
+	{ID: "openai/gpt-5-nano", Label: "💬 GPT-5 nano", Desc: locRU.ModelGPT5Nano, Category: ModelCategoryChat, RequestCost: 1},
+	{ID: "chat-gpt-4.1mini", ApiModel: "gpt-4.1-mini", Label: "💬 GPT-4.1 mini", Desc: locRU.ModelGPT41Mini, Category: ModelCategoryChat, RequestCost: 1, TaskType: "chat"},
 }
 
 var modelCategories = []ModelCategory{ModelCategoryPhoto, ModelCategoryVideo, ModelCategoryMusic, ModelCategoryChat}
@@ -773,13 +794,13 @@ func (b *Bot) handleCommand(msg *tgbotapi.Message) {
 		if !b.ensurePaymentsEnabled(msg.Chat.ID) {
 			return
 		}
-		b.sendBuyMenu(msg.Chat.ID)
+		b.sendBuyMenu(msg.Chat.ID, msg.From.ID)
 	case "invite":
 		b.sendInviteInfo(msg.Chat.ID, msg.From.ID)
 	case "help":
 		b.sendHelpMessage(msg.Chat.ID)
 	case "rules":
-		b.sendRulesMessage(msg.Chat.ID)
+		b.sendRulesMessage(msg.Chat.ID, msg.From.ID)
 	case "privacy":
 		b.sendPrivacyMessage(msg.Chat.ID)
 	case "settings":
@@ -794,6 +815,7 @@ func (b *Bot) handleCommand(msg *tgbotapi.Message) {
 func (b *Bot) handlePhoto(msg *tgbotapi.Message) {
 	userID := msg.From.ID
 	chatID := msg.Chat.ID
+	loc := b.getLocalization(userID)
 
 	// Альбом до 4 фото для Nano Banana / Nano Banana Pro
 	if msg.MediaGroupID != "" {
@@ -812,15 +834,8 @@ func (b *Bot) handlePhoto(msg *tgbotapi.Message) {
 	caption := strings.TrimSpace(msg.Caption)
 	if caption == "" && modelOpt.Category == ModelCategoryPhoto {
 		// Для фото без описания просим добавить подпись
-		text := `📷 Фото получено!
-
-Пожалуйста, отправьте фото ещё раз, но с подписью — опишите, что хотите изменить.
-
-Примеры:
-• "Сделай короткую стрижку"
-• "Примерь красное платье"
-• "Измени цвет волос на блонд"
-• "Удали 'определенный' объект с фото`
+		examples := []string{loc.PhotoExample1, loc.PhotoExample2, loc.PhotoExample3, loc.PhotoExample4}
+		text := loc.PhotoReceived + "\n\n" + loc.PhotoAddCaption + "\n\n" + loc.PhotoExamples + "\n• " + strings.Join(examples, "\n• ")
 		reply := tgbotapi.NewMessage(chatID, text)
 		_, _ = b.api.Send(reply)
 		return
@@ -1304,6 +1319,19 @@ func categoryLabel(cat ModelCategory) string {
 		return "💬 Текст"
 	default:
 		return string(cat)
+	}
+}
+
+func categoryUnitLoc(cat ModelCategory, loc *Localization) string {
+	switch cat {
+	case ModelCategoryMusic:
+		return loc.TrackUnit
+	case ModelCategoryVideo:
+		return loc.VideoUnit
+	case ModelCategoryChat:
+		return loc.QueryUnit
+	default:
+		return loc.PhotoUnit
 	}
 }
 
@@ -1968,31 +1996,149 @@ func (b *Bot) setUserChatStyle(userID int64, style string) {
 }
 
 func (b *Bot) buildChatSystemPrompt(userID int64) string {
+	loc := b.getLocalization(userID)
+	basePrompt := loc.ChatSystemPrompt
+	if basePrompt == "" {
+		basePrompt = chatSystemPrompt
+	}
+
 	styleID := b.getUserChatStyle(userID)
-	stylePrompt := ""
-	for _, st := range chatStyles {
-		if st.ID == styleID {
-			stylePrompt = st.Prompt
-			break
-		}
-	}
+	stylePrompt := b.chatStylePrompt(styleID, loc)
 	if stylePrompt == "" {
-		return chatSystemPrompt
+		return basePrompt
 	}
-	return chatSystemPrompt + " " + stylePrompt
+
+	return basePrompt + " " + stylePrompt
+}
+
+func (b *Bot) getUserLanguage(userID int64) string {
+	lang, err := b.redisClient.GetUserLanguage(userID)
+	if err != nil {
+		log.Printf("getUserLanguage error: %v", err)
+		return "ru"
+	}
+	if lang == "" {
+		return "ru"
+	}
+	return lang
+}
+
+func (b *Bot) setUserLanguage(userID int64, lang string) {
+	if lang != "ru" && lang != "en" {
+		lang = "ru"
+	}
+	if err := b.redisClient.SetUserLanguage(userID, lang); err != nil {
+		log.Printf("setUserLanguage error: %v", err)
+	}
+}
+
+func (b *Bot) getLocalization(userID int64) *Localization {
+	lang := b.getUserLanguage(userID)
+	return GetLocalization(lang)
+}
+
+func (b *Bot) chatStyleLabel(styleID string, loc *Localization) string {
+	switch styleID {
+	case "normal":
+		return loc.StyleNormal
+	case "formal":
+		return loc.StyleFormal
+	case "humor":
+		return loc.StyleHumor
+	case "informal":
+		return loc.StyleInformal
+	case "friendly":
+		return loc.StyleFriendly
+	case "expert":
+		return loc.StyleExpert
+	case "empathetic":
+		return loc.StyleEmpathetic
+	default:
+		return styleID
+	}
+}
+
+func (b *Bot) chatStylePrompt(styleID string, loc *Localization) string {
+	switch styleID {
+	case "normal":
+		return loc.StylePromptNormal
+	case "formal":
+		return loc.StylePromptFormal
+	case "humor":
+		return loc.StylePromptHumor
+	case "informal":
+		return loc.StylePromptInformal
+	case "friendly":
+		return loc.StylePromptFriendly
+	case "expert":
+		return loc.StylePromptExpert
+	case "empathetic":
+		return loc.StylePromptEmpathetic
+	default:
+		return ""
+	}
+}
+
+func (b *Bot) modelLabelLoc(id string, loc *Localization) string {
+	if opt, ok := findModelOption(id); ok {
+		return opt.Label
+	}
+	return id
+}
+
+func (b *Bot) modelDescriptionLoc(id string, loc *Localization) string {
+	switch id {
+	case "google/nano-banana":
+		return loc.ModelNanoBanana
+	case "google/nano-banana-pro":
+		return loc.ModelNanoBananaPro
+	case "hug-video":
+		return loc.ModelHugVideo
+	case "music-suno":
+		return loc.ModelSunoMusic
+	case "google/gemini-3-flash":
+		return loc.ModelGeminiFlash
+	case "openai/gpt-5-mini":
+		return loc.ModelGPT5Mini
+	case "openai/gpt-5-nano":
+		return loc.ModelGPT5Nano
+	case "chat-gpt-4.1mini":
+		return loc.ModelGPT41Mini
+	default:
+		return id
+	}
+}
+
+func (b *Bot) categoryLabelLoc(cat ModelCategory, loc *Localization) string {
+	switch cat {
+	case ModelCategoryPhoto:
+		return loc.ModelsCatPhoto
+	case ModelCategoryVideo:
+		return loc.ModelsCatVideo
+	case ModelCategoryMusic:
+		return loc.ModelsCatMusic
+	case ModelCategoryChat:
+		return loc.ModelsCatChat
+	default:
+		return string(cat)
+	}
 }
 
 func (b *Bot) sendSettingsMenu(chatID int64, userID int64) {
+	loc := b.getLocalization(userID)
 	rows := [][]tgbotapi.InlineKeyboardButton{
 		{
-			tgbotapi.NewInlineKeyboardButtonData("🗣️ Стиль общения GPT", "settings:style"),
+			tgbotapi.NewInlineKeyboardButtonData(loc.SettingsChatStyle, "settings:style"),
+		},
+		{
+			tgbotapi.NewInlineKeyboardButtonData(loc.SettingsLanguage, "settings:language"),
 		},
 	}
 	rows = append(rows, tgbotapi.NewInlineKeyboardRow(
-		tgbotapi.NewInlineKeyboardButtonData("◀️ Назад", "menu"),
+		tgbotapi.NewInlineKeyboardButtonData(loc.SettingsBackBtn, "menu"),
 	))
 
-	text := "⚙️ Настройки\n\nВыберите раздел настроек."
+	text := loc.SettingsTitle + "\n\n" + loc.SettingsSelect
 	msg := tgbotapi.NewMessage(chatID, text)
 	msg.ReplyMarkup = tgbotapi.NewInlineKeyboardMarkup(rows...)
 	if _, err := b.api.Send(msg); err != nil {
@@ -2001,13 +2147,14 @@ func (b *Bot) sendSettingsMenu(chatID int64, userID int64) {
 }
 
 func (b *Bot) sendChatStyleMenu(chatID int64, userID int64) {
+	loc := b.getLocalization(userID)
 	current := b.getUserChatStyle(userID)
 	var rows [][]tgbotapi.InlineKeyboardButton
 	for i := 0; i < len(chatStyles); i += 2 {
 		btns := []tgbotapi.InlineKeyboardButton{}
 		for j := i; j < len(chatStyles) && j < i+2; j++ {
 			st := chatStyles[j]
-			label := st.Label
+			label := b.chatStyleLabel(st.ID, loc)
 			if st.ID == current {
 				label = "✅ " + label
 			}
@@ -2016,14 +2163,43 @@ func (b *Bot) sendChatStyleMenu(chatID int64, userID int64) {
 		rows = append(rows, tgbotapi.NewInlineKeyboardRow(btns...))
 	}
 	rows = append(rows, tgbotapi.NewInlineKeyboardRow(
-		tgbotapi.NewInlineKeyboardButtonData("◀️ Назад", "settings"),
+		tgbotapi.NewInlineKeyboardButtonData(loc.BackBtn, "settings"),
 	))
 
-	text := "🗣️ Стиль общения GPT\n\nВыберите тон, который будет применяться в системном промпте."
+	text := loc.StyleSelectTitle
 	msg := tgbotapi.NewMessage(chatID, text)
 	msg.ReplyMarkup = tgbotapi.NewInlineKeyboardMarkup(rows...)
 	if _, err := b.api.Send(msg); err != nil {
 		log.Printf("Failed to send chat style menu: %v", err)
+	}
+}
+
+func (b *Bot) sendLanguageMenu(chatID int64, userID int64) {
+	loc := b.getLocalization(userID)
+	currentLang := b.getUserLanguage(userID)
+
+	ruLabel := loc.LangRussian
+	enLabel := loc.LangEnglish
+	if currentLang == "ru" {
+		ruLabel = "✅ " + ruLabel
+	} else {
+		enLabel = "✅ " + enLabel
+	}
+
+	rows := [][]tgbotapi.InlineKeyboardButton{
+		{
+			tgbotapi.NewInlineKeyboardButtonData(ruLabel, "set_lang:ru"),
+			tgbotapi.NewInlineKeyboardButtonData(enLabel, "set_lang:en"),
+		},
+	}
+	rows = append(rows, tgbotapi.NewInlineKeyboardRow(
+		tgbotapi.NewInlineKeyboardButtonData(loc.BackBtn, "settings"),
+	))
+
+	msg := tgbotapi.NewMessage(chatID, loc.LangTitle)
+	msg.ReplyMarkup = tgbotapi.NewInlineKeyboardMarkup(rows...)
+	if _, err := b.api.Send(msg); err != nil {
+		log.Printf("Failed to send language menu: %v", err)
 	}
 }
 
@@ -2189,7 +2365,7 @@ func (b *Bot) handleCallback(callback *tgbotapi.CallbackQuery) {
 		if !b.ensurePaymentsEnabled(chatID) {
 			return
 		}
-		b.sendBuyMenu(chatID)
+		b.sendBuyMenu(chatID, userID)
 	case "suno_instr_toggle":
 		cur := b.getSunoInstrumental(userID)
 		b.setSunoInstrumental(userID, !cur)
@@ -2206,16 +2382,17 @@ func (b *Bot) handleCallback(callback *tgbotapi.CallbackQuery) {
 		if !b.ensurePaymentsEnabled(chatID) {
 			return
 		}
-		b.sendBuyExtrasMenu(chatID)
+		b.sendBuyExtrasMenu(chatID, userID)
 	case "buy:sub":
 		if !b.ensurePaymentsEnabled(chatID) {
 			return
 		}
 		if ok, _ := b.userService.IsSubscriptionsEnabled(); !ok {
-			b.sendErrorMessage(chatID, "Подписки временно недоступны")
+			loc := b.getLocalization(userID)
+			b.sendErrorMessage(chatID, loc.SubsUnavailable)
 			return
 		}
-		b.sendBuySubscription(chatID)
+		b.sendBuySubscription(chatID, userID)
 	case "buy_sub:mini":
 		b.sendBuySubscriptionPayment(chatID, userID, "mini")
 	case "buy_sub:start":
@@ -2226,22 +2403,22 @@ func (b *Bot) handleCallback(callback *tgbotapi.CallbackQuery) {
 		if !b.ensureCategoryEnabled(chatID, ModelCategoryChat) {
 			return
 		}
-		b.sendBuyExtrasCategory(chatID, "Текстовые запросы", "buy_package:text")
+		b.sendBuyExtrasCategory(chatID, userID, "", "buy_package:text")
 	case "buy:image":
 		if !b.ensureCategoryEnabled(chatID, ModelCategoryPhoto) {
 			return
 		}
-		b.sendBuyExtrasCategory(chatID, "Запросы на изображения", "buy_package:image")
+		b.sendBuyExtrasCategory(chatID, userID, "", "buy_package:image")
 	case "buy:music":
 		if !b.ensureCategoryEnabled(chatID, ModelCategoryMusic) {
 			return
 		}
-		b.sendBuyExtrasCategory(chatID, "Музыкальные запросы", "buy_package:music")
+		b.sendBuyExtrasCategory(chatID, userID, "", "buy_package:music")
 	case "buy:video":
 		if !b.ensureCategoryEnabled(chatID, ModelCategoryVideo) {
 			return
 		}
-		b.sendBuyExtrasCategory(chatID, "Видео-запросы", "buy_package:video")
+		b.sendBuyExtrasCategory(chatID, userID, "", "buy_package:video")
 	case "admin:categories":
 		if !b.ensureAdmin(chatID, userID) {
 			return
@@ -2328,6 +2505,18 @@ func (b *Bot) handleCallback(callback *tgbotapi.CallbackQuery) {
 		b.sendSettingsMenu(chatID, userID)
 	case "settings:style":
 		b.sendChatStyleMenu(chatID, userID)
+	case "settings:language":
+		b.sendLanguageMenu(chatID, userID)
+	case "set_lang:ru":
+		b.setUserLanguage(userID, "ru")
+		loc := b.getLocalization(userID)
+		b.sendText(chatID, loc.LangChanged)
+		b.sendLanguageMenu(chatID, userID)
+	case "set_lang:en":
+		b.setUserLanguage(userID, "en")
+		loc := b.getLocalization(userID)
+		b.sendText(chatID, loc.LangChanged)
+		b.sendLanguageMenu(chatID, userID)
 	case "aspect_menu":
 		b.sendAspectRatioMenu(chatID, userID)
 	case "set_style":
@@ -2381,6 +2570,7 @@ func (b *Bot) handleCallback(callback *tgbotapi.CallbackQuery) {
 				b.sendBuyPackageInfo(chatID, userID, category, pack)
 			}
 		} else if strings.HasPrefix(data, "model_set:") {
+			loc := b.getLocalization(userID)
 			model := strings.TrimPrefix(data, "model_set:")
 			opt, ok := findModelOption(model)
 			if !ok {
@@ -2393,14 +2583,14 @@ func (b *Bot) handleCallback(callback *tgbotapi.CallbackQuery) {
 			}
 			b.setUserModel(userID, model)
 
-			info := fmt.Sprintf("Модель выбрана: %s\nКатегория: %s", opt.Label, categoryLabel(opt.Category))
-			if opt.Desc != "" {
-				info += "\n" + opt.Desc
+			info := fmt.Sprintf("%s: %s\n%s", loc.ModelsCurrent, b.modelLabelLoc(opt.ID, loc), fmt.Sprintf(loc.ModelsCategory, b.categoryLabelLoc(opt.Category, loc)))
+			if desc := b.modelDescriptionLoc(opt.ID, loc); desc != "" {
+				info += "\n" + desc
 			}
 			if opt.RequestCost > 0 {
-				info += fmt.Sprintf("\nРасход: %d запрос(ов) за 1 %s", opt.RequestCost, categoryUnit(opt.Category))
+				info += "\n" + fmt.Sprintf(loc.ModelsCost, opt.RequestCost)
 			}
-			info += "\n\n" + modelsDescription
+			info += "\n\n" + loc.ModelsDescription
 			b.sendText(chatID, info)
 			b.sendModelMenu(chatID, userID, opt.Category)
 		}
@@ -2687,6 +2877,7 @@ func (b *Bot) handleStartWithReferral(msg *tgbotapi.Message, referralCode string
 
 // sendMainMenu отправляет главное меню
 func (b *Bot) sendMainMenu(chatID int64, userID int64) {
+	loc := b.getLocalization(userID)
 	// Получаем статистику пользователя
 	if _, err := b.userService.GetUserStats(userID); err != nil {
 		log.Printf("Failed to get user stats: %v", err)
@@ -2701,47 +2892,45 @@ func (b *Bot) sendMainMenu(chatID int64, userID int64) {
 	}
 
 	currentModel := b.getUserModel(userID)
-	currentCategory := ""
-	var limitLine = "Лимит текущей модели: нет данных"
+	displayCategory := "" // не показываем категорию в строке модели, чтобы не путать с названием модели
+	var limitLine = loc.MenuLimit
 	if opt, ok := findModelOption(currentModel); ok {
-		currentCategory = categoryLabel(opt.Category)
-		if currentCategory != "" {
-			currentCategory = "(" + currentCategory + ")"
-		}
-
 		if quota != nil {
+			var extraLabel string
 			switch opt.Category {
 			case ModelCategoryPhoto:
-				limitLine = fmt.Sprintf("Лимит: %d (%d доп)", quota.ImageWeekly, quota.ImageExtra)
+				extraLabel = loc.ExtrasImages
+				limitLine = fmt.Sprintf(loc.MenuLimitFormat, quota.ImageWeekly, quota.ImageExtra, extraLabel)
 			case ModelCategoryVideo:
-				limitLine = fmt.Sprintf("Лимит: %d (%d доп)", quota.VideoWeekly, quota.VideoExtra)
+				extraLabel = loc.ExtrasVideo
+				limitLine = fmt.Sprintf(loc.MenuLimitFormat, quota.VideoWeekly, quota.VideoExtra, extraLabel)
 			case ModelCategoryMusic:
-				limitLine = fmt.Sprintf("Лимит: %d (%d доп)", quota.MusicWeekly, quota.MusicExtra)
+				extraLabel = loc.ExtrasMusic
+				limitLine = fmt.Sprintf(loc.MenuLimitFormat, quota.MusicWeekly, quota.MusicExtra, extraLabel)
 			case ModelCategoryChat:
-				limitLine = fmt.Sprintf("Лимит: %d (%d доп)", quota.TextDaily, quota.TextExtra)
+				extraLabel = loc.ExtrasText
+				limitLine = fmt.Sprintf(loc.MenuLimitFormat, quota.TextDaily, quota.TextExtra, extraLabel)
 			}
 		}
 	}
 
-	text := fmt.Sprintf(`🍌 Ваш айди: %d
-⭐ Тип подписки: %s
-🧠 Текущая модель: %s %s — %s`,
+	text := fmt.Sprintf(loc.MenuTitle,
 		userID,
 		subLabel,
-		currentCategory,
-		modelLabel(currentModel),
+		displayCategory,
+		b.modelLabelLoc(currentModel, loc),
 		limitLine,
 	)
 
 	keyboard := tgbotapi.NewInlineKeyboardMarkup(
 		tgbotapi.NewInlineKeyboardRow(
-			tgbotapi.NewInlineKeyboardButtonData("💰 Покупка", "buy"),
+			tgbotapi.NewInlineKeyboardButtonData(loc.MenuBuyBtn, "buy"),
 		),
 		tgbotapi.NewInlineKeyboardRow(
-			tgbotapi.NewInlineKeyboardButtonData("👥 Пригласить друзей", "invite"),
+			tgbotapi.NewInlineKeyboardButtonData(loc.MenuInviteBtn, "invite"),
 		),
 		tgbotapi.NewInlineKeyboardRow(
-			tgbotapi.NewInlineKeyboardButtonData("🧠 Выбрать модель", "models_menu"),
+			tgbotapi.NewInlineKeyboardButtonData(loc.MenuSelectModelBtn, "models_menu"),
 		),
 	)
 	// Админ-кнопка только для админов
@@ -2759,6 +2948,7 @@ func (b *Bot) sendMainMenu(chatID int64, userID int64) {
 
 // sendAccount отправляет карточку аккаунта с лимитами (как на скриншоте)
 func (b *Bot) sendAccount(chatID int64, userID int64) {
+	loc := b.getLocalization(userID)
 	user, _ := b.userService.GetUserByTelegramID(userID)
 	quota, _ := b.userService.GetQuota(userID)
 
@@ -2790,30 +2980,19 @@ func (b *Bot) sendAccount(chatID int64, userID int64) {
 	}
 
 	accountText := fmt.Sprintf(
-		`ID Пользователя: %d
-⭐ Тип подписки: %s
-📅 Действует до: %s
-------------------------------
-📝 Текстовые генерации (24 ч): %d
-🖼️ Картинок осталось (нед): %d
-🎵 Музыка (нед): %d
-🎬 Видео(нед): %d
-------------------------------
-📝 Доп. текстовые генерации: %d
-🖼️ Доп. запросы изображений: %d
-🎵 Доп. музыка: %d
-🎬 Доп. видео: %d`,
-		userID,
-		subType,
-		subEndStr,
-		textDaily,
-		imageWeekly,
-		musicWeekly,
-		videoWeekly,
-		textExtra,
-		imageExtra,
-		musicExtra,
-		videoExtra,
+		fmt.Sprintf(loc.AccountUserID, userID) + "\n" +
+			fmt.Sprintf(loc.AccountSubscription, subType) + "\n" +
+			fmt.Sprintf(loc.AccountValidUntil, subEndStr) + "\n" +
+			"------------------------------\n" +
+			fmt.Sprintf(loc.AccountTextDaily, textDaily) + "\n" +
+			fmt.Sprintf(loc.AccountImagesWeekly, imageWeekly) + "\n" +
+			fmt.Sprintf(loc.AccountMusicWeekly, musicWeekly) + "\n" +
+			fmt.Sprintf(loc.AccountVideoWeekly, videoWeekly) + "\n" +
+			"------------------------------\n" +
+			fmt.Sprintf(loc.AccountExtraText, textExtra) + "\n" +
+			fmt.Sprintf(loc.AccountExtraImages, imageExtra) + "\n" +
+			fmt.Sprintf(loc.AccountExtraMusic, musicExtra) + "\n" +
+			fmt.Sprintf(loc.AccountExtraVideo, videoExtra),
 	)
 
 	msg := tgbotapi.NewMessage(chatID, accountText)
@@ -2823,26 +3002,25 @@ func (b *Bot) sendAccount(chatID int64, userID int64) {
 }
 
 // sendBuyMenu отправляет меню покупки доп. запросов
-func (b *Bot) sendBuyMenu(chatID int64) {
+func (b *Bot) sendBuyMenu(chatID int64, userID int64) {
+	loc := b.getLocalization(userID)
 	if !b.ensurePaymentsEnabled(chatID) {
 		return
 	}
 
 	subsEnabled, _ := b.userService.IsSubscriptionsEnabled()
 
-	text := `💰 Покупки
-
-Выберите, что хотите приобрести:`
+	text := loc.BuyTitle + "\n\n" + loc.BuySelectAction + "\n" + loc.BuyConsentNote
 
 	rows := [][]tgbotapi.InlineKeyboardButton{}
 	row := []tgbotapi.InlineKeyboardButton{}
 	if subsEnabled {
-		row = append(row, tgbotapi.NewInlineKeyboardButtonData("⭐ Подписка", "buy:sub"))
+		row = append(row, tgbotapi.NewInlineKeyboardButtonData(loc.BuySubscriptionBtn, "buy:sub"))
 	}
-	row = append(row, tgbotapi.NewInlineKeyboardButtonData("📦 Запросы отдельно", "buy:extras"))
+	row = append(row, tgbotapi.NewInlineKeyboardButtonData(loc.BuyExtrasBtn, "buy:extras"))
 	rows = append(rows, tgbotapi.NewInlineKeyboardRow(row...))
 	rows = append(rows, tgbotapi.NewInlineKeyboardRow(
-		tgbotapi.NewInlineKeyboardButtonData("◀️ Меню", "menu"),
+		tgbotapi.NewInlineKeyboardButtonData(loc.BackBtn+" "+loc.MenuBtn, "menu"),
 	))
 
 	keyboard := tgbotapi.NewInlineKeyboardMarkup(rows...)
@@ -2857,14 +3035,15 @@ func (b *Bot) sendBuyMenu(chatID int64) {
 }
 
 // sendBuyExtrasMenu отправляет меню покупки доп. запросов по категориям
-func (b *Bot) sendBuyExtrasMenu(chatID int64) {
+func (b *Bot) sendBuyExtrasMenu(chatID int64, userID int64) {
+	loc := b.getLocalization(userID)
 	if !b.ensurePaymentsEnabled(chatID) {
 		return
 	}
 
 	enabled := b.getEnabledCategories(false)
 	if len(enabled) == 0 {
-		b.sendErrorMessage(chatID, "Все категории отключены администратором")
+		b.sendErrorMessage(chatID, loc.ErrAllCategoriesDisabled)
 		return
 	}
 
@@ -2872,23 +3051,21 @@ func (b *Bot) sendBuyExtrasMenu(chatID int64) {
 	for _, cat := range enabled {
 		switch cat {
 		case ModelCategoryChat:
-			rows = append(rows, tgbotapi.NewInlineKeyboardRow(tgbotapi.NewInlineKeyboardButtonData("📝 Текстовые", "buy:text")))
+			rows = append(rows, tgbotapi.NewInlineKeyboardRow(tgbotapi.NewInlineKeyboardButtonData(loc.ExtrasTexts, "buy:text")))
 		case ModelCategoryPhoto:
-			rows = append(rows, tgbotapi.NewInlineKeyboardRow(tgbotapi.NewInlineKeyboardButtonData("🖼️ Изображения", "buy:image")))
+			rows = append(rows, tgbotapi.NewInlineKeyboardRow(tgbotapi.NewInlineKeyboardButtonData(loc.ExtrasImage, "buy:image")))
 		case ModelCategoryMusic:
-			rows = append(rows, tgbotapi.NewInlineKeyboardRow(tgbotapi.NewInlineKeyboardButtonData("🎵 Музыка", "buy:music")))
+			rows = append(rows, tgbotapi.NewInlineKeyboardRow(tgbotapi.NewInlineKeyboardButtonData(loc.ExtrasMusico, "buy:music")))
 		case ModelCategoryVideo:
-			rows = append(rows, tgbotapi.NewInlineKeyboardRow(tgbotapi.NewInlineKeyboardButtonData("🎬 Видео", "buy:video")))
+			rows = append(rows, tgbotapi.NewInlineKeyboardRow(tgbotapi.NewInlineKeyboardButtonData(loc.ExtrasVideos, "buy:video")))
 		}
 	}
 	rows = append(rows, tgbotapi.NewInlineKeyboardRow(
-		tgbotapi.NewInlineKeyboardButtonData("◀️ Назад", "buy"),
-		tgbotapi.NewInlineKeyboardButtonData("🏠 Меню", "menu"),
+		tgbotapi.NewInlineKeyboardButtonData(loc.BackBtn, "buy"),
+		tgbotapi.NewInlineKeyboardButtonData(loc.MenuBtn, "menu"),
 	))
 
-	text := `💰 Купить доп. запросы
-
-Выберите категорию.`
+	text := loc.ExtrasTitle + "\n\n" + loc.ExtrasSelectCat + "\n" + loc.BuyConsentNote
 
 	keyboard := tgbotapi.NewInlineKeyboardMarkup(rows...)
 
@@ -2900,12 +3077,13 @@ func (b *Bot) sendBuyExtrasMenu(chatID int64) {
 	}
 }
 
-func (b *Bot) sendBuySubscription(chatID int64) {
+func (b *Bot) sendBuySubscription(chatID int64, userID int64) {
+	loc := b.getLocalization(userID)
 	if !b.ensurePaymentsEnabled(chatID) {
 		return
 	}
 	if ok, _ := b.userService.IsSubscriptionsEnabled(); !ok {
-		b.sendErrorMessage(chatID, "Подписки временно недоступны")
+		b.sendErrorMessage(chatID, loc.SubsUnavailable)
 		return
 	}
 
@@ -2913,29 +3091,13 @@ func (b *Bot) sendBuySubscription(chatID int64) {
 	startPrice := b.subscriptionPrice("start")
 	proPrice := b.subscriptionPrice("pro")
 
-	text := fmt.Sprintf(`⭐ Подписки
-
-✨ Mini — %d ₽ в неделю
-• 50 текстовых/24ч
-• 30 изображений
-• 5 песен
-• Скидка 10%% на доп. запросы
-
-🚀 Start — %d ₽ в неделю
-• 100 текстовых/24ч
-• 70 изображений
-• 10 песен
-• x2 контекст
-• 3 видео
-• Скидка 20%% на доп. запросы
-
-👑 Pro — %d ₽ в неделю
-• 300 текстовых/24ч
-• 150 изображений
-• 15 песен
-• 7 видео
-• 6 стилей общения GPT, x3 контекст, без рекламы
-• Скидка 25%% на доп. запросы`, miniPrice, startPrice, proPrice)
+	text := fmt.Sprintf("%s\n%s\n\n✨ Mini — %d ₽ %s\n• 50 %s\n• 30 %s\n• 5 %s\n• %s\n\n🚀 Start — %d ₽ %s\n• 100 %s\n• 70 %s\n• 10 %s\n• %s\n• 3 %s\n• %s\n\n👑 Pro — %d ₽ %s\n• 300 %s\n• 150 %s\n• 15 %s\n• 7 %s\n• %s, %s, %s\n• %s",
+		loc.SubsTitle,
+		loc.BuyConsentNote,
+		miniPrice, loc.SubsPerWeek, loc.SubsTextDaily, loc.SubsImages, loc.SubsSongs, fmt.Sprintf(loc.SubsDiscount, 10),
+		startPrice, loc.SubsPerWeek, loc.SubsTextDaily, loc.SubsImages, loc.SubsSongs, fmt.Sprintf(loc.SubsContext, 2), loc.SubsVideos, fmt.Sprintf(loc.SubsDiscount, 20),
+		proPrice, loc.SubsPerWeek, loc.SubsTextDaily, loc.SubsImages, loc.SubsSongs, loc.SubsVideos, fmt.Sprintf(loc.SubsChatStyles, 6), fmt.Sprintf(loc.SubsContext, 3), loc.SubsNoAds, fmt.Sprintf(loc.SubsDiscount, 25),
+	)
 
 	keyboard := tgbotapi.NewInlineKeyboardMarkup(
 		tgbotapi.NewInlineKeyboardRow(
@@ -2946,8 +3108,8 @@ func (b *Bot) sendBuySubscription(chatID int64) {
 			tgbotapi.NewInlineKeyboardButtonData("👑 Pro", "buy_sub:pro"),
 		),
 		tgbotapi.NewInlineKeyboardRow(
-			tgbotapi.NewInlineKeyboardButtonData("◀️ Назад", "buy"),
-			tgbotapi.NewInlineKeyboardButtonData("🏠 Меню", "menu"),
+			tgbotapi.NewInlineKeyboardButtonData(loc.BackBtn, "buy"),
+			tgbotapi.NewInlineKeyboardButtonData(loc.MenuBtn, "menu"),
 		),
 	)
 
@@ -2969,32 +3131,33 @@ func (b *Bot) subscriptionPrice(plan string) int {
 }
 
 func (b *Bot) sendBuySubscriptionPayment(chatID int64, userID int64, plan string) {
+	loc := b.getLocalization(userID)
 	if b.paymentService == nil {
-		b.sendErrorMessage(chatID, "Платёжный сервис не настроен")
+		b.sendErrorMessage(chatID, loc.ErrPaymentNotConfigured)
 		return
 	}
 	if !b.ensurePaymentsEnabled(chatID) {
 		return
 	}
 	if ok, _ := b.userService.IsSubscriptionsEnabled(); !ok {
-		b.sendErrorMessage(chatID, "Подписки временно недоступны")
+		b.sendErrorMessage(chatID, loc.SubsUnavailable)
 		return
 	}
 
 	resp, err := b.paymentService.CreateSubscriptionPayment(userID, plan, 7)
 	if err != nil {
-		b.sendErrorMessage(chatID, fmt.Sprintf("Не удалось создать платеж: %v", err))
+		b.sendErrorMessage(chatID, fmt.Sprintf(loc.ErrCreatePayment+": %v", err))
 		return
 	}
 
 	label := strings.Title(plan)
-	text := fmt.Sprintf("✅ Вы выбрали подписку %s.\nПерейдите по ссылке для оплаты:\n%s", label, resp.CheckoutURL)
+	text := fmt.Sprintf(loc.SubsPaymentCreated, label, resp.CheckoutURL) + "\n\n" + loc.BuyConsentNote
 	keyboard := tgbotapi.NewInlineKeyboardMarkup(
 		tgbotapi.NewInlineKeyboardRow(
-			tgbotapi.NewInlineKeyboardButtonData("◀️ Назад к подпискам", "buy:sub"),
+			tgbotapi.NewInlineKeyboardButtonData(loc.SubsBackToSubs, "buy:sub"),
 		),
 		tgbotapi.NewInlineKeyboardRow(
-			tgbotapi.NewInlineKeyboardButtonData("🏠 Меню", "menu"),
+			tgbotapi.NewInlineKeyboardButtonData(loc.MenuBtn, "menu"),
 		),
 	)
 
@@ -3007,30 +3170,29 @@ func (b *Bot) sendBuySubscriptionPayment(chatID int64, userID int64, plan string
 
 // sendInviteInfo отправляет информацию о реферальной программе
 func (b *Bot) sendInviteInfo(chatID int64, userID int64) {
+	loc := b.getLocalization(userID)
 	user, err := b.userService.GetUserByTelegramID(userID)
 	if err != nil {
-		b.sendErrorMessage(chatID, "Ошибка при получении данных")
+		b.sendErrorMessage(chatID, loc.ErrGetStats)
 		return
 	}
 
 	botUsername := b.api.Self.UserName
 	referralLink := fmt.Sprintf("https://t.me/%s?start=%s", botUsername, user.ReferralCode)
 
-	text := fmt.Sprintf(`🎁 Вы будете получать 20%% от покупок ваших рефералов!
-Например, пользователь купил 10 доп. запросов, вы получите 2 доп. запроса бесплатно!
-
-Ваша личная реферальная ссылка:
-%s
-*Нажмите, чтобы скопировать*
-
-👥 Приглашено пользователей: %d`,
+	text := fmt.Sprintf("%s\n%s\n\n%s\n%s\n%s\n\n%s %d",
+		loc.InviteTitle,
+		loc.InviteExample,
+		loc.InviteLink,
 		referralLink,
+		loc.InviteCopyHint,
+		loc.InviteCount,
 		user.ReferralsCount,
 	)
 
 	keyboard := tgbotapi.NewInlineKeyboardMarkup(
 		tgbotapi.NewInlineKeyboardRow(
-			tgbotapi.NewInlineKeyboardButtonData("◀️ Меню", "menu"),
+			tgbotapi.NewInlineKeyboardButtonData(loc.BackBtn+" "+loc.MenuBtn, "menu"),
 		),
 	)
 
@@ -3046,9 +3208,10 @@ func (b *Bot) sendInviteInfo(chatID int64, userID int64) {
 
 // sendModelMenu показывает выбор модели с разбивкой по категориям
 func (b *Bot) sendModelMenu(chatID int64, userID int64, category ModelCategory) {
+	loc := b.getLocalization(userID)
 	enabledCats := b.getEnabledCategories(false)
 	if len(enabledCats) == 0 {
-		b.sendErrorMessage(chatID, "Все категории отключены администратором")
+		b.sendErrorMessage(chatID, loc.ErrAllCategoriesDisabled)
 		return
 	}
 	if category == "" || !containsCategory(enabledCats, category) {
@@ -3088,7 +3251,7 @@ func (b *Bot) sendModelMenu(chatID int64, userID int64, category ModelCategory) 
 	// Ряд с категориями (только включённые)
 	catButtons := []tgbotapi.InlineKeyboardButton{}
 	for _, cat := range enabledCats {
-		label := categoryLabel(cat)
+		label := b.categoryLabelLoc(cat, loc)
 		if cat == category {
 			label = "✅ " + label
 		}
@@ -3115,41 +3278,37 @@ func (b *Bot) sendModelMenu(chatID int64, userID int64, category ModelCategory) 
 	}
 
 	rows = append(rows, tgbotapi.NewInlineKeyboardRow(
-		tgbotapi.NewInlineKeyboardButtonData("◀️ Назад", "menu"),
+		tgbotapi.NewInlineKeyboardButtonData(loc.BackBtn, "menu"),
 	))
 
-	text := fmt.Sprintf("Категория: %s\n\nВыберите модель. Она будет применяться по умолчанию для ваших запросов.", categoryLabel(category))
-	currentDesc := modelDescription(current)
+	text := fmt.Sprintf(loc.ModelsCategory, b.categoryLabelLoc(category, loc)) + "\n\n" + loc.ModelsSelect
+	currentDesc := b.modelDescriptionLoc(current, loc)
 	if currentDesc != "" {
-		text += "\n\nТекущая: " + modelLabel(current) + " — " + currentDesc
+		text += "\n\n" + loc.ModelsCurrent + ": " + b.modelLabelLoc(current, loc) + " — " + currentDesc
 		if cost := modelRequestCost(current); cost > 0 {
-			unitCategory := category
-			if opt, ok := findModelOption(current); ok {
-				unitCategory = opt.Category
-			}
-			text += fmt.Sprintf("\nРасход: %d запрос(ов) за 1 %s", cost, categoryUnit(unitCategory))
+			text += "\n" + fmt.Sprintf(loc.ModelsCost, cost)
 		}
 		if current == "google/nano-banana" {
-			text += "\nМаксимум фото: 2"
+			text += "\n" + fmt.Sprintf(loc.ModelsMaxPhotos, 2)
 		} else if current == "google/nano-banana-pro" {
-			text += "\nМаксимум фото: 4"
+			text += "\n" + fmt.Sprintf(loc.ModelsMaxPhotos, 4)
 		}
 	}
 	if category == ModelCategoryMusic {
 		if opt, ok := findModelOption(current); ok && (opt.ID == "music-suno" || strings.Contains(strings.ToLower(opt.ApiModel), "suno")) {
 			instrOn := b.getSunoInstrumental(userID)
-			instrText := "режим: с голосом"
-			instrBtn := "🎹 Режим: с голосом"
+			instrText := loc.MusicMode + " " + loc.MusicModeVocal
+			instrBtn := "🎹 " + loc.MusicMode + " " + loc.MusicModeVocal
 			if instrOn {
-				instrText = "режим: инструментал (без голоса)"
-				instrBtn = "🎹 Режим: инструментал"
+				instrText = loc.MusicMode + " " + loc.MusicModeInstr
+				instrBtn = "🎹 " + loc.MusicMode + " " + loc.MusicModeInstr
 			}
 			voice := b.getSunoVoice(userID)
-			voiceText := "голос: мужской"
-			voiceBtn := "🗣️ Голос: мужской"
+			voiceText := loc.MusicVoice + " " + loc.MusicVoiceMale
+			voiceBtn := "🗣️ " + loc.MusicVoice + " " + loc.MusicVoiceMale
 			if voice == "f" {
-				voiceText = "голос: женский"
-				voiceBtn = "🗣️ Голос: женский"
+				voiceText = loc.MusicVoice + " " + loc.MusicVoiceFemale
+				voiceBtn = "🗣️ " + loc.MusicVoice + " " + loc.MusicVoiceFemale
 			}
 			text += "\n" + instrText + "\n" + voiceText
 			rows = append(rows, tgbotapi.NewInlineKeyboardRow(
@@ -3162,12 +3321,12 @@ func (b *Bot) sendModelMenu(chatID int64, userID int64, category ModelCategory) 
 	}
 	if category == ModelCategoryPhoto && (current == "google/nano-banana" || current == "google/nano-banana-pro") {
 		ratio := b.getUserAspectRatio(userID)
-		label := "📐 Формат: " + ratio
+		label := loc.AspectTitle + ": " + ratio
 		rows = append(rows, tgbotapi.NewInlineKeyboardRow(
 			tgbotapi.NewInlineKeyboardButtonData(label, "aspect_menu"),
 		))
 	}
-	text += "\n\n" + modelsDescription
+	text += "\n\n" + loc.ModelsDescription
 
 	keyboard := tgbotapi.NewInlineKeyboardMarkup(rows...)
 
@@ -3202,20 +3361,21 @@ func (b *Bot) sendHelpMessage(chatID int64) {
 }
 
 func (b *Bot) sendAspectRatioMenu(chatID int64, userID int64) {
+	loc := b.getLocalization(userID)
 	current := b.getUserAspectRatio(userID)
 	rows := [][]tgbotapi.InlineKeyboardButton{
 		{
-			aspectOptionButton("Пейзаж 16:9", "16:9", current),
-			aspectOptionButton("Портрет 9:16", "9:16", current),
+			aspectOptionButton(loc.AspectLandscape, "16:9", current),
+			aspectOptionButton(loc.AspectPortrait, "9:16", current),
 		},
 		{
-			aspectOptionButton("Аватар 1:1", "1:1", current),
+			aspectOptionButton(loc.AspectSquare, "1:1", current),
 		},
 		{
-			tgbotapi.NewInlineKeyboardButtonData("◀️ Назад", "models_menu"),
+			tgbotapi.NewInlineKeyboardButtonData(loc.BackBtn, "models_menu"),
 		},
 	}
-	text := "📐 Выберите соотношение сторон для Nano Banana"
+	text := loc.AspectTitle
 	msg := tgbotapi.NewMessage(chatID, text)
 	msg.ReplyMarkup = tgbotapi.NewInlineKeyboardMarkup(rows...)
 	if _, err := b.api.Send(msg); err != nil {
@@ -3239,17 +3399,9 @@ func (b *Bot) sendPrivacyMessage(chatID int64) {
 	}
 }
 
-func (b *Bot) sendRulesMessage(chatID int64) {
-	text := `📜 Правила бота:
-
-1) 18+ контент запрещён к генерации и отправке.
-2) Нельзя загружать обнажёнку, жестокость, спам или нелегальный контент.
-3) Не нарушайте авторские права и чужие личные данные.
-4) Соблюдайте лимиты запросов и уважайте инфраструктуру.
-5) Используйте /menu для выбора модели и следуйте её инструкции.
-6) Запрещены любые оскорбления третьих лиц в песнях, фото, чат.
-
-Нарушения могут привести к блокировке. Без возврата средств.`
+func (b *Bot) sendRulesMessage(chatID int64, userID int64) {
+	loc := b.getLocalization(userID)
+	text := loc.RulesTitle + "\n\n" + loc.RulesContent
 	msg := tgbotapi.NewMessage(chatID, text)
 	if _, err := b.api.Send(msg); err != nil {
 		log.Printf("Failed to send rules message: %v", err)

@@ -86,6 +86,23 @@ func (c *Client) GetUserAspectRatio(userID int64) (string, error) {
 	return ratio, nil
 }
 
+func (c *Client) SetUserLanguage(userID int64, lang string) error {
+	key := fmt.Sprintf("user:%d:language", userID)
+	return c.rdb.Set(c.ctx, key, lang, 0).Err()
+}
+
+func (c *Client) GetUserLanguage(userID int64) (string, error) {
+	key := fmt.Sprintf("user:%d:language", userID)
+	lang, err := c.rdb.Get(c.ctx, key).Result()
+	if err == redis.Nil {
+		return "", nil
+	}
+	if err != nil {
+		return "", err
+	}
+	return lang, nil
+}
+
 func NewClient(cfg config.RedisConfig) (*Client, error) {
 	rdb := redis.NewClient(&redis.Options{
 		Addr:     cfg.URL,
