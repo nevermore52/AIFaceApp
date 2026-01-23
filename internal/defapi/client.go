@@ -17,6 +17,87 @@ type Client struct {
 	client  *http.Client
 }
 
+type chatCompletionResponse struct {
+	Choices []struct {
+		Message struct {
+			Content string `json:"content"`
+		} `json:"message"`
+	} `json:"choices"`
+}
+
+func (c *Client) CreateChatCompletion(model string, messages []map[string]string) (string, error) {
+	if c == nil {
+		return "", fmt.Errorf("defapi client is nil")
+	}
+	if c.apiKey == "" {
+		return "", fmt.Errorf("DEF_API_KEY is not set")
+	}
+	if c.baseURL == "" {
+		return "", fmt.Errorf("DEF_BASE_URL is not set")
+	}
+	if model == "" {
+		return "", fmt.Errorf("defapi model is empty")
+	}
+	if len(messages) == 0 {
+		return "", fmt.Errorf("defapi messages are empty")
+	}
+
+	payload := map[string]any{
+		"model":             model,
+		"messages":          messages,
+		"stream":            false,
+		"temperature":       0.7,
+		"top_p":             1,
+		"frequency_penalty": 0,
+		"presence_penalty":  0,
+	}
+
+	body, err := json.Marshal(payload)
+	if err != nil {
+		return "", fmt.Errorf("marshal defapi chat payload: %w", err)
+	}
+
+	base := strings.TrimRight(c.baseURL, "/")
+	url := base + "/api/v1/chat/completions"
+	log.Printf("[DEFAPI] chat request url=%s payload=%s", url, string(body))
+
+	req, err := http.NewRequest(http.MethodPost, url, bytes.NewReader(body))
+	if err != nil {
+		return "", fmt.Errorf("create defapi chat request: %w", err)
+	}
+	req.Header.Set("Authorization", "Bearer "+c.apiKey)
+	req.Header.Set("Content-Type", "application/json")
+
+	resp, err := c.client.Do(req)
+	if err != nil {
+		return "", fmt.Errorf("defapi chat request failed: %w", err)
+	}
+	defer resp.Body.Close()
+
+	raw, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return "", fmt.Errorf("read defapi chat response: %w", err)
+	}
+	log.Printf("[DEFAPI] chat response status=%d body=%s", resp.StatusCode, string(raw))
+
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		return "", fmt.Errorf("defapi chat status %d: %s", resp.StatusCode, string(raw))
+	}
+
+	var parsed chatCompletionResponse
+	if err := json.Unmarshal(raw, &parsed); err != nil {
+		return "", fmt.Errorf("parse defapi chat response: %w", err)
+	}
+	if len(parsed.Choices) == 0 {
+		return "", fmt.Errorf("defapi chat response has no choices")
+	}
+	content := strings.TrimSpace(parsed.Choices[0].Message.Content)
+	if content == "" {
+		return "", fmt.Errorf("defapi chat response empty content")
+	}
+	return content, nil
+}
+
 type CreateImageResponse struct {
 	Code    int    `json:"code"`
 	Message string `json:"message"`

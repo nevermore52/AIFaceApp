@@ -44,6 +44,19 @@ type Bot struct {
 	sunoVoice         map[int64]string // userID -> m/f
 }
 
+func (b *Bot) isChatModelAllowed(userID int64, model ModelOption) bool {
+	if model.ID != "google/gemini-3-flash" && model.ID != "openai/gpt-5-mini" {
+		return true
+	}
+	if isAdmin, err := b.userService.IsUserAdmin(userID); err == nil && isAdmin {
+		return true
+	}
+	if label, ok := b.userService.GetSubscriptionLabel(userID); ok && label != "Free" {
+		return true
+	}
+	return false
+}
+
 func (b *Bot) extrasPrice(category string, qty int) (int, bool) {
 	if b.paymentService == nil {
 		return 0, false
@@ -454,7 +467,7 @@ const requiredChannelLink = "https://t.me/AIFaceApps"
 const modelsDescription = `Категории моделей:
 📸 Фото — редактирование и генерация изображений.
 🎵 Песни — генерация треков.
-💬 Чат-бот — ответы на вопросы и сопровождение.`
+💬 Текст — ответы на вопросы и сопровождение.`
 
 const chatSystemPrompt = "Отвечай чётко и по делу, избегай излишних предисловий и не нарушай правила бота (никакого 18+, насилия, нелегала). Не ссылайся на ограничения объёма или «формата ответа» — если запрос слишком большой или непонятный, попроси пользователя кратко уточнить суть одним предложением."
 
@@ -513,6 +526,8 @@ var modelOptions = []ModelOption{
 	{ID: "google/nano-banana-pro", Label: "🌟 Nano Banana Pro", Desc: "Фото: Новейшая модель, лучшее качество. Среднее время ожидания 1-2 минуты, максимум до 10 минут", Category: ModelCategoryPhoto, RequestCost: 3},
 	{ID: "hug-video", ApiModel: "Qubico/hug-video", Label: "🤗 Обнимашки", Desc: "Видео: оживление фото с обнимашками.", Category: ModelCategoryVideo, RequestCost: 1, TaskType: "image_to_video"},
 	{ID: "music-suno", ApiModel: "suno", Label: "🎵 Suno Music", Desc: "Музыка: генерация песни. До 10-15 минут.", Category: ModelCategoryMusic, RequestCost: 1, TaskType: "music"},
+	{ID: "google/gemini-3-flash", Label: "💬 Gemini 3 Flash", Desc: "Текст: быстрые ответы (DefAPI). Доступно с подпиской Mini+.", Category: ModelCategoryChat, RequestCost: 1},
+	{ID: "openai/gpt-5-mini", Label: "💬 GPT-5 mini", Desc: "Текст: быстрые ответы (DefAPI). Доступно с подпиской Mini+.", Category: ModelCategoryChat, RequestCost: 1},
 	{ID: "chat-gpt-4.1mini", ApiModel: "gpt-4.1-mini", Label: "💬 GPT-4.1 mini", Desc: "Чат-бот: быстрые ответы на текстовые запросы.", Category: ModelCategoryChat, RequestCost: 1, TaskType: "chat"},
 }
 
@@ -1285,7 +1300,7 @@ func categoryLabel(cat ModelCategory) string {
 	case ModelCategoryMusic:
 		return "🎵 Музыка"
 	case ModelCategoryChat:
-		return "💬 Чат-бот LLM"
+		return "💬 Текст"
 	default:
 		return string(cat)
 	}
@@ -2343,6 +2358,10 @@ func (b *Bot) handleCallback(callback *tgbotapi.CallbackQuery) {
 				b.sendErrorMessage(chatID, "Неизвестная модель")
 				return
 			}
+			if opt.Category == ModelCategoryChat && !b.isChatModelAllowed(userID, opt) {
+				b.sendErrorMessage(chatID, "Модель доступна только с подпиской Mini и выше")
+				return
+			}
 			b.setUserModel(userID, model)
 
 			info := fmt.Sprintf("Модель выбрана: %s\nКатегория: %s", opt.Label, categoryLabel(opt.Category))
@@ -2532,6 +2551,10 @@ func (b *Bot) handleTextMessage(msg *tgbotapi.Message) {
 
 	// Чат-модель: выдаём ответ с учётом системного промпта (пока локально)
 	if ok && modelOpt.Category == ModelCategoryChat {
+		if !b.isChatModelAllowed(msg.From.ID, modelOpt) {
+			b.sendErrorMessage(msg.Chat.ID, "Модель доступна только с подпиской Mini и выше")
+			return
+		}
 		requestCost := modelOpt.RequestCost
 		if requestCost < 1 {
 			requestCost = 1
@@ -3015,8 +3038,18 @@ func (b *Bot) sendModelMenu(chatID int64, userID int64, category ModelCategory) 
 	if current == "" {
 		for _, m := range modelOptions {
 			if containsCategory(enabledCats, m.Category) {
+				if m.Category == ModelCategoryChat && !b.isChatModelAllowed(userID, m) {
+					continue
+				}
 				current = m.ID
 				break
+			}
+		}
+	}
+	if current != "" {
+		if opt, ok := findModelOption(current); ok {
+			if opt.Category == ModelCategoryChat && !b.isChatModelAllowed(userID, opt) {
+				current = ""
 			}
 		}
 	}
@@ -3039,6 +3072,9 @@ func (b *Bot) sendModelMenu(chatID int64, userID int64, category ModelCategory) 
 	row := []tgbotapi.InlineKeyboardButton{}
 	for i, m := range options {
 		label := m.Label
+		if m.Category == ModelCategoryChat && !b.isChatModelAllowed(userID, m) {
+			label = "🔒 " + label
+		}
 		if m.ID == current {
 			label = "✅ " + label
 		}

@@ -214,8 +214,15 @@ func (s *GenerationService) GenerateVideoFromImage(imageURL, model, taskType str
 	return s.client.GenerateVideo(imageURL, model, taskType)
 }
 func (s *GenerationService) GenerateChat(model string, messages []map[string]string) (string, error) {
+	if useDefAPIChatModel(model) {
+		if s.defAPI == nil {
+			return "", fmt.Errorf("defapi client is not configured")
+		}
+		return s.defAPI.CreateChatCompletion(model, messages)
+	}
 	return s.client.GenerateChat(model, messages)
 }
+
 func (s *GenerationService) GenerateMusicSuno(prompt, vocalGender string, instrumental bool) (string, string, error) {
 	apiKey := os.Getenv("SUNO_API_KEY")
 	if apiKey == "" {
@@ -316,6 +323,11 @@ func (s *GenerationService) HealthCheckPiAPI() error {
 func useDefAPIModel(model string) bool {
 	model = strings.ToLower(strings.TrimSpace(model))
 	return model == "google/nano-banana" || model == "google/nano-banana-pro"
+}
+
+func useDefAPIChatModel(model string) bool {
+	model = strings.ToLower(strings.TrimSpace(model))
+	return model == "google/gemini-3-flash" || model == "openai/gpt-5-mini"
 }
 
 func (s *GenerationService) createDefAPITask(requestID int64, opts GenerationOptions, images []string) (string, error) {
