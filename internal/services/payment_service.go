@@ -39,10 +39,10 @@ func NewPaymentService(provider *payments.PaymentProvider, userService *UserServ
 			},
 			"music": {
 				1:   45,
-				5:   219,
-				10:  429,
-				50:  1999,
-				100: 3899,
+				5:   199,
+				10:  349,
+				50:  1599,
+				100: 2899,
 			},
 			"video": {
 				1:   45,
@@ -114,6 +114,14 @@ func (s *PaymentService) priceFor(category string, qty int) (int, error) {
 		}
 	}
 	return 0, fmt.Errorf("неизвестный пакет: %s x %d", category, qty)
+}
+
+func (s *PaymentService) ExtrasPrice(category string, qty int) (int, bool) {
+	price, err := s.priceFor(category, qty)
+	if err != nil {
+		return 0, false
+	}
+	return price, true
 }
 
 func (s *PaymentService) PriceListText() string {

@@ -42,6 +42,13 @@ type Bot struct {
 	sunoInstrumental  map[int64]bool // userID -> true (instrumental), false (with vocal)
 }
 
+func (b *Bot) extrasPrice(category string, qty int) (int, bool) {
+	if b.paymentService == nil {
+		return 0, false
+	}
+	return b.paymentService.ExtrasPrice(category, qty)
+}
+
 func (b *Bot) getUserAspectRatio(userID int64) string {
 	ratio, err := b.redisClient.GetUserAspectRatio(userID)
 	if err != nil {
@@ -147,11 +154,16 @@ func (b *Bot) sendBuyExtrasCategory(chatID int64, title string, callbackPrefix s
 	if strings.Contains(callbackPrefix, "music") || strings.Contains(callbackPrefix, "video") {
 		packs = []int{1, 5, 10, 50, 100}
 	}
+	category := strings.TrimPrefix(callbackPrefix, "buy_package:")
 
 	var sb strings.Builder
 	sb.WriteString(fmt.Sprintf("💰 %s\n\nВыберите пакет:\n", title))
 	for _, p := range packs {
-		sb.WriteString(fmt.Sprintf("• %d запросов\n", p))
+		if price, ok := b.extrasPrice(category, p); ok {
+			sb.WriteString(fmt.Sprintf("• %d запросов — %d ₽\n", p, price))
+		} else {
+			sb.WriteString(fmt.Sprintf("• %d запросов\n", p))
+		}
 	}
 	text := sb.String()
 
