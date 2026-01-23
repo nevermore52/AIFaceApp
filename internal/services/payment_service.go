@@ -53,9 +53,9 @@ func NewPaymentService(provider *payments.PaymentProvider, userService *UserServ
 			},
 		},
 		subPrices: map[string]int{
-			"mini":  250,
-			"start": 550,
-			"pro":   799,
+			"mini":  1,
+			"start": 2,
+			"pro":   3,
 		},
 	}
 }
