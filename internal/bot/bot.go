@@ -135,7 +135,7 @@ func (b *Bot) startWebhookServer() {
 
 		log.Printf("suno callback body: %s", string(body))
 
-		taskID, audioURLs, parseErr := parseSunoCallback(body)
+		taskID, audioURLs, errMsg, parseErr := parseSunoCallback(body)
 		if parseErr != nil {
 			log.Printf("suno callback parse error: %v body=%s", parseErr, truncateForLog(string(body), 300))
 			http.Error(w, "bad request", http.StatusBadRequest)
@@ -147,6 +147,12 @@ func (b *Bot) startWebhookServer() {
 			return
 		}
 		if len(audioURLs) == 0 {
+			if errMsg != "" {
+				b.tgBot.HandleSunoError(taskID, errMsg)
+				log.Printf("suno callback error task=%s msg=%s", taskID, truncateForLog(errMsg, 200))
+				w.WriteHeader(http.StatusOK)
+				return
+			}
 			log.Printf("suno callback skip: empty audio_url for task=%s body=%s", taskID, truncateForLog(string(body), 300))
 			w.WriteHeader(http.StatusOK)
 			return
@@ -164,10 +170,10 @@ func (b *Bot) startWebhookServer() {
 	}
 }
 
-func parseSunoCallback(body []byte) (string, []string, error) {
+func parseSunoCallback(body []byte) (string, []string, string, error) {
 	var payload any
 	if err := json.Unmarshal(body, &payload); err != nil {
-		return "", nil, err
+		return "", nil, "", err
 	}
 	taskID := findStringByKeys(payload, "taskId", "task_id")
 	audioURLs := findAllStringsByKeys(payload,
@@ -179,7 +185,8 @@ func parseSunoCallback(body []byte) (string, []string, error) {
 		"preview_url", "previewUrl",
 		"url",
 	)
-	return taskID, audioURLs, nil
+	errMsg := findStringByKeys(payload, "msg", "message", "error")
+	return taskID, audioURLs, errMsg, nil
 }
 
 func findStringByKeys(v any, keys ...string) string {

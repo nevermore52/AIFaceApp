@@ -469,7 +469,7 @@ const modelsDescription = `Категории моделей:
 🎵 Песни — генерация треков.
 💬 Текст — ответы на вопросы и сопровождение.`
 
-const chatSystemPrompt = "Отвечай чётко и по делу, избегай излишних предисловий и не нарушай правила бота (никакого 18+, насилия, нелегала). Не ссылайся на ограничения объёма или «формата ответа» — если запрос слишком большой или непонятный, попроси пользователя кратко уточнить суть одним предложением."
+const chatSystemPrompt = "Отвечай чётко как тебя просят, избегай излишних предисловий и не нарушай правила бота (никакого 18+, насилия, нелегала)."
 
 type chatStyle struct {
 	ID     string
@@ -528,7 +528,7 @@ var modelOptions = []ModelOption{
 	{ID: "music-suno", ApiModel: "suno", Label: "🎵 Suno Music", Desc: "Музыка: генерация песни. До 10-15 минут.", Category: ModelCategoryMusic, RequestCost: 1, TaskType: "music"},
 	{ID: "google/gemini-3-flash", Label: "💬 Gemini 3 Flash", Desc: "Текст: быстрые ответы. Доступно с подпиской Mini+.", Category: ModelCategoryChat, RequestCost: 1},
 	{ID: "openai/gpt-5-mini", Label: "💬 GPT-5 mini", Desc: "Текст: быстрые ответы. Доступно с подпиской Mini+.", Category: ModelCategoryChat, RequestCost: 1},
-	{ID: "openai/gpt-5-nano", Label: "💬 GPT-5 nano", Desc: "Текст: быстрые ответы. Доступно с подпиской Mini+.", Category: ModelCategoryChat, RequestCost: 1},
+	{ID: "openai/gpt-5-nano", Label: "💬 GPT-5 nano", Desc: "Текст: дольше ответы. Доступно с подпиской Mini+.", Category: ModelCategoryChat, RequestCost: 1},
 	{ID: "chat-gpt-4.1mini", ApiModel: "gpt-4.1-mini", Label: "💬 GPT-4.1 mini", Desc: "Чат-бот: быстрые ответы на текстовые запросы.", Category: ModelCategoryChat, RequestCost: 1, TaskType: "chat"},
 }
 
@@ -1668,6 +1668,34 @@ func (b *Bot) HandleSunoCallback(taskID string, audioURLs []string) {
 		caption := fmt.Sprintf("🔊 Аудио готово (%d/%d)\nМодель: %s\nСписано: %d музыкальных запрос(ов)", i+1, len(valid), task.ModelLabel, task.RequestCost)
 		b.sendAudioResult(task.ChatID, caption, url)
 	}
+}
+
+func (b *Bot) HandleSunoError(taskID, errMsg string) {
+	if taskID == "" {
+		return
+	}
+
+	b.sunoMu.Lock()
+	task, ok := b.sunoTasks[taskID]
+	if ok {
+		delete(b.sunoTasks, taskID)
+	}
+	b.sunoMu.Unlock()
+
+	if !ok {
+		log.Printf("Suno error unknown taskID=%s", taskID)
+		return
+	}
+
+	_ = b.userService.AddExtraQuota(task.UserID, models.QuotaCategoryMusic, task.RequestCost)
+	message := fmt.Sprintf("Не удалось сгенерировать песню: %s", strings.TrimSpace(errMsg))
+	if strings.TrimSpace(errMsg) == "" {
+		message = "Не удалось сгенерировать песню. Попробуйте изменить запрос и повторить."
+	}
+	if task.Prompt != "" {
+		message += "\n\nЗапрос:\n" + truncate(task.Prompt, 700)
+	}
+	b.sendErrorMessage(task.ChatID, message)
 }
 
 func (b *Bot) getSunoInstrumental(userID int64) bool {
