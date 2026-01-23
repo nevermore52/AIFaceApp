@@ -157,7 +157,7 @@ func (b *Bot) sendBuyExtrasCategory(chatID int64, title string, callbackPrefix s
 	category := strings.TrimPrefix(callbackPrefix, "buy_package:")
 
 	var sb strings.Builder
-	sb.WriteString(fmt.Sprintf("💰 %s\n\nВыберите пакет:\n", title))
+	sb.WriteString(fmt.Sprintf("💰 %s\n\nС подпиской скидка до 20%%\n\nВыберите пакет:\n", title))
 	for _, p := range packs {
 		if price, ok := b.extrasPrice(category, p); ok {
 			sb.WriteString(fmt.Sprintf("• %d запросов — %d ₽\n", p, price))
@@ -1701,10 +1701,70 @@ func (b *Bot) sendSunoBalance(chatID int64) {
 	if balanceStr != "" {
 		msg := fmt.Sprintf("Баланс Suno API: %s\n(HTTP %d)", balanceStr, resp.StatusCode)
 		b.sendText(chatID, msg)
+	} else {
+		b.sendText(chatID, fmt.Sprintf("Баланс Suno API (HTTP %d):\n%s", resp.StatusCode, rawShown))
+	}
+
+	b.sendDefAPIBalance(chatID)
+}
+
+func (b *Bot) sendDefAPIBalance(chatID int64) {
+	if b.cfg == nil {
+		b.sendErrorMessage(chatID, "Конфиг не загружен")
+		return
+	}
+	apiKey := strings.TrimSpace(b.cfg.DefAPI.APIKey)
+	baseURL := strings.TrimSpace(b.cfg.DefAPI.BaseURL)
+	if apiKey == "" || baseURL == "" {
+		b.sendErrorMessage(chatID, "DEF_API_KEY или DEF_BASE_URL не заданы")
+		return
+	}
+	baseURL = strings.TrimRight(baseURL, "/")
+	url := baseURL + "/api/user"
+
+	req, err := http.NewRequest(http.MethodGet, url, nil)
+	if err != nil {
+		b.sendErrorMessage(chatID, fmt.Sprintf("Ошибка создания DefAPI запроса: %v", err))
+		return
+	}
+	req.Header.Set("Authorization", "Bearer "+apiKey)
+	req.Header.Set("Accept", "application/json")
+
+	client := &http.Client{Timeout: 10 * time.Second}
+	resp, err := client.Do(req)
+	if err != nil {
+		b.sendErrorMessage(chatID, fmt.Sprintf("Запрос DefAPI баланса не удался: %v", err))
+		return
+	}
+	defer resp.Body.Close()
+
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		b.sendErrorMessage(chatID, fmt.Sprintf("Ошибка чтения ответа DefAPI: %v", err))
 		return
 	}
 
-	b.sendText(chatID, fmt.Sprintf("Баланс Suno API (HTTP %d):\n%s", resp.StatusCode, rawShown))
+	var (
+		balanceStr string
+		rawShown   = string(body)
+	)
+
+	var payload interface{}
+	if err := json.Unmarshal(body, &payload); err == nil {
+		if s, ok := findStringByKeys(payload, "credit"); ok {
+			balanceStr = s
+		} else if num, ok := findNumberByKeys(payload, "credit"); ok {
+			balanceStr = fmt.Sprintf("%.8f", num)
+		}
+	}
+
+	if balanceStr != "" {
+		msg := fmt.Sprintf("Баланс DefAPI: %s\n(HTTP %d)", balanceStr, resp.StatusCode)
+		b.sendText(chatID, msg)
+		return
+	}
+
+	b.sendText(chatID, fmt.Sprintf("Баланс DefAPI (HTTP %d):\n%s", resp.StatusCode, rawShown))
 }
 
 // findNumberByKeys ищет первое числовое значение по ключам (float64/числовая строка)
