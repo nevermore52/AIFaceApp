@@ -6,6 +6,7 @@ import (
 	"io"
 	"log"
 	"net/http"
+	"strconv"
 	"strings"
 
 	"telegram-ai-face-bot/internal/config"
@@ -135,7 +136,7 @@ func (b *Bot) startWebhookServer() {
 
 		log.Printf("suno callback body: %s", string(body))
 
-		taskID, audioURLs, errMsg, parseErr := parseSunoCallback(body)
+		taskID, audioURLs, errMsg, callbackType, code, parseErr := parseSunoCallback(body)
 		if parseErr != nil {
 			log.Printf("suno callback parse error: %v body=%s", parseErr, truncateForLog(string(body), 300))
 			http.Error(w, "bad request", http.StatusBadRequest)
@@ -147,6 +148,11 @@ func (b *Bot) startWebhookServer() {
 			return
 		}
 		if len(audioURLs) == 0 {
+			if callbackType == "text" && code >= 200 && code < 300 {
+				log.Printf("suno callback pending text task=%s msg=%s", taskID, truncateForLog(errMsg, 200))
+				w.WriteHeader(http.StatusOK)
+				return
+			}
 			if errMsg != "" {
 				b.tgBot.HandleSunoError(taskID, errMsg)
 				log.Printf("suno callback error task=%s msg=%s", taskID, truncateForLog(errMsg, 200))
@@ -170,10 +176,10 @@ func (b *Bot) startWebhookServer() {
 	}
 }
 
-func parseSunoCallback(body []byte) (string, []string, string, error) {
+func parseSunoCallback(body []byte) (string, []string, string, string, int, error) {
 	var payload any
 	if err := json.Unmarshal(body, &payload); err != nil {
-		return "", nil, "", err
+		return "", nil, "", "", 0, err
 	}
 	taskID := findStringByKeys(payload, "taskId", "task_id")
 	audioURLs := findAllStringsByKeys(payload,
@@ -186,7 +192,47 @@ func parseSunoCallback(body []byte) (string, []string, string, error) {
 		"url",
 	)
 	errMsg := findStringByKeys(payload, "msg", "message", "error")
-	return taskID, audioURLs, errMsg, nil
+	callbackType := findStringByKeys(payload, "callbackType", "callback_type", "type")
+	code := findIntByKeys(payload, "code", "status")
+	return taskID, audioURLs, errMsg, callbackType, code, nil
+}
+
+func findIntByKeys(v any, keys ...string) int {
+	switch val := v.(type) {
+	case map[string]any:
+		for _, k := range keys {
+			if raw, ok := val[k]; ok {
+				switch n := raw.(type) {
+				case float64:
+					return int(n)
+				case int:
+					return n
+				case int64:
+					return int(n)
+				case json.Number:
+					if parsed, err := n.Int64(); err == nil {
+						return int(parsed)
+					}
+				case string:
+					if parsed, err := strconv.Atoi(strings.TrimSpace(n)); err == nil {
+						return parsed
+					}
+				}
+			}
+		}
+		for _, vv := range val {
+			if res := findIntByKeys(vv, keys...); res != 0 {
+				return res
+			}
+		}
+	case []any:
+		for _, vv := range val {
+			if res := findIntByKeys(vv, keys...); res != 0 {
+				return res
+			}
+		}
+	}
+	return 0
 }
 
 func findStringByKeys(v any, keys ...string) string {
