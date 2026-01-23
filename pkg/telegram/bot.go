@@ -2538,6 +2538,7 @@ func (b *Bot) confirmGeneration(chatID int64, userID int64, requestIDStr string)
 }
 
 func (b *Bot) handleTextMessage(msg *tgbotapi.Message) {
+	userText := strings.TrimSpace(msg.Text)
 	modelID := b.getUserModel(msg.From.ID)
 	modelOpt, ok := findModelOption(modelID)
 
@@ -2550,7 +2551,7 @@ func (b *Bot) handleTextMessage(msg *tgbotapi.Message) {
 	// Чат-модель: выдаём ответ с учётом системного промпта (пока локально)
 	if ok && modelOpt.Category == ModelCategoryChat {
 		// Сохраняем сообщение в контекст (до 5 последних) только для текстовых моделей
-		b.saveMessageToContext(msg.From.ID, msg.Text)
+		b.saveMessageToContext(msg.From.ID, "Пользователь: "+userText)
 		if !b.isChatModelAllowed(msg.From.ID, modelOpt) {
 			b.sendErrorMessage(msg.Chat.ID, "Модель доступна только с подпиской Mini и выше")
 			return
@@ -2582,14 +2583,13 @@ func (b *Bot) handleTextMessage(msg *tgbotapi.Message) {
 			messages := []map[string]string{
 				{"role": "system", "content": b.buildChatSystemPrompt(msg.From.ID)},
 			}
-			// добавляем контекст пользователя из redis, если есть
+			// добавляем контекст пользователя из redis с явным префиксом
 			if ctx, err := b.redisClient.GetContext(msg.From.ID); err == nil && ctx != nil && len(ctx.Messages) > 0 {
-				for _, m := range ctx.Messages {
-					messages = append(messages, map[string]string{"role": "user", "content": m})
-				}
+				contextBlock := "Вот прошлые запросы и твои ответы:\n" + strings.Join(ctx.Messages, "\n")
+				messages = append(messages, map[string]string{"role": "user", "content": contextBlock})
 			}
 			// текущий запрос
-			messages = append(messages, map[string]string{"role": "user", "content": msg.Text})
+			messages = append(messages, map[string]string{"role": "user", "content": userText})
 
 			resp, err := b.generationService.GenerateChat(apiModel, messages)
 			if err != nil {
@@ -2598,6 +2598,7 @@ func (b *Bot) handleTextMessage(msg *tgbotapi.Message) {
 				b.sendErrorMessage(msg.Chat.ID, fmt.Sprintf("Не удалось ответить: %s", friendlyGenerationError(err)))
 				return
 			}
+			b.saveMessageToContext(msg.From.ID, "Бот: "+resp)
 			b.sendLongText(msg.Chat.ID, resp)
 		})
 		return
