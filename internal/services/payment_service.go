@@ -24,11 +24,11 @@ func NewPaymentService(provider *payments.PaymentProvider, userService *UserServ
 		userService: userService,
 		priceTable: map[string]map[int]int{
 			"image": {
-				10:  50,
-				50:  240,
-				100: 460,
-				250: 999,
-				500: 1910,
+				10:  39,
+				50:  195,
+				100: 375,
+				250: 880,
+				500: 1710,
 			},
 			"text": {
 				10:  10,
@@ -53,9 +53,9 @@ func NewPaymentService(provider *payments.PaymentProvider, userService *UserServ
 			},
 		},
 		subPrices: map[string]int{
-			"mini":  1,
-			"start": 2,
-			"pro":   3,
+			"mini":  249,
+			"start": 449,
+			"pro":   799,
 		},
 	}
 }
@@ -125,6 +125,12 @@ func (s *PaymentService) PriceListText() string {
 		}
 	}
 	return strings.Join(lines, "\n")
+}
+
+func (s *PaymentService) SubscriptionPrice(plan string) (int, bool) {
+	plan = strings.ToLower(strings.TrimSpace(plan))
+	price, ok := s.subPrices[plan]
+	return price, ok
 }
 
 func (s *PaymentService) ProcessSuccessfulPayment(userID int64, category string, qty int) error {

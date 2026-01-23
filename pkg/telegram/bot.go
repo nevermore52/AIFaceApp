@@ -2730,29 +2730,33 @@ func (b *Bot) sendBuySubscription(chatID int64) {
 		return
 	}
 
-	text := `⭐ Подписки
+	miniPrice := b.subscriptionPrice("mini")
+	startPrice := b.subscriptionPrice("start")
+	proPrice := b.subscriptionPrice("pro")
 
-✨ Mini — 250 ₽ в неделю
+	text := fmt.Sprintf(`⭐ Подписки
+
+✨ Mini — %d ₽ в неделю
 • 50 текстовых/24ч
 • 30 изображений
 • 5 песен
-• Скидка 10% на доп. запросы
+• Скидка 10%% на доп. запросы
 
-🚀 Start — 550 ₽ в неделю
+🚀 Start — %d ₽ в неделю
 • 100 текстовых/24ч
 • 70 изображений
 • 10 песен
 • x2 контекст
 • 3 видео
-• Скидка 20% на доп. запросы
+• Скидка 20%% на доп. запросы
 
-👑 Pro — 799 ₽ в неделю
+👑 Pro — %d ₽ в неделю
 • 300 текстовых/24ч
-• 70 изображений
+• 150 изображений
 • 15 песен
 • 7 видео
 • 6 стилей общения GPT, x3 контекст, без рекламы
-• Скидка 25% на доп. запросы`
+• Скидка 25%% на доп. запросы`, miniPrice, startPrice, proPrice)
 
 	keyboard := tgbotapi.NewInlineKeyboardMarkup(
 		tgbotapi.NewInlineKeyboardRow(
@@ -2773,6 +2777,16 @@ func (b *Bot) sendBuySubscription(chatID int64) {
 	if _, err := b.api.Send(msg); err != nil {
 		log.Printf("Failed to send buy subscription: %v", err)
 	}
+}
+
+func (b *Bot) subscriptionPrice(plan string) int {
+	if b.paymentService == nil {
+		return 0
+	}
+	if price, ok := b.paymentService.SubscriptionPrice(plan); ok {
+		return price
+	}
+	return 0
 }
 
 func (b *Bot) sendBuySubscriptionPayment(chatID int64, userID int64, plan string) {

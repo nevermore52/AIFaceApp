@@ -842,7 +842,7 @@ func (s *UserService) setSubscriptionQuotas(telegramID int64, subType string) er
 		image, music, video = 70, 10, 3
 		textDaily = 100
 	case "pro":
-		image, music, video = 70, 15, 7
+		image, music, video = 150, 15, 7
 		textDaily = 300
 	default:
 		return nil
@@ -868,7 +868,7 @@ func (s *UserService) setSubscriptionWeekly(telegramID int64, subType string) er
 	case "start":
 		image, music, video = 70, 10, 3
 	case "pro":
-		image, music, video = 70, 15, 7
+		image, music, video = 150, 15, 7
 	default:
 		return nil
 	}
