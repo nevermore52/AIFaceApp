@@ -1549,7 +1549,13 @@ func (b *Bot) processAudioMessage(msg *tgbotapi.Message, modelOpt ModelOption) {
 		var taskID string
 		var err error
 		if apiModel == "music-suno" || strings.Contains(strings.ToLower(apiModel), "suno") {
-			resultURL, taskID, err = b.generationService.GenerateMusicSuno(text, voice, instrumental)
+			sunoPrompt := text
+			if voice == "f" {
+				sunoPrompt += "\nженский голос"
+			} else {
+				sunoPrompt += "\nмужской голос"
+			}
+			resultURL, taskID, err = b.generationService.GenerateMusicSuno(sunoPrompt, voice, instrumental)
 		} else if modelOpt.Category == ModelCategoryMusic {
 			_ = b.userService.AddExtraQuota(userID, models.QuotaCategoryMusic, requestCost)
 			b.sendErrorMessage(chatID, "Музыкальная генерация доступна только через Suno.")

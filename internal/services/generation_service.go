@@ -240,7 +240,7 @@ func (s *GenerationService) GenerateMusicSuno(prompt, vocalGender string, instru
 		"vocalGender":         gender,
 		"styleWeight":         0.65,
 		"weirdnessConstraint": 0.65,
-		"audioWeight":         0.65,
+		"audioWeight":         0.75,
 	}
 
 	body, err := json.Marshal(payload)
