@@ -496,7 +496,7 @@ func (b *Bot) isUserAllowed(userID int64) bool {
 // Доступные модели для выбора
 var modelOptions = []ModelOption{
 	{ID: "google/nano-banana", Label: "🚀 Nano Banana", Desc: "Фото: среднее качество. До 5 минут и дешево.", Category: ModelCategoryPhoto, RequestCost: 1},
-	{ID: "google/nano-banana-pro", Label: "🌟 Nano Banana Pro", Desc: "Фото: лучшее качество. До 10 минут и дороже.", Category: ModelCategoryPhoto, RequestCost: 4},
+	{ID: "google/nano-banana-pro", Label: "🌟 Nano Banana Pro", Desc: "Фото: лучшее качество. До 10 минут и дороже.", Category: ModelCategoryPhoto, RequestCost: 3},
 	{ID: "hug-video", ApiModel: "Qubico/hug-video", Label: "🤗 Обнимашки", Desc: "Видео: оживление фото с обнимашками.", Category: ModelCategoryVideo, RequestCost: 1, TaskType: "image_to_video"},
 	{ID: "music-suno", ApiModel: "suno", Label: "🎵 Suno Music", Desc: "Музыка: генерация песни. Долго.", Category: ModelCategoryMusic, RequestCost: 1, TaskType: "music"},
 	{ID: "chat-gpt-4.1mini", ApiModel: "gpt-4.1-mini", Label: "💬 GPT-4.1 mini", Desc: "Чат-бот: быстрые ответы на текстовые запросы.", Category: ModelCategoryChat, RequestCost: 1, TaskType: "chat"},
@@ -3179,6 +3179,46 @@ func (b *Bot) handleAdminCommand(msg *tgbotapi.Message) {
 		b.sendPaymentsStatus(msg.Chat.ID)
 	case "nano":
 		b.sendNanoBananaAPIStatus(msg.Chat.ID)
+	case "sub_set":
+		if len(args) < 5 {
+			b.sendErrorMessage(msg.Chat.ID, "Использование: /admin sub_set <user_id> <mini|start|pro> <days>")
+			return
+		}
+		userID, err := strconv.ParseInt(args[2], 10, 64)
+		if err != nil {
+			b.sendErrorMessage(msg.Chat.ID, "Некорректный user_id")
+			return
+		}
+		plan := strings.ToLower(strings.TrimSpace(args[3]))
+		days, err := strconv.Atoi(args[4])
+		if err != nil || days <= 0 {
+			b.sendErrorMessage(msg.Chat.ID, "Некорректные days")
+			return
+		}
+		if plan != "mini" && plan != "start" && plan != "pro" {
+			b.sendErrorMessage(msg.Chat.ID, "План должен быть mini, start или pro")
+			return
+		}
+		if err := b.userService.SetSubscription(userID, plan, days); err != nil {
+			b.sendErrorMessage(msg.Chat.ID, fmt.Sprintf("Не удалось выдать подписку: %v", err))
+			return
+		}
+		b.sendText(msg.Chat.ID, fmt.Sprintf("✅ Подписка %s выдана пользователю %d на %d дней", strings.Title(plan), userID, days))
+	case "sub_remove":
+		if len(args) < 3 {
+			b.sendErrorMessage(msg.Chat.ID, "Использование: /admin sub_remove <user_id>")
+			return
+		}
+		userID, err := strconv.ParseInt(args[2], 10, 64)
+		if err != nil {
+			b.sendErrorMessage(msg.Chat.ID, "Некорректный user_id")
+			return
+		}
+		if err := b.userService.ResetSubscription(userID); err != nil {
+			b.sendErrorMessage(msg.Chat.ID, fmt.Sprintf("Не удалось убрать подписку: %v", err))
+			return
+		}
+		b.sendText(msg.Chat.ID, fmt.Sprintf("✅ Подписка удалена у пользователя %d", userID))
 	case "help":
 		b.handleAdminHelp(msg.Chat.ID)
 	default:
@@ -3287,6 +3327,8 @@ func (b *Bot) handleAdminHelp(chatID int64) {
 /admin categories - Управление доступностью категорий
 /admin payments - Управление платежами
 /admin nano - Переключение Nano Banana API
+/admin sub_set <user_id> <mini|start|pro> <days> - Выдать подписку
+/admin sub_remove <user_id> - Убрать подписку
 /admin help - Эта справка
 `
 
