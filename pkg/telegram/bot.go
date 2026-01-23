@@ -45,7 +45,7 @@ type Bot struct {
 }
 
 func (b *Bot) isChatModelAllowed(userID int64, model ModelOption) bool {
-	if model.ID != "google/gemini-3-flash" && model.ID != "openai/gpt-5-mini" {
+	if model.ID != "google/gemini-3-flash" && model.ID != "openai/gpt-5-mini" && model.ID != "openai/gpt-5-nano" {
 		return true
 	}
 	if isAdmin, err := b.userService.IsUserAdmin(userID); err == nil && isAdmin {
@@ -526,8 +526,9 @@ var modelOptions = []ModelOption{
 	{ID: "google/nano-banana-pro", Label: "🌟 Nano Banana Pro", Desc: "Фото: Новейшая модель, лучшее качество. Среднее время ожидания 1-2 минуты, максимум до 10 минут", Category: ModelCategoryPhoto, RequestCost: 3},
 	{ID: "hug-video", ApiModel: "Qubico/hug-video", Label: "🤗 Обнимашки", Desc: "Видео: оживление фото с обнимашками.", Category: ModelCategoryVideo, RequestCost: 1, TaskType: "image_to_video"},
 	{ID: "music-suno", ApiModel: "suno", Label: "🎵 Suno Music", Desc: "Музыка: генерация песни. До 10-15 минут.", Category: ModelCategoryMusic, RequestCost: 1, TaskType: "music"},
-	{ID: "google/gemini-3-flash", Label: "💬 Gemini 3 Flash", Desc: "Текст: быстрые ответы (DefAPI). Доступно с подпиской Mini+.", Category: ModelCategoryChat, RequestCost: 1},
-	{ID: "openai/gpt-5-mini", Label: "💬 GPT-5 mini", Desc: "Текст: быстрые ответы (DefAPI). Доступно с подпиской Mini+.", Category: ModelCategoryChat, RequestCost: 1},
+	{ID: "google/gemini-3-flash", Label: "💬 Gemini 3 Flash", Desc: "Текст: быстрые ответы. Доступно с подпиской Mini+.", Category: ModelCategoryChat, RequestCost: 1},
+	{ID: "openai/gpt-5-mini", Label: "💬 GPT-5 mini", Desc: "Текст: быстрые ответы. Доступно с подпиской Mini+.", Category: ModelCategoryChat, RequestCost: 1},
+	{ID: "openai/gpt-5-nano", Label: "💬 GPT-5 nano", Desc: "Текст: быстрые ответы. Доступно с подпиской Mini+.", Category: ModelCategoryChat, RequestCost: 1},
 	{ID: "chat-gpt-4.1mini", ApiModel: "gpt-4.1-mini", Label: "💬 GPT-4.1 mini", Desc: "Чат-бот: быстрые ответы на текстовые запросы.", Category: ModelCategoryChat, RequestCost: 1, TaskType: "chat"},
 }
 

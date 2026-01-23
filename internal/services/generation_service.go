@@ -327,7 +327,7 @@ func useDefAPIModel(model string) bool {
 
 func useDefAPIChatModel(model string) bool {
 	model = strings.ToLower(strings.TrimSpace(model))
-	return model == "google/gemini-3-flash" || model == "openai/gpt-5-mini"
+	return model == "google/gemini-3-flash" || model == "openai/gpt-5-mini" || model == "openai/gpt-5-nano"
 }
 
 func (s *GenerationService) createDefAPITask(requestID int64, opts GenerationOptions, images []string) (string, error) {
