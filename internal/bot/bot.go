@@ -98,6 +98,7 @@ func (b *Bot) startWebhookServer() {
 			http.Error(w, "bad request", http.StatusBadRequest)
 			return
 		}
+		log.Printf("defapi callback body: %s", string(body))
 
 		var payload defapi.CallbackPayload
 		if err := json.Unmarshal(body, &payload); err != nil {

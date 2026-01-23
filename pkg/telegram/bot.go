@@ -157,7 +157,7 @@ func (b *Bot) sendBuyExtrasCategory(chatID int64, title string, callbackPrefix s
 	category := strings.TrimPrefix(callbackPrefix, "buy_package:")
 
 	var sb strings.Builder
-	sb.WriteString(fmt.Sprintf("💰 %s\n\nС подпиской скидка до 20%%\n\nВыберите пакет:\n", title))
+	sb.WriteString(fmt.Sprintf("💰 %s\n\nС подпиской скидка до 20%%\nЦены указаны без учета скидки\n\nВыберите пакет:\n", title))
 	for _, p := range packs {
 		if price, ok := b.extrasPrice(category, p); ok {
 			sb.WriteString(fmt.Sprintf("• %d запросов — %d ₽\n", p, price))

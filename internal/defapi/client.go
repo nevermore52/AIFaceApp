@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"log"
 	"net/http"
 	"strings"
 	"time"
@@ -84,6 +85,7 @@ func (c *Client) CreateImageTask(model, prompt string, images []string, callback
 	}
 
 	url := normalizeEndpoint(c.baseURL)
+	log.Printf("[DEFAPI] request url=%s payload=%s", url, string(body))
 	req, err := http.NewRequest(http.MethodPost, url, bytes.NewReader(body))
 	if err != nil {
 		return "", fmt.Errorf("create defapi request: %w", err)
@@ -98,6 +100,7 @@ func (c *Client) CreateImageTask(model, prompt string, images []string, callback
 
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
 		raw, _ := io.ReadAll(io.LimitReader(resp.Body, 2048))
+		log.Printf("[DEFAPI] response status=%d body=%s", resp.StatusCode, string(raw))
 		return "", fmt.Errorf("defapi status %d: %s", resp.StatusCode, string(raw))
 	}
 
@@ -105,6 +108,7 @@ func (c *Client) CreateImageTask(model, prompt string, images []string, callback
 	if err != nil {
 		return "", fmt.Errorf("read defapi response: %w", err)
 	}
+	log.Printf("[DEFAPI] response status=%d body=%s", resp.StatusCode, string(raw))
 
 	var parsed CreateImageResponse
 	if err := json.Unmarshal(raw, &parsed); err != nil {
