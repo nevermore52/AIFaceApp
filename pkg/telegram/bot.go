@@ -509,10 +509,10 @@ func (b *Bot) isUserAllowed(userID int64) bool {
 
 // Доступные модели для выбора
 var modelOptions = []ModelOption{
-	{ID: "google/nano-banana", Label: "🚀 Nano Banana", Desc: "Фото: среднее качество. До 5 минут и дешево.", Category: ModelCategoryPhoto, RequestCost: 1},
-	{ID: "google/nano-banana-pro", Label: "🌟 Nano Banana Pro", Desc: "Фото: лучшее качество. До 10 минут и дороже.", Category: ModelCategoryPhoto, RequestCost: 3},
+	{ID: "google/nano-banana", Label: "🚀 Nano Banana", Desc: "Фото: Старая модель, среднее качество, плохо работает с большими запросами и двумя фотографиями. Среднее время ожидания 1-2 минуты, максимум до 10 минут", Category: ModelCategoryPhoto, RequestCost: 1},
+	{ID: "google/nano-banana-pro", Label: "🌟 Nano Banana Pro", Desc: "Фото: Новейшая модель, лучшее качество. Среднее время ожидания 1-2 минуты, максимум до 10 минут", Category: ModelCategoryPhoto, RequestCost: 3},
 	{ID: "hug-video", ApiModel: "Qubico/hug-video", Label: "🤗 Обнимашки", Desc: "Видео: оживление фото с обнимашками.", Category: ModelCategoryVideo, RequestCost: 1, TaskType: "image_to_video"},
-	{ID: "music-suno", ApiModel: "suno", Label: "🎵 Suno Music", Desc: "Музыка: генерация песни. Долго.", Category: ModelCategoryMusic, RequestCost: 1, TaskType: "music"},
+	{ID: "music-suno", ApiModel: "suno", Label: "🎵 Suno Music", Desc: "Музыка: генерация песни. До 10-15 минут.", Category: ModelCategoryMusic, RequestCost: 1, TaskType: "music"},
 	{ID: "chat-gpt-4.1mini", ApiModel: "gpt-4.1-mini", Label: "💬 GPT-4.1 mini", Desc: "Чат-бот: быстрые ответы на текстовые запросы.", Category: ModelCategoryChat, RequestCost: 1, TaskType: "chat"},
 }
 
