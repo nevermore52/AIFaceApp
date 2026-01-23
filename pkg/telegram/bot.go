@@ -2538,9 +2538,6 @@ func (b *Bot) confirmGeneration(chatID int64, userID int64, requestIDStr string)
 }
 
 func (b *Bot) handleTextMessage(msg *tgbotapi.Message) {
-	// Сохраняем сообщение в контекст (до 5 последних)
-	b.saveMessageToContext(msg.From.ID, msg.Text)
-
 	modelID := b.getUserModel(msg.From.ID)
 	modelOpt, ok := findModelOption(modelID)
 
@@ -2552,6 +2549,8 @@ func (b *Bot) handleTextMessage(msg *tgbotapi.Message) {
 
 	// Чат-модель: выдаём ответ с учётом системного промпта (пока локально)
 	if ok && modelOpt.Category == ModelCategoryChat {
+		// Сохраняем сообщение в контекст (до 5 последних) только для текстовых моделей
+		b.saveMessageToContext(msg.From.ID, msg.Text)
 		if !b.isChatModelAllowed(msg.From.ID, modelOpt) {
 			b.sendErrorMessage(msg.Chat.ID, "Модель доступна только с подпиской Mini и выше")
 			return
