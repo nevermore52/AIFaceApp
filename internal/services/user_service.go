@@ -676,9 +676,9 @@ func (s *UserService) SubscriptionDiscount(telegramID int64) float64 {
 	case "mini":
 		return 0.9
 	case "start":
-		return 0.8
+		return 0.85
 	case "pro":
-		return 0.75
+		return 0.8
 	default:
 		return 1.0
 	}
