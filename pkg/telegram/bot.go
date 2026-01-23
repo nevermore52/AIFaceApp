@@ -1014,9 +1014,15 @@ func (b *Bot) flushAlbum(mediaGroupID string) {
 		return
 	}
 
-	// Для моделей, отличных от Nano Banana / Pro, используем только первое фото
-	if modelOpt.ID != "google/nano-banana" && modelOpt.ID != "google/nano-banana-pro" && len(imageURLs) > 1 {
-		imageURLs = imageURLs[:1]
+	// Ограничения по количеству фото в зависимости от модели
+	maxPhotos := 1
+	if modelOpt.ID == "google/nano-banana" {
+		maxPhotos = 2
+	} else if modelOpt.ID == "google/nano-banana-pro" {
+		maxPhotos = 4
+	}
+	if len(imageURLs) > maxPhotos {
+		imageURLs = imageURLs[:maxPhotos]
 	}
 
 	caption := strings.TrimSpace(buf.caption)
@@ -1311,6 +1317,8 @@ func instructionForModel(m ModelOption) string {
 	case "google/nano-banana":
 		return base + `Принимает фото с подписью и возвращает изображение среднего качества.
 
+Можно отправить до 2 фото за запрос.
+
 Как отправить:
 1) Пришлите фото.
 2) В подписи опишите, что нужно сделать (ретушь, правки, изменение).
@@ -1323,6 +1331,8 @@ func instructionForModel(m ModelOption) string {
 Используйте /menu для выбора другой модели.`
 	case "google/nano-banana-pro":
 		return base + `Принимает фото с подписью и возвращает улучшенное изображение (лучшее качество, но дольше).
+
+Можно отправить до 4 фото за запрос.
 
 Как отправить:
 1) Пришлите фото.
@@ -3053,6 +3063,11 @@ func (b *Bot) sendModelMenu(chatID int64, userID int64, category ModelCategory) 
 				unitCategory = opt.Category
 			}
 			text += fmt.Sprintf("\nРасход: %d запрос(ов) за 1 %s", cost, categoryUnit(unitCategory))
+		}
+		if current == "google/nano-banana" {
+			text += "\nМаксимум фото: 2"
+		} else if current == "google/nano-banana-pro" {
+			text += "\nМаксимум фото: 4"
 		}
 	}
 	if category == ModelCategoryMusic {
