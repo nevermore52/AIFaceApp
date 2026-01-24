@@ -178,6 +178,9 @@ type sunoTask struct {
 	ModelLabel  string
 	Prompt      string
 	CreatedAt   time.Time
+	AudioURLs   []string
+	FirstAudio  time.Time
+	Timer       *time.Timer
 }
 
 func (b *Bot) Config() *config.Config {
@@ -1710,18 +1713,6 @@ func (b *Bot) HandleSunoCallback(taskID string, audioURLs []string) {
 		return
 	}
 
-	b.sunoMu.Lock()
-	task, ok := b.sunoTasks[taskID]
-	if ok {
-		delete(b.sunoTasks, taskID)
-	}
-	b.sunoMu.Unlock()
-
-	if !ok {
-		log.Printf("Suno callback unknown taskID=%s", taskID)
-		return
-	}
-
 	valid := make([]string, 0, len(audioURLs))
 	for _, url := range audioURLs {
 		if url != "" {
@@ -1732,12 +1723,99 @@ func (b *Bot) HandleSunoCallback(taskID string, audioURLs []string) {
 		return
 	}
 
-	if len(valid) > 1 {
+	now := time.Now()
+
+	b.sunoMu.Lock()
+	task, ok := b.sunoTasks[taskID]
+	if !ok {
+		b.sunoMu.Unlock()
+		log.Printf("Suno callback unknown taskID=%s", taskID)
+		return
+	}
+
+	// merge unique URLs
+	existing := make(map[string]struct{}, len(task.AudioURLs))
+	for _, u := range task.AudioURLs {
+		existing[u] = struct{}{}
+	}
+	for _, u := range valid {
+		if _, seen := existing[u]; !seen {
+			task.AudioURLs = append(task.AudioURLs, u)
+			existing[u] = struct{}{}
+		}
+	}
+
+	if task.FirstAudio.IsZero() {
+		task.FirstAudio = now
+	}
+
+	// Decide if we can send now
+	readyToSend := len(task.AudioURLs) >= 2
+
+	// Calculate next deadline if waiting for second variant
+	if !readyToSend {
+		deadlineSecond := task.FirstAudio.Add(6 * time.Minute)
+		deadlineHard := task.CreatedAt.Add(8 * time.Minute)
+		if deadlineHard.Before(deadlineSecond) {
+			deadlineSecond = deadlineHard
+		}
+		delay := time.Until(deadlineSecond)
+		if delay < 0 {
+			delay = 0
+		}
+		if task.Timer != nil {
+			task.Timer.Stop()
+		}
+		if delay == 0 {
+			readyToSend = true
+		} else {
+			// schedule finalize
+			task.Timer = time.AfterFunc(delay, func() {
+				b.finalizeSunoTask(taskID, "timeout")
+			})
+		}
+	}
+
+	b.sunoTasks[taskID] = task
+	b.sunoMu.Unlock()
+
+	if readyToSend {
+		b.finalizeSunoTask(taskID, "complete")
+	}
+}
+
+// finalizeSunoTask отправляет накопленные аудио и очищает задачу
+func (b *Bot) finalizeSunoTask(taskID string, reason string) {
+	b.sunoMu.Lock()
+	task, ok := b.sunoTasks[taskID]
+	if ok {
+		delete(b.sunoTasks, taskID)
+		if task.Timer != nil {
+			task.Timer.Stop()
+		}
+	}
+	b.sunoMu.Unlock()
+
+	if !ok {
+		log.Printf("Suno finalize: unknown taskID=%s", taskID)
+		return
+	}
+
+	urls := task.AudioURLs
+	if len(urls) == 0 {
+		log.Printf("Suno finalize: no audio urls for task=%s reason=%s", taskID, reason)
+		return
+	}
+	if len(urls) > 2 {
+		urls = urls[:2]
+	}
+
+	if len(urls) > 1 {
 		b.sendText(task.ChatID, "Вот 2 разных варианта песни:")
 	}
 
-	for i, url := range valid {
-		caption := fmt.Sprintf("🔊 Аудио готово (%d/%d)\nМодель: %s\nСписано: %d музыкальных запрос(ов)", i+1, len(valid), task.ModelLabel, task.RequestCost)
+	for i, url := range urls {
+		caption := fmt.Sprintf("🔊 Аудио готово (%d/%d)\nМодель: %s\nСписано: %d музыкальных запрос(ов)", i+1, len(urls), task.ModelLabel, task.RequestCost)
 		b.sendAudioResult(task.ChatID, caption, url)
 	}
 }
@@ -1751,6 +1829,9 @@ func (b *Bot) HandleSunoError(taskID, errMsg string) {
 	task, ok := b.sunoTasks[taskID]
 	if ok {
 		delete(b.sunoTasks, taskID)
+		if task.Timer != nil {
+			task.Timer.Stop()
+		}
 	}
 	b.sunoMu.Unlock()
 
