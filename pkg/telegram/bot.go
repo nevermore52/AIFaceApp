@@ -2929,7 +2929,7 @@ func (b *Bot) handleStart(msg *tgbotapi.Message) {
 	if isAdmin, err := b.userService.IsUserAdmin(msg.From.ID); err == nil {
 		b.setChatCommands(msg.Chat.ID, isAdmin)
 	}
-	b.sendMainMenu(msg.Chat.ID, msg.From.ID)
+	b.sendLanguageMenu(msg.Chat.ID, msg.From.ID)
 }
 
 // handleStartWithReferral обрабатывает /start с реферальным кодом
@@ -2950,7 +2950,7 @@ func (b *Bot) handleStartWithReferral(msg *tgbotapi.Message, referralCode string
 	if isAdmin, err := b.userService.IsUserAdmin(user.ID); err == nil {
 		b.setChatCommands(msg.Chat.ID, isAdmin)
 	}
-	b.sendMainMenu(msg.Chat.ID, msg.From.ID)
+	b.sendLanguageMenu(msg.Chat.ID, msg.From.ID)
 }
 
 // sendMainMenu отправляет главное меню

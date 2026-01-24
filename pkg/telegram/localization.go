@@ -762,7 +762,6 @@ var locEN = Localization{
 	ChatStyleProOnly:      "Chat styles are available only with Pro subscription and above.",
 
 	// Models
-	ModelsCategory:    "Category: %s",
 	ModelsSelect:      "Select a model. It will be used by default for your requests.",
 	ModelsCurrent:     "Current:",
 	ModelsCost:        "Cost: %d request",
