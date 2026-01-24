@@ -2927,20 +2927,19 @@ func (b *Bot) sendMainMenu(chatID int64, userID int64) {
 	var limitLine = loc.MenuLimit
 	if opt, ok := findModelOption(currentModel); ok {
 		if quota != nil {
-			var extraLabel string
+			var base, extra int
 			switch opt.Category {
 			case ModelCategoryPhoto:
-				extraLabel = loc.ExtrasImages
-				limitLine = fmt.Sprintf(loc.MenuLimitFormat, quota.ImageWeekly, quota.ImageExtra, extraLabel)
+				base, extra = quota.ImageWeekly, quota.ImageExtra
 			case ModelCategoryVideo:
-				extraLabel = loc.ExtrasVideo
-				limitLine = fmt.Sprintf(loc.MenuLimitFormat, quota.VideoWeekly, quota.VideoExtra, extraLabel)
+				base, extra = quota.VideoWeekly, quota.VideoExtra
 			case ModelCategoryMusic:
-				extraLabel = loc.ExtrasMusic
-				limitLine = fmt.Sprintf(loc.MenuLimitFormat, quota.MusicWeekly, quota.MusicExtra, extraLabel)
+				base, extra = quota.MusicWeekly, quota.MusicExtra
 			case ModelCategoryChat:
-				extraLabel = loc.ExtrasText
-				limitLine = fmt.Sprintf(loc.MenuLimitFormat, quota.TextDaily, quota.TextExtra, extraLabel)
+				base, extra = quota.TextDaily, quota.TextExtra
+			}
+			if base > 0 || extra > 0 {
+				limitLine = fmt.Sprintf(loc.MenuLimitFormat, base, extra)
 			}
 		}
 	}
