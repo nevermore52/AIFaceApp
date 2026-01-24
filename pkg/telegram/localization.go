@@ -124,6 +124,7 @@ type Localization struct {
 	StylePromptEmpathetic string
 	ChatSystemPrompt      string
 	ChatSystemLangHint    string
+	ChatStyleProOnly      string
 
 	// Models
 	ModelsCategory    string
@@ -439,13 +440,11 @@ var locRU = Localization{
 	StylePromptInformal:   "Пиши в расслабленном разговорном тоне, без канцелярита и без грубости.",
 	StylePromptFriendly:   "Будь тёплым и поддерживающим, но не многословным.",
 	StylePromptExpert:     "Давай чёткие, структурированные и экспертные ответы по делу.",
-	StylePromptEmpathetic: "Отвечай заботливо и поддерживающе, избегай резкости.",
-	ChatSystemPrompt:      "Отвечай чётко как тебя просят, избегай излишних предисловий и не нарушай правила бота (никакого 18+, насилия, нелегала).",
-	ChatSystemLangHint:    "Отвечай только на русском, если пользователь явно не просит другой язык.",
+	StylePromptEmpathetic: "Отвечай с эмпатией и поддержкой.",
+	ChatSystemPrompt:      "Ты — умный ассистент Telegram-бота. Отвечай кратко и по делу.",
+	ChatSystemLangHint:    "Если пользователь пишет по-русски, отвечай на русском. Если по-английски — отвечай на английском.",
+	ChatStyleProOnly:      "Стили общения доступны только с подпиской Pro и выше.",
 
-	// Models
-	ModelsCategory:    "Категория: %s",
-	ModelsSelect:      "Выберите модель. Она будет применяться по умолчанию для ваших запросов.",
 	ModelsCurrent:     "Текущая",
 	ModelsCost:        "Расход: %d запрос",
 	ModelsMaxPhotos:   "Максимум фото: %d",
@@ -757,9 +756,10 @@ var locEN = Localization{
 	StylePromptInformal:   "Write in a relaxed conversational tone, no bureaucracy and no rudeness.",
 	StylePromptFriendly:   "Be warm and supportive, but not verbose.",
 	StylePromptExpert:     "Provide clear, structured, expert-level answers.",
-	StylePromptEmpathetic: "Respond with care and support, avoid harshness.",
-	ChatSystemPrompt:      "Answer clearly as requested, avoid unnecessary preambles, and do not violate bot rules (no 18+, violence, or illegal content).",
-	ChatSystemLangHint:    "Respond in English unless the user explicitly asks for another language.",
+	StylePromptEmpathetic: "Respond with empathy and support.",
+	ChatSystemPrompt:      "You are a smart assistant in a Telegram bot. Keep replies brief and to the point.",
+	ChatSystemLangHint:    "If the user writes in Russian, reply in Russian. If in English — reply in English.",
+	ChatStyleProOnly:      "Chat styles are available only with Pro subscription and above.",
 
 	// Models
 	ModelsCategory:    "Category: %s",

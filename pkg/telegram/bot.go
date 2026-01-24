@@ -2013,6 +2013,23 @@ func (b *Bot) setUserChatStyle(userID int64, style string) {
 	}
 }
 
+func (b *Bot) isChatStyleAllowed(userID int64) bool {
+	label, active := b.userService.GetSubscriptionLabel(userID)
+	if !active {
+		return false
+	}
+	return strings.EqualFold(label, "pro")
+}
+
+func (b *Bot) ensureChatStyleAllowed(chatID int64, userID int64) bool {
+	if b.isChatStyleAllowed(userID) {
+		return true
+	}
+	loc := b.getLocalization(userID)
+	b.sendErrorMessage(chatID, loc.ChatStyleProOnly)
+	return false
+}
+
 func (b *Bot) buildChatSystemPrompt(userID int64) string {
 	loc := b.getLocalization(userID)
 	basePrompt := loc.ChatSystemPrompt
@@ -2186,6 +2203,9 @@ func (b *Bot) sendSettingsMenu(chatID int64, userID int64) {
 
 func (b *Bot) sendChatStyleMenu(chatID int64, userID int64) {
 	loc := b.getLocalization(userID)
+	if !b.ensureChatStyleAllowed(chatID, userID) {
+		return
+	}
 	current := b.getUserChatStyle(userID)
 	var rows [][]tgbotapi.InlineKeyboardButton
 	for i := 0; i < len(chatStyles); i += 2 {
@@ -2542,6 +2562,9 @@ func (b *Bot) handleCallback(callback *tgbotapi.CallbackQuery) {
 	case "settings":
 		b.sendSettingsMenu(chatID, userID)
 	case "settings:style":
+		if !b.ensureChatStyleAllowed(chatID, userID) {
+			return
+		}
 		b.sendChatStyleMenu(chatID, userID)
 	case "settings:language":
 		b.sendLanguageMenu(chatID, userID)
@@ -2558,28 +2581,52 @@ func (b *Bot) handleCallback(callback *tgbotapi.CallbackQuery) {
 	case "aspect_menu":
 		b.sendAspectRatioMenu(chatID, userID)
 	case "set_style":
+		if !b.ensureChatStyleAllowed(chatID, userID) {
+			return
+		}
 		// default style
 		b.setUserChatStyle(userID, "normal")
 		b.sendChatStyleMenu(chatID, userID)
 	case "set_style:normal":
+		if !b.ensureChatStyleAllowed(chatID, userID) {
+			return
+		}
 		b.setUserChatStyle(userID, "normal")
 		b.sendChatStyleMenu(chatID, userID)
 	case "set_style:formal":
+		if !b.ensureChatStyleAllowed(chatID, userID) {
+			return
+		}
 		b.setUserChatStyle(userID, "formal")
 		b.sendChatStyleMenu(chatID, userID)
 	case "set_style:humor":
+		if !b.ensureChatStyleAllowed(chatID, userID) {
+			return
+		}
 		b.setUserChatStyle(userID, "humor")
 		b.sendChatStyleMenu(chatID, userID)
 	case "set_style:informal":
+		if !b.ensureChatStyleAllowed(chatID, userID) {
+			return
+		}
 		b.setUserChatStyle(userID, "informal")
 		b.sendChatStyleMenu(chatID, userID)
 	case "set_style:friendly":
+		if !b.ensureChatStyleAllowed(chatID, userID) {
+			return
+		}
 		b.setUserChatStyle(userID, "friendly")
 		b.sendChatStyleMenu(chatID, userID)
 	case "set_style:expert":
+		if !b.ensureChatStyleAllowed(chatID, userID) {
+			return
+		}
 		b.setUserChatStyle(userID, "expert")
 		b.sendChatStyleMenu(chatID, userID)
 	case "set_style:empathetic":
+		if !b.ensureChatStyleAllowed(chatID, userID) {
+			return
+		}
 		b.setUserChatStyle(userID, "empathetic")
 		b.sendChatStyleMenu(chatID, userID)
 	case "invite":
