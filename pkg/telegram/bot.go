@@ -2820,13 +2820,14 @@ func (b *Bot) handleTextMessage(msg *tgbotapi.Message) {
 		}
 
 		b.goLimited(func() {
+			systemPrompt := b.buildChatSystemPrompt(msg.From.ID)
 			messages := []map[string]string{
-				{"role": "system", "content": b.buildChatSystemPrompt(msg.From.ID)},
+				{"role": "system", "content": systemPrompt},
 			}
-			// добавляем контекст пользователя из redis с явным префиксом
+			// добавляем контекст пользователя из redis с явным префиксом как системный блок
 			if ctx, err := b.redisClient.GetContext(msg.From.ID); err == nil && ctx != nil && len(ctx.Messages) > 0 {
 				contextBlock := loc.ContextPrefix + strings.Join(ctx.Messages, "\n")
-				messages = append(messages, map[string]string{"role": "user", "content": contextBlock})
+				messages = append(messages, map[string]string{"role": "system", "content": contextBlock})
 			}
 			// текущий запрос
 			messages = append(messages, map[string]string{"role": "user", "content": userText})
