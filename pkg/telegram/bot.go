@@ -1366,6 +1366,32 @@ func categoryUnit(cat ModelCategory) string {
 	}
 }
 
+// requestWord возвращает правильную форму слова "запрос" / "request" по количеству
+func requestWord(count int, loc *Localization) string {
+	if count < 0 {
+		count = -count
+	}
+
+	// Английский
+	if loc == &locEN {
+		if count == 1 {
+			return "request"
+		}
+		return "requests"
+	}
+
+	// Русский (по умолчанию)
+	mod10 := count % 10
+	mod100 := count % 100
+	if mod10 == 1 && mod100 != 11 {
+		return "запрос"
+	}
+	if mod10 >= 2 && mod10 <= 4 && (mod100 < 12 || mod100 > 14) {
+		return "запроса"
+	}
+	return "запросов"
+}
+
 // instructionForModel возвращает инструкцию, завязанную на конкретную модель
 func instructionForModel(m ModelOption) string {
 	cost := m.RequestCost
@@ -3356,12 +3382,12 @@ func (b *Bot) sendModelMenu(chatID int64, userID int64, category ModelCategory, 
 		tgbotapi.NewInlineKeyboardButtonData(loc.BackBtn, "menu"),
 	))
 
-	text := fmt.Sprintf(loc.ModelsCategory, b.categoryLabelLoc(category, loc)) + "\n\n" + loc.ModelsSelect
+	text := fmt.Sprintf(loc.ModelsCategory, b.categoryLabelLoc(category, loc)) + "\n" + loc.ModelsSelect
 	currentDesc := b.modelDescriptionLoc(current, loc)
 	if currentDesc != "" {
 		text += "\n\n" + loc.ModelsCurrent + ": " + b.modelLabelLoc(current, loc) + " — " + currentDesc
 		if cost := modelRequestCost(current); cost > 0 {
-			text += "\n" + fmt.Sprintf(loc.ModelsCost, cost)
+			text += "\n" + fmt.Sprintf(loc.ModelsCost, cost, requestWord(cost, loc))
 		}
 		if instr := b.modelInstructionLoc(current, loc); instr != "" {
 			text += "\n" + instr
