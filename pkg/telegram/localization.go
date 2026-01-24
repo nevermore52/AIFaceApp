@@ -350,6 +350,9 @@ var locRU = Localization{
 	AccountMusicWeekly:  "🎵 Музыка: %d",
 	AccountVideoWeekly:  "🎬 Видео: %d",
 	AccountExtraText:    "📝 Доп. текстовые генерации: %d",
+	AccountExtraImages:  "🖼️ Доп. изображения: %d",
+	AccountExtraMusic:   "🎵 Доп. музыка: %d",
+	AccountExtraVideo:   "🎬 Доп. видео: %d",
 
 	// Buy menu
 	BuyTitle:           "💳 Купить",
@@ -658,7 +661,7 @@ var locEN = Localization{
 	AccountMusicWeekly:  "🎵 Music (week): %d",
 	AccountVideoWeekly:  "🎬 Video (week): %d",
 	AccountExtraText:    "📝 Extra text generations: %d",
-	AccountExtraImages:  "🖼️ Extra image requests: %d",
+	AccountExtraImages:  "🖼️ Extra images: %d",
 	AccountExtraMusic:   "🎵 Extra music: %d",
 	AccountExtraVideo:   "🎬 Extra video: %d",
 
