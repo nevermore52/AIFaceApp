@@ -511,7 +511,7 @@ var locRU = Localization{
 	ErrSubscriptionsUnavailable: "Подписки временно недоступны",
 	ErrInvalidPackage:           "Неверный пакет",
 	ErrUnknownModel:             "Неизвестная модель",
-	ErrModelRequiresMini:        "Модель доступна только с подпиской Mini и выше",
+	ErrModelRequiresMini:        "Модель доступна только с подпиской start и выше",
 
 	// Cooldown
 	CooldownWait:   "⏳ Подождите ещё %d секунд перед следующим запросом.",
@@ -820,7 +820,7 @@ var locEN = Localization{
 	ErrSubscriptionsUnavailable: "Subscriptions are temporarily unavailable",
 	ErrInvalidPackage:           "Invalid package",
 	ErrUnknownModel:             "Unknown model",
-	ErrModelRequiresMini:        "This model requires a Mini subscription or higher",
+	ErrModelRequiresMini:        "This model requires a Start subscription or higher",
 
 	// Cooldown
 	CooldownWait:   "⏳ Please wait %d more seconds before next request.",

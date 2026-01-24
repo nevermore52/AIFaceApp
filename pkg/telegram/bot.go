@@ -51,10 +51,30 @@ func (b *Bot) isChatModelAllowed(userID int64, model ModelOption) bool {
 	if isAdmin, err := b.userService.IsUserAdmin(userID); err == nil && isAdmin {
 		return true
 	}
-	if label, ok := b.userService.GetSubscriptionLabel(userID); ok && label != "Free" {
+	label, ok := b.userService.GetSubscriptionLabel(userID)
+	if !ok {
+		return false
+	}
+	label = strings.ToLower(label)
+	switch model.ID {
+	case "google/gemini-3-flash":
+		return label == "start" || label == "pro"
+	case "openai/gpt-5-mini", "openai/gpt-5-nano":
+		return label == "mini" || label == "start" || label == "pro"
+	default:
 		return true
 	}
-	return false
+}
+
+func (b *Bot) chatModelAccessMessage(modelID string) string {
+	switch modelID {
+	case "google/gemini-3-flash":
+		return "Модель доступна только с подпиской Start или Pro"
+	case "openai/gpt-5-mini", "openai/gpt-5-nano":
+		return "Модель доступна только с подпиской Mini, Start или Pro"
+	default:
+		return "Модель доступна только с активной подпиской"
+	}
 }
 
 func (b *Bot) extrasPrice(category string, qty int) (int, bool) {
@@ -2578,7 +2598,7 @@ func (b *Bot) handleCallback(callback *tgbotapi.CallbackQuery) {
 				return
 			}
 			if opt.Category == ModelCategoryChat && !b.isChatModelAllowed(userID, opt) {
-				b.sendErrorMessage(chatID, "Модель доступна только с подпиской Mini и выше")
+				b.sendErrorMessage(chatID, b.chatModelAccessMessage(opt.ID))
 				return
 			}
 			b.setUserModel(userID, model)
@@ -2771,7 +2791,7 @@ func (b *Bot) handleTextMessage(msg *tgbotapi.Message) {
 		// Сохраняем сообщение в контекст (до 5 последних) только для текстовых моделей
 		b.saveMessageToContext(msg.From.ID, "Пользователь: "+userText)
 		if !b.isChatModelAllowed(msg.From.ID, modelOpt) {
-			b.sendErrorMessage(msg.Chat.ID, "Модель доступна только с подпиской Mini и выше")
+			b.sendErrorMessage(msg.Chat.ID, b.chatModelAccessMessage(modelOpt.ID))
 			return
 		}
 		requestCost := modelOpt.RequestCost
