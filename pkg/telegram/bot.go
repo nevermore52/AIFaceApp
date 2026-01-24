@@ -2130,6 +2130,23 @@ func (b *Bot) modelDescriptionLoc(id string, loc *Localization) string {
 	}
 }
 
+func (b *Bot) modelInstructionLoc(id string, loc *Localization) string {
+	if opt, ok := findModelOption(id); ok {
+		switch opt.ID {
+		case "google/nano-banana", "google/nano-banana-pro":
+			return loc.InstrNanoBanana
+		case "hug-video":
+			return loc.InstrHugVideo
+		case "music-suno":
+			return loc.InstrSunoMusic
+		}
+		if opt.Category == ModelCategoryChat {
+			return loc.InstrTextModels
+		}
+	}
+	return ""
+}
+
 func (b *Bot) categoryLabelLoc(cat ModelCategory, loc *Localization) string {
 	switch cat {
 	case ModelCategoryPhoto:
@@ -2390,7 +2407,7 @@ func (b *Bot) handleCallback(callback *tgbotapi.CallbackQuery) {
 	case "suno_instr_toggle":
 		cur := b.getSunoInstrumental(userID)
 		b.setSunoInstrumental(userID, !cur)
-		b.sendModelMenu(chatID, userID, ModelCategoryMusic)
+		b.sendModelMenu(chatID, userID, ModelCategoryMusic, callback.Message.MessageID)
 	case "suno_voice_toggle":
 		cur := b.getSunoVoice(userID)
 		if cur == "f" {
@@ -2398,7 +2415,7 @@ func (b *Bot) handleCallback(callback *tgbotapi.CallbackQuery) {
 		} else {
 			b.setSunoVoice(userID, "f")
 		}
-		b.sendModelMenu(chatID, userID, ModelCategoryMusic)
+		b.sendModelMenu(chatID, userID, ModelCategoryMusic, callback.Message.MessageID)
 	case "buy:extras":
 		if !b.ensurePaymentsEnabled(chatID) {
 			return
@@ -2568,7 +2585,7 @@ func (b *Bot) handleCallback(callback *tgbotapi.CallbackQuery) {
 	case "invite":
 		b.sendInviteInfo(chatID, userID)
 	case "models_menu":
-		b.sendModelMenu(chatID, userID, ModelCategoryPhoto)
+		b.sendModelMenu(chatID, userID, ModelCategoryPhoto, callback.Message.MessageID)
 	default:
 		// Обрабатываем confirm_generation
 		if strings.HasPrefix(data, "confirm_generation:") {
@@ -2582,7 +2599,7 @@ func (b *Bot) handleCallback(callback *tgbotapi.CallbackQuery) {
 			b.sendAspectRatioMenu(chatID, userID)
 		} else if strings.HasPrefix(data, "models_menu:") {
 			cat := ModelCategory(strings.TrimPrefix(data, "models_menu:"))
-			b.sendModelMenu(chatID, userID, cat)
+			b.sendModelMenu(chatID, userID, cat, callback.Message.MessageID)
 		} else if strings.HasPrefix(data, "buy_package:") {
 			parts := strings.Split(data, ":")
 			if len(parts) == 3 {
@@ -2591,7 +2608,6 @@ func (b *Bot) handleCallback(callback *tgbotapi.CallbackQuery) {
 				b.sendBuyPackageInfo(chatID, userID, category, pack)
 			}
 		} else if strings.HasPrefix(data, "model_set:") {
-			loc := b.getLocalization(userID)
 			model := strings.TrimPrefix(data, "model_set:")
 			opt, ok := findModelOption(model)
 			if !ok {
@@ -2604,16 +2620,8 @@ func (b *Bot) handleCallback(callback *tgbotapi.CallbackQuery) {
 			}
 			b.setUserModel(userID, model)
 
-			info := fmt.Sprintf("%s: %s\n%s", loc.ModelsCurrent, b.modelLabelLoc(opt.ID, loc), fmt.Sprintf(loc.ModelsCategory, b.categoryLabelLoc(opt.Category, loc)))
-			if desc := b.modelDescriptionLoc(opt.ID, loc); desc != "" {
-				info += "\n" + desc
-			}
-			if opt.RequestCost > 0 {
-				info += "\n" + fmt.Sprintf(loc.ModelsCost, opt.RequestCost)
-			}
-			info += "\n\n" + loc.ModelsDescription
-			b.sendText(chatID, info)
-			b.sendModelMenu(chatID, userID, opt.Category)
+			// Обновляем меню моделей в том же сообщении
+			b.sendModelMenu(chatID, userID, opt.Category, callback.Message.MessageID)
 		}
 	}
 
@@ -3230,7 +3238,7 @@ func (b *Bot) sendInviteInfo(chatID int64, userID int64) {
 }
 
 // sendModelMenu показывает выбор модели с разбивкой по категориям
-func (b *Bot) sendModelMenu(chatID int64, userID int64, category ModelCategory) {
+func (b *Bot) sendModelMenu(chatID int64, userID int64, category ModelCategory, messageID int) {
 	loc := b.getLocalization(userID)
 	enabledCats := b.getEnabledCategories(false)
 	if len(enabledCats) == 0 {
@@ -3311,6 +3319,9 @@ func (b *Bot) sendModelMenu(chatID int64, userID int64, category ModelCategory) 
 		if cost := modelRequestCost(current); cost > 0 {
 			text += "\n" + fmt.Sprintf(loc.ModelsCost, cost)
 		}
+		if instr := b.modelInstructionLoc(current, loc); instr != "" {
+			text += "\n" + instr
+		}
 		if current == "google/nano-banana" {
 			text += "\n" + fmt.Sprintf(loc.ModelsMaxPhotos, 2)
 		} else if current == "google/nano-banana-pro" {
@@ -3352,6 +3363,14 @@ func (b *Bot) sendModelMenu(chatID int64, userID int64, category ModelCategory) 
 	text += "\n\n" + loc.ModelsDescription
 
 	keyboard := tgbotapi.NewInlineKeyboardMarkup(rows...)
+
+	if messageID > 0 {
+		edited := tgbotapi.NewEditMessageTextAndMarkup(chatID, messageID, text, keyboard)
+		if _, err := b.api.Send(edited); err != nil {
+			log.Printf("Failed to edit model menu: %v", err)
+		}
+		return
+	}
 
 	msg := tgbotapi.NewMessage(chatID, text)
 	msg.ReplyMarkup = keyboard

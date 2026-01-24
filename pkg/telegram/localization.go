@@ -136,6 +136,10 @@ type Localization struct {
 	ModelsCatVideo    string
 	ModelsCatMusic    string
 	ModelsCatChat     string
+	InstrNanoBanana   string
+	InstrTextModels   string
+	InstrSunoMusic    string
+	InstrHugVideo     string
 
 	// Photo models
 	ModelNanoBanana    string
@@ -450,6 +454,10 @@ var locRU = Localization{
 	ModelsCatVideo:    "🎬 Видео",
 	ModelsCatMusic:    "🎵 Музыка",
 	ModelsCatChat:     "💬 Текст",
+	InstrNanoBanana:   "В 1 сообщении отправьте 1 или более фото, в подписи укажите что хотите изменить (промпт).",
+	InstrTextModels:   "Отправьте любое сообщение в чат.",
+	InstrSunoMusic:    "Отправьте в чат описание музыки, которую хотите создать.",
+	InstrHugVideo:     "Отправьте 1 фото с двумя или более людьми и ожидайте.",
 
 	// Photo models descriptions
 	ModelNanoBanana:    "Фото: Старая модель, среднее качество, плохо работает с большими запросами и двумя фотографиями. Среднее время ожидания 1-2 минуты, максимум до 10 минут",
@@ -764,6 +772,10 @@ var locEN = Localization{
 	ModelsCatVideo:    "🎬 Video",
 	ModelsCatMusic:    "🎵 Music",
 	ModelsCatChat:     "💬 Text",
+	InstrNanoBanana:   "Send 1 or more photos in a single message and add a caption with the changes you want (prompt).",
+	InstrTextModels:   "Send any message in chat.",
+	InstrSunoMusic:    "Send in chat a description of the music you want to create.",
+	InstrHugVideo:     "Send 1 photo with two or more people and wait.",
 
 	// Photo models descriptions
 	ModelNanoBanana:    "Photo: Older model, medium quality, works poorly with large requests and two photos. Average wait 1-2 min, max 10 min",
