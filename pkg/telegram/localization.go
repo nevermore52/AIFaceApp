@@ -622,6 +622,7 @@ var locRU = Localization{
 	ModelSelected:                "Модель выбрана: %s",
 	ModelCategory:                "Категория: %s",
 	ModelCost:                    "Расход: %d запрос",
+	ModelsCategory:               "Категория: %s",
 	ModelsTitle:                  "🤖 Текущая модель: %s\n\nВыберите категорию:",
 	ModelsNotSelected:            "Не выбрана",
 	SubscribeBtn:                 "Подписаться",
@@ -762,6 +763,7 @@ var locEN = Localization{
 	ChatStyleProOnly:      "Chat styles are available only with Pro subscription and above.",
 
 	// Models
+	ModelsCategory:    "Category: %s",
 	ModelsSelect:      "Select a model. It will be used by default for your requests.",
 	ModelsCurrent:     "Current:",
 	ModelsCost:        "Cost: %d request",
