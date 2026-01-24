@@ -66,7 +66,8 @@ type Localization struct {
 	SubsContext        string
 	SubsNoAds          string
 	SubsChatStyles     string
-	SubsTextModelsNote string
+	SubsTextModelsMini string
+	SubsTextModelsHi   string
 	SubsUnavailable    string
 	SubsPaymentCreated string
 	SubsBackToSubs     string
@@ -378,7 +379,8 @@ var locRU = Localization{
 	SubsContext:        "x%d контекст",
 	SubsNoAds:          "без рекламы",
 	SubsChatStyles:     "%d стилей общения GPT",
-	SubsTextModelsNote: "Текстовые модели (Mini+): Gemini 3 Flash, GPT-5 mini, GPT-5 nano",
+	SubsTextModelsMini: "Текстовые модели: GPT-5 mini, GPT-5 nano",
+	SubsTextModelsHi:   "Текстовые модели: Gemini 3 Flash, GPT-5 mini, GPT-5 nano",
 	SubsUnavailable:    "Подписки временно недоступны",
 	SubsPaymentCreated: "✅ Вы выбрали подписку %s.\nПерейдите по ссылке для оплаты:\n%s",
 	SubsBackToSubs:     "◀️ Назад к подпискам",
@@ -690,7 +692,8 @@ var locEN = Localization{
 	SubsContext:        "x%d context",
 	SubsNoAds:          "no ads",
 	SubsChatStyles:     "%d GPT chat styles",
-	SubsTextModelsNote: "Text models (Mini+): Gemini 3 Flash, GPT-5 mini, GPT-5 nano",
+	SubsTextModelsMini: "Text models: GPT-5 mini, GPT-5 nano",
+	SubsTextModelsHi:   "Text models: Gemini 3 Flash, GPT-5 mini, GPT-5 nano",
 	SubsUnavailable:    "Subscriptions are temporarily unavailable",
 	SubsPaymentCreated: "✅ You selected %s subscription.\nFollow the link to pay:\n%s",
 	SubsBackToSubs:     "◀️ Back to subscriptions",
