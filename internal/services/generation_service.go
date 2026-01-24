@@ -175,21 +175,36 @@ func (s *GenerationService) SetNotifier(fn func(chatID int64, req *models.Genera
 	s.notify = fn
 }
 func (s *GenerationService) HandleDefAPICallback(payload defapi.CallbackPayload) error {
-	if payload.Status != "success" {
-		return nil
-	}
 	if payload.TaskID == "" {
 		return fmt.Errorf("defapi callback missing task_id")
-	}
-	url := payload.ResultURL()
-	if url == "" {
-		return fmt.Errorf("defapi callback missing result url")
 	}
 
 	req, err := s.getGenerationRequestByExternalTaskID(payload.TaskID)
 	if err != nil {
 		return err
 	}
+
+	if payload.Status != "success" {
+		reason := fmt.Sprintf("defapi status=%s", payload.Status)
+		if msg, ok := payload.StatusReason["message"].(string); ok && strings.TrimSpace(msg) != "" {
+			reason = msg
+		}
+		_ = s.updateRequestStatus(req.ID, "failed", reason)
+		req.Status = "failed"
+		req.ErrorMsg = &reason
+		req.OutputImage = nil
+		req.CompletedAt = nil
+		if s.notify != nil {
+			s.notify(req.UserID, req)
+		}
+		return nil
+	}
+
+	url := payload.ResultURL()
+	if url == "" {
+		return fmt.Errorf("defapi callback missing result url")
+	}
+
 	if req.Status == "completed" {
 		return nil
 	}
