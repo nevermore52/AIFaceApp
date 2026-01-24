@@ -123,6 +123,7 @@ type Localization struct {
 	StylePromptExpert     string
 	StylePromptEmpathetic string
 	ChatSystemPrompt      string
+	ChatSystemLangHint    string
 
 	// Models
 	ModelsCategory    string
@@ -388,11 +389,11 @@ var locRU = Localization{
 	// Extras
 	ExtrasTitle:       "💰 Купить доп. запросы",
 	ExtrasSelectCat:   "Выберите категорию.",
-	ExtrasText:        "доп",
-	ExtrasImages:      "доп",
-	ExtrasMusic:       "доп",
-	ExtrasVideo:       "доп",
-	ExtrasTexts:       "📝 Доп. текстовые генерации",
+	ExtrasText:        "📝 Текст",
+	ExtrasImages:      "🖼️ Изображения",
+	ExtrasMusic:       "🎵 Музыка",
+	ExtrasVideo:       "🎬 Видео",
+	ExtrasTexts:       "📝 Текст",
 	ExtrasImage:       "🖼️ Доп. запросы изображений",
 	ExtrasMusico:      "🎵 Доп. музыка",
 	ExtrasVideos:      "🎬 Доп. видео",
@@ -436,6 +437,7 @@ var locRU = Localization{
 	StylePromptExpert:     "Давай чёткие, структурированные и экспертные ответы по делу.",
 	StylePromptEmpathetic: "Отвечай заботливо и поддерживающе, избегай резкости.",
 	ChatSystemPrompt:      "Отвечай чётко как тебя просят, избегай излишних предисловий и не нарушай правила бота (никакого 18+, насилия, нелегала).",
+	ChatSystemLangHint:    "Отвечай только на русском, если пользователь явно не просит другой язык.",
 
 	// Models
 	ModelsCategory:    "Категория: %s",
@@ -454,7 +456,7 @@ var locRU = Localization{
 	ModelNanoBananaPro: "Фото: Новейшая модель, лучшее качество. Среднее время ожидания 1-2 минуты, максимум до 10 минут",
 	ModelHugVideo:      "Видео: оживление фото с обнимашками.",
 	ModelSunoMusic:     "Музыка: генерация песни. До 10-15 минут.",
-	ModelGeminiFlash:   "Текст: быстрые ответы. Доступно с подпиской Mini+.",
+	ModelGeminiFlash:   "Текст: быстрые ответы. Доступно с подпиской Start+.",
 	ModelGPT5Mini:      "Текст: быстрые ответы. Доступно с подпиской Mini+.",
 	ModelGPT5Nano:      "Текст: дольше ответы. Доступно с подпиской Mini+.",
 	ModelGPT41Mini:     "Чат-бот: быстрые ответы на текстовые запросы.",
@@ -593,7 +595,7 @@ var locRU = Localization{
 	ErrAllCategoriesDisabled:     "Все категории отключены администратором",
 	ErrInvalidUserID:             "Некорректный user_id",
 	ErrInvalidDays:               "Некорректные days",
-	ErrInvalidPlan:               "План должен быть mini, start или pro",
+	ErrInvalidPlan:               "План должен быть mini, start и выше",
 	ErrSetSubscription:           "Не удалось выдать подписку: %v",
 	ErrRemoveSubscription:        "Не удалось убрать подписку: %v",
 	ErrUnknownAdminCommand:       "Неизвестная админ-команда. Используйте /admin help",
@@ -706,6 +708,10 @@ var locEN = Localization{
 	ExtrasMusic:       "🎵 Music",
 	ExtrasVideo:       "🎬 Video",
 	ExtrasAllDisabled: "All categories are disabled by administrator",
+	ExtrasTexts:       "📝 Text",
+	ExtrasImage:       "🖼️ Images",
+	ExtrasMusico:      "🎵 Music",
+	ExtrasVideos:      "🎬 Video",
 
 	// Invite
 	InviteTitle:    "🎁 You will receive 20% of your referrals' purchases!",
@@ -745,6 +751,7 @@ var locEN = Localization{
 	StylePromptExpert:     "Provide clear, structured, expert-level answers.",
 	StylePromptEmpathetic: "Respond with care and support, avoid harshness.",
 	ChatSystemPrompt:      "Answer clearly as requested, avoid unnecessary preambles, and do not violate bot rules (no 18+, violence, or illegal content).",
+	ChatSystemLangHint:    "Respond in English unless the user explicitly asks for another language.",
 
 	// Models
 	ModelsCategory:    "Category: %s",
@@ -763,7 +770,7 @@ var locEN = Localization{
 	ModelNanoBananaPro: "Photo: Latest model, best quality. Average wait 1-2 min, max 10 min",
 	ModelHugVideo:      "Video: animate photo with hugging effect.",
 	ModelSunoMusic:     "Music: song generation. Up to 10-15 min.",
-	ModelGeminiFlash:   "Text: fast responses. Available with Mini+ subscription.",
+	ModelGeminiFlash:   "Text: fast responses. Available with Start+ subscription.",
 	ModelGPT5Mini:      "Text: fast responses. Available with Mini+ subscription.",
 	ModelGPT5Nano:      "Text: slower responses. Available with Mini+ subscription.",
 	ModelGPT41Mini:     "Chat bot: fast text responses.",
@@ -902,7 +909,7 @@ var locEN = Localization{
 	ErrAllCategoriesDisabled:     "All categories are disabled by administrator",
 	ErrInvalidUserID:             "Invalid user_id",
 	ErrInvalidDays:               "Invalid days",
-	ErrInvalidPlan:               "Plan must be mini, start or pro",
+	ErrInvalidPlan:               "Plan must be mini, start and higher",
 	ErrSetSubscription:           "Failed to grant subscription: %v",
 	ErrRemoveSubscription:        "Failed to remove subscription: %v",
 	ErrUnknownAdminCommand:       "Unknown admin command. Use /admin help",

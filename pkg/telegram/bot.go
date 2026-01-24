@@ -512,8 +512,6 @@ const modelsDescription = `Категории моделей:
 🎵 Песни — генерация треков.
 💬 Текст — ответы на вопросы и сопровождение.`
 
-const chatSystemPrompt = "Отвечай чётко как тебя просят, избегай излишних предисловий и не нарушай правила бота (никакого 18+, насилия, нелегала)."
-
 type chatStyle struct {
 	ID string
 }
@@ -1432,7 +1430,7 @@ func instructionForModel(m ModelOption) string {
 2) Отправьте в чат и получите ответ.
 
 Системный промпт:
-` + chatSystemPrompt + `
+` + locRU.ChatSystemPrompt + `
 
 Используйте /menu для выбора другой модели.`
 	default:
@@ -2019,7 +2017,10 @@ func (b *Bot) buildChatSystemPrompt(userID int64) string {
 	loc := b.getLocalization(userID)
 	basePrompt := loc.ChatSystemPrompt
 	if basePrompt == "" {
-		basePrompt = chatSystemPrompt
+		basePrompt = loc.ChatSystemPrompt
+	}
+	if hint := strings.TrimSpace(loc.ChatSystemLangHint); hint != "" {
+		basePrompt += " " + hint
 	}
 
 	styleID := b.getUserChatStyle(userID)
@@ -2777,6 +2778,7 @@ func (b *Bot) confirmGeneration(chatID int64, userID int64, requestIDStr string)
 
 func (b *Bot) handleTextMessage(msg *tgbotapi.Message) {
 	userText := strings.TrimSpace(msg.Text)
+	loc := b.getLocalization(msg.From.ID)
 	modelID := b.getUserModel(msg.From.ID)
 	modelOpt, ok := findModelOption(modelID)
 
@@ -2789,7 +2791,7 @@ func (b *Bot) handleTextMessage(msg *tgbotapi.Message) {
 	// Чат-модель: выдаём ответ с учётом системного промпта (пока локально)
 	if ok && modelOpt.Category == ModelCategoryChat {
 		// Сохраняем сообщение в контекст (до 5 последних) только для текстовых моделей
-		b.saveMessageToContext(msg.From.ID, "Пользователь: "+userText)
+		b.saveMessageToContext(msg.From.ID, loc.UserPrefix+" "+userText)
 		if !b.isChatModelAllowed(msg.From.ID, modelOpt) {
 			b.sendErrorMessage(msg.Chat.ID, b.chatModelAccessMessage(modelOpt.ID))
 			return
@@ -2812,7 +2814,7 @@ func (b *Bot) handleTextMessage(msg *tgbotapi.Message) {
 		if apiModel == "" {
 			apiModel = modelOpt.ID
 		}
-		reply := tgbotapi.NewMessage(msg.Chat.ID, "Думаю над ответом...")
+		reply := tgbotapi.NewMessage(msg.Chat.ID, loc.Thinking)
 		if _, err := b.api.Send(reply); err != nil {
 			log.Printf("Failed to send typing message: %v", err)
 		}
@@ -2823,7 +2825,7 @@ func (b *Bot) handleTextMessage(msg *tgbotapi.Message) {
 			}
 			// добавляем контекст пользователя из redis с явным префиксом
 			if ctx, err := b.redisClient.GetContext(msg.From.ID); err == nil && ctx != nil && len(ctx.Messages) > 0 {
-				contextBlock := "Вот прошлые запросы и твои ответы:\n" + strings.Join(ctx.Messages, "\n")
+				contextBlock := loc.ContextPrefix + strings.Join(ctx.Messages, "\n")
 				messages = append(messages, map[string]string{"role": "user", "content": contextBlock})
 			}
 			// текущий запрос
@@ -2836,7 +2838,7 @@ func (b *Bot) handleTextMessage(msg *tgbotapi.Message) {
 				b.sendErrorMessage(msg.Chat.ID, fmt.Sprintf("Не удалось ответить: %s", friendlyGenerationError(err)))
 				return
 			}
-			b.saveMessageToContext(msg.From.ID, "Бот: "+resp)
+			b.saveMessageToContext(msg.From.ID, loc.BotPrefix+" "+resp)
 			b.sendLongText(msg.Chat.ID, resp)
 		})
 		return
