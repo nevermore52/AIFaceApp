@@ -2926,8 +2926,8 @@ func (b *Bot) sendMainMenu(chatID int64, userID int64) {
 	displayCategory := "" // не показываем категорию в строке модели, чтобы не путать с названием модели
 	var limitLine = loc.MenuLimit
 	if opt, ok := findModelOption(currentModel); ok {
+		var base, extra int
 		if quota != nil {
-			var base, extra int
 			switch opt.Category {
 			case ModelCategoryPhoto:
 				base, extra = quota.ImageWeekly, quota.ImageExtra
@@ -2938,10 +2938,8 @@ func (b *Bot) sendMainMenu(chatID int64, userID int64) {
 			case ModelCategoryChat:
 				base, extra = quota.TextDaily, quota.TextExtra
 			}
-			if base > 0 || extra > 0 {
-				limitLine = fmt.Sprintf(loc.MenuLimitFormat, base, extra)
-			}
 		}
+		limitLine = fmt.Sprintf(loc.MenuLimitFormat, base, extra)
 	}
 
 	text := fmt.Sprintf(loc.MenuTitle,
