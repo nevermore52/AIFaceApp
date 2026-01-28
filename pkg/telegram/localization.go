@@ -346,7 +346,7 @@ var locRU = Localization{
 	CmdAdmin:    "Админ-панель",
 
 	// Main menu
-	MenuTitle:           "🍌 Ваш айди: %d\n⭐ Тип подписки: %s\n🧠 Текущая ИИ модель: %s %s %s",
+	MenuTitle:           "🍌  Ваш айди: %d\n⭐  Тип подписки: %s\n🧠  Текущая ИИ модель: %s %s %s",
 	MenuYourID:          "🍌 Ваш айди",
 	MenuSubscription:    "⭐ Тип подписки",
 	MenuCurrentModel:    "🧠 Текущая модель",
