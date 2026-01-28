@@ -33,6 +33,20 @@ type GenerationService struct {
 	notify func(chatID int64, req *models.GenerationRequest)
 }
 
+type LogRequestOptions struct {
+	Username          string
+	ModelType         string
+	Model             string
+	Prompt            string
+	ExternalTaskID    string
+	Status            string
+	Output            string
+	ErrorMsg          string
+	TokensUsed        int
+	TokensPrimaryUsed int
+	TokensExtraUsed   int
+}
+
 type GenerationOptions struct {
 	InputImage        string
 	InputImages       []string
@@ -473,6 +487,67 @@ func (s *GenerationService) completeRequest(requestID int64, outputImage string)
 		SET status = 'completed', output_image = $2, completed_at = CURRENT_TIMESTAMP
 		WHERE id = $1`
 	_, err := s.db.Exec(query, requestID, outputImage)
+	return err
+}
+
+func (s *GenerationService) LogRequest(userID int64, opts LogRequestOptions) (*models.GenerationRequest, error) {
+	status := strings.TrimSpace(opts.Status)
+	if status == "" {
+		status = "processing"
+	}
+
+	query := `
+		INSERT INTO generation_requests (user_id, username, model_type, model, status, input_image, output_image, external_task_id, prompt, error_msg, tokens_used, tokens_primary_used, tokens_extra_used, completed_at)
+		VALUES ($1, $2, $3, $4, $5, '', $6, $7, $8, $9, $10, $11, $12,
+			CASE WHEN $5 = 'completed' THEN CURRENT_TIMESTAMP ELSE NULL END)
+		RETURNING id, user_id, username, model_type, model, status, input_image, output_image, prompt, error_msg, tokens_used, tokens_primary_used, tokens_extra_used, created_at, completed_at`
+
+	req := &models.GenerationRequest{}
+	err := s.db.QueryRow(
+		query,
+		userID,
+		opts.Username,
+		opts.ModelType,
+		opts.Model,
+		status,
+		opts.Output,
+		opts.ExternalTaskID,
+		opts.Prompt,
+		opts.ErrorMsg,
+		opts.TokensUsed,
+		opts.TokensPrimaryUsed,
+		opts.TokensExtraUsed,
+	).Scan(
+		&req.ID, &req.UserID, &req.Username, &req.ModelType, &req.Model, &req.Status, &req.InputImage, &req.OutputImage,
+		&req.Prompt, &req.ErrorMsg, &req.TokensUsed, &req.TokensPrimaryUsed, &req.TokensExtraUsed, &req.CreatedAt, &req.CompletedAt,
+	)
+	if err != nil {
+		return nil, err
+	}
+	return req, nil
+}
+
+func (s *GenerationService) CompleteRequest(requestID int64, output string) error {
+	return s.completeRequest(requestID, output)
+}
+
+func (s *GenerationService) FailRequest(requestID int64, reason string) error {
+	return s.updateRequestStatus(requestID, "failed", reason)
+}
+
+func (s *GenerationService) CompleteRequestByExternalTaskID(taskID string, output string) error {
+	if strings.TrimSpace(taskID) == "" {
+		return fmt.Errorf("external task id is empty")
+	}
+	_, err := s.db.Exec(`UPDATE generation_requests SET status = 'completed', output_image = $2, completed_at = CURRENT_TIMESTAMP WHERE external_task_id = $1`, taskID, output)
+	return err
+}
+
+func (s *GenerationService) FailRequestByExternalTaskID(taskID string, reason string) error {
+	if strings.TrimSpace(taskID) == "" {
+		return fmt.Errorf("external task id is empty")
+	}
+	_, err := s.db.Exec(`UPDATE generation_requests SET status = 'failed', error_msg = $2 WHERE external_task_id = $1`, taskID, reason)
 	return err
 }
 

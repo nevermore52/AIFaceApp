@@ -174,7 +174,10 @@ type photoRecord struct {
 type sunoTask struct {
 	ChatID      int64
 	UserID      int64
+	RequestID   int64
 	RequestCost int
+	PrimaryUsed int
+	ExtraUsed   int
 	ModelLabel  string
 	Prompt      string
 	CreatedAt   time.Time
@@ -1581,6 +1584,12 @@ func (b *Bot) processAudioMessage(msg *tgbotapi.Message, modelOpt ModelOption) {
 		return
 	}
 
+	userRec, _ := b.userService.GetUserByTelegramID(userID)
+	username := ""
+	if userRec != nil {
+		username = userRec.Username
+	}
+
 	// Дополнительная проверка доступа и подписки
 	if !b.isUserAllowed(userID) {
 		b.sendErrorMessage(chatID, "Доступ только для админов.")
@@ -1607,7 +1616,8 @@ func (b *Bot) processAudioMessage(msg *tgbotapi.Message, modelOpt ModelOption) {
 	instrumental := b.getSunoInstrumental(userID)
 	voice := b.getSunoVoice(userID)
 
-	if err := b.userService.ConsumeQuota(userID, models.QuotaCategoryMusic, requestCost); err != nil {
+	primaryUsed, extraUsed, err := b.userService.ConsumeQuotaDetailed(userID, models.QuotaCategoryMusic, requestCost)
+	if err != nil {
 		b.sendInsufficientQuotaMessage(chatID, models.QuotaCategoryMusic, requestCost, err)
 		return
 	}
@@ -1639,7 +1649,7 @@ func (b *Bot) processAudioMessage(msg *tgbotapi.Message, modelOpt ModelOption) {
 				log.Printf("music cooldown recheck error: %v", err2)
 			} else if !ok2 {
 				log.Printf("music cooldown still active, skipping generation")
-				_ = b.userService.AddExtraQuota(userID, models.QuotaCategoryMusic, requestCost)
+				_ = b.userService.RefundQuota(userID, models.QuotaCategoryMusic, primaryUsed, extraUsed)
 				return
 			}
 		}
@@ -1660,30 +1670,69 @@ func (b *Bot) processAudioMessage(msg *tgbotapi.Message, modelOpt ModelOption) {
 			}
 			resultURL, taskID, err = b.generationService.GenerateMusicSuno(sunoPrompt, voice, instrumental)
 		} else if modelOpt.Category == ModelCategoryMusic {
-			_ = b.userService.AddExtraQuota(userID, models.QuotaCategoryMusic, requestCost)
+			_ = b.userService.RefundQuota(userID, models.QuotaCategoryMusic, primaryUsed, extraUsed)
 			b.sendErrorMessage(chatID, "Музыкальная генерация доступна только через Suno.")
 			return
 		} else {
 			resultURL, err = b.generationService.GenerateAudio(text, apiModel, modelOpt.TaskType, "")
 		}
 		if err != nil {
-			// Возврат запроса при ошибке
-			_ = b.userService.AddExtraQuota(userID, models.QuotaCategoryMusic, requestCost)
+			_, _ = b.generationService.LogRequest(userID, services.LogRequestOptions{
+				Username:          username,
+				ModelType:         string(modelOpt.Category),
+				Model:             apiModel,
+				Prompt:            text,
+				Status:            "failed",
+				ErrorMsg:          err.Error(),
+				TokensUsed:        requestCost,
+				TokensPrimaryUsed: primaryUsed,
+				TokensExtraUsed:   extraUsed,
+			})
+			_ = b.userService.RefundQuota(userID, models.QuotaCategoryMusic, primaryUsed, extraUsed)
 			b.sendErrorMessage(chatID, fmt.Sprintf("Не удалось озвучить: %s", friendlyGenerationError(err)))
 			return
 		}
 
 		if resultURL != "" {
+			_, _ = b.generationService.LogRequest(userID, services.LogRequestOptions{
+				Username:          username,
+				ModelType:         string(modelOpt.Category),
+				Model:             apiModel,
+				Prompt:            text,
+				Status:            "completed",
+				Output:            resultURL,
+				TokensUsed:        requestCost,
+				TokensPrimaryUsed: primaryUsed,
+				TokensExtraUsed:   extraUsed,
+			})
 			caption := fmt.Sprintf("🔊 Аудио готово\nМодель: %s\nСписано: %d музыкальных запрос(ов)", modelOpt.Label, requestCost)
 			b.sendAudioResult(chatID, caption, resultURL)
 			return
 		}
 
 		if taskID != "" {
+			req, _ := b.generationService.LogRequest(userID, services.LogRequestOptions{
+				Username:          username,
+				ModelType:         string(modelOpt.Category),
+				Model:             apiModel,
+				Prompt:            text,
+				ExternalTaskID:    taskID,
+				Status:            "processing",
+				TokensUsed:        requestCost,
+				TokensPrimaryUsed: primaryUsed,
+				TokensExtraUsed:   extraUsed,
+			})
+			requestID := int64(0)
+			if req != nil {
+				requestID = req.ID
+			}
 			b.registerSunoTask(taskID, sunoTask{
 				ChatID:      chatID,
 				UserID:      userID,
+				RequestID:   requestID,
 				RequestCost: requestCost,
+				PrimaryUsed: primaryUsed,
+				ExtraUsed:   extraUsed,
 				ModelLabel:  modelOpt.Label,
 				Prompt:      text,
 				CreatedAt:   time.Now(),
@@ -1693,7 +1742,18 @@ func (b *Bot) processAudioMessage(msg *tgbotapi.Message, modelOpt ModelOption) {
 
 		// На всякий случай, если нет ни URL, ни taskId
 		b.sendErrorMessage(chatID, "Сервис не вернул ссылку и taskId. Попробуйте позже.")
-		_ = b.userService.AddExtraQuota(userID, models.QuotaCategoryMusic, requestCost)
+		_, _ = b.generationService.LogRequest(userID, services.LogRequestOptions{
+			Username:          username,
+			ModelType:         string(modelOpt.Category),
+			Model:             apiModel,
+			Prompt:            text,
+			Status:            "failed",
+			ErrorMsg:          "service returned empty result and taskId",
+			TokensUsed:        requestCost,
+			TokensPrimaryUsed: primaryUsed,
+			TokensExtraUsed:   extraUsed,
+		})
+		_ = b.userService.RefundQuota(userID, models.QuotaCategoryMusic, primaryUsed, extraUsed)
 	})
 }
 
@@ -1820,6 +1880,9 @@ func (b *Bot) finalizeSunoTask(taskID string, reason string) {
 		caption := fmt.Sprintf("🔊 Аудио готово (%d/%d)\nМодель: %s\nСписано: %d музыкальных запрос(ов)", i+1, len(urls), task.ModelLabel, task.RequestCost)
 		b.sendAudioResult(task.ChatID, caption, url)
 	}
+	if len(urls) > 0 {
+		_ = b.generationService.CompleteRequestByExternalTaskID(taskID, urls[0])
+	}
 }
 
 func (b *Bot) HandleSunoError(taskID, errMsg string) {
@@ -1842,7 +1905,8 @@ func (b *Bot) HandleSunoError(taskID, errMsg string) {
 		return
 	}
 
-	_ = b.userService.AddExtraQuota(task.UserID, models.QuotaCategoryMusic, task.RequestCost)
+	_ = b.generationService.FailRequestByExternalTaskID(taskID, strings.TrimSpace(errMsg))
+	_ = b.userService.RefundQuota(task.UserID, models.QuotaCategoryMusic, task.PrimaryUsed, task.ExtraUsed)
 	message := fmt.Sprintf("Не удалось сгенерировать песню: %s", strings.TrimSpace(errMsg))
 	if strings.TrimSpace(errMsg) == "" {
 		message = "Не удалось сгенерировать песню. Попробуйте изменить запрос и повторить."
@@ -3018,9 +3082,16 @@ func (b *Bot) handleTextMessage(msg *tgbotapi.Message) {
 			return
 		}
 
-		if err := b.userService.ConsumeQuota(msg.From.ID, models.QuotaCategoryText, requestCost); err != nil {
+		primaryUsed, extraUsed, err := b.userService.ConsumeQuotaDetailed(msg.From.ID, models.QuotaCategoryText, requestCost)
+		if err != nil {
 			b.sendInsufficientQuotaMessage(msg.Chat.ID, models.QuotaCategoryText, requestCost, err)
 			return
+		}
+
+		userRec, _ := b.userService.GetUserByTelegramID(msg.From.ID)
+		username := ""
+		if userRec != nil {
+			username = userRec.Username
 		}
 
 		apiModel := modelOpt.ApiModel
@@ -3033,6 +3104,20 @@ func (b *Bot) handleTextMessage(msg *tgbotapi.Message) {
 		}
 
 		b.goLimited(func() {
+			req, _ := b.generationService.LogRequest(msg.From.ID, services.LogRequestOptions{
+				Username:          username,
+				ModelType:         string(modelOpt.Category),
+				Model:             apiModel,
+				Prompt:            userText,
+				Status:            "processing",
+				TokensUsed:        requestCost,
+				TokensPrimaryUsed: primaryUsed,
+				TokensExtraUsed:   extraUsed,
+			})
+			requestID := int64(0)
+			if req != nil {
+				requestID = req.ID
+			}
 			systemPrompt := b.buildChatSystemPrompt(msg.From.ID)
 			messages := []map[string]string{
 				{"role": "system", "content": systemPrompt},
@@ -3047,10 +3132,15 @@ func (b *Bot) handleTextMessage(msg *tgbotapi.Message) {
 
 			resp, err := b.generationService.GenerateChat(apiModel, messages)
 			if err != nil {
-				// Возврат списанного запроса
-				_ = b.userService.AddExtraQuota(msg.From.ID, models.QuotaCategoryText, requestCost)
+				if requestID != 0 {
+					_ = b.generationService.FailRequest(requestID, err.Error())
+				}
+				_ = b.userService.RefundQuota(msg.From.ID, models.QuotaCategoryText, primaryUsed, extraUsed)
 				b.sendErrorMessage(msg.Chat.ID, fmt.Sprintf("Не удалось ответить: %s", friendlyGenerationError(err)))
 				return
+			}
+			if requestID != 0 {
+				_ = b.generationService.CompleteRequest(requestID, resp)
 			}
 			b.saveMessageToContext(msg.From.ID, loc.BotPrefix+" "+resp)
 			b.sendLongText(msg.Chat.ID, resp)
