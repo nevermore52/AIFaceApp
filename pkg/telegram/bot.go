@@ -2889,8 +2889,12 @@ func (b *Bot) processGeneration(chatID int64, userID int64, photoURLs []string, 
 	imageList := photoURLs
 
 	// Запускаем генерацию через сервис
+	userRec, _ := b.userService.GetUserByTelegramID(userID)
+	username := ""
+	if userRec != nil {
+		username = userRec.Username
+	}
 	opts := services.GenerationOptions{
-		Type:              genType,
 		InputImages:       imageList,
 		InputImage:        imageList[0],
 		Prompt:            prompt,
@@ -2899,6 +2903,8 @@ func (b *Bot) processGeneration(chatID int64, userID int64, photoURLs []string, 
 		TokensExtraUsed:   extraUsed,
 		ChatID:            chatID,
 		Model:             modelOpt.ID,
+		ModelType:         string(modelOpt.Category),
+		Username:          username,
 	}
 	if modelOpt.ID == "google/nano-banana" || modelOpt.ID == "google/nano-banana-pro" {
 		opts.AspectRatio = b.getUserAspectRatio(userID)
@@ -4143,7 +4149,8 @@ func (b *Bot) sendGenerationStatus(chatID int64, req *models.GenerationRequest) 
 	if req.Status == "failed" && req.ErrorMsg != nil && *req.ErrorMsg != "" {
 		friendly := friendlyGenerationError(fmt.Errorf(*req.ErrorMsg))
 		// Возврат запросов в те же бакеты, откуда списали
-		if req.TokensUsed > 0 && req.UserID != 0 {
+		skipRefund := *req.ErrorMsg == "Произошла ошибка возможно вы нарушили правила бота.\n Попробуйте переформулировать запрос"
+		if !skipRefund && req.TokensUsed > 0 && req.UserID != 0 {
 			if err := b.userService.RefundQuota(req.UserID, models.QuotaCategoryImage, req.TokensPrimaryUsed, req.TokensExtraUsed); err != nil {
 				log.Printf("refund on failed generation error: %v", err)
 			}

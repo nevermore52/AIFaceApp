@@ -60,7 +60,9 @@ type TokenTransaction struct {
 type GenerationRequest struct {
 	ID                int64      `json:"id" db:"id"`
 	UserID            int64      `json:"user_id" db:"user_id"`
-	Type              string     `json:"type" db:"type"`
+	Username          string     `json:"username" db:"username"`
+	ModelType         string     `json:"model_type" db:"model_type"`
+	Model             string     `json:"model" db:"model"`
 	Status            string     `json:"status" db:"status"`
 	InputImage        string     `json:"input_image" db:"input_image"`
 	OutputImage       *string    `json:"output_image" db:"output_image"`

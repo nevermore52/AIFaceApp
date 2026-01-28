@@ -34,7 +34,6 @@ type GenerationService struct {
 }
 
 type GenerationOptions struct {
-	Type              string
 	InputImage        string
 	InputImages       []string
 	Prompt            string
@@ -43,6 +42,8 @@ type GenerationOptions struct {
 	TokensExtraUsed   int
 	ChatID            int64
 	Model             string
+	ModelType         string
+	Username          string
 	UseDefAPI         bool
 	AspectRatio       string
 }
@@ -59,11 +60,11 @@ func (s *GenerationService) SetDefAPIClient(client *defapi.Client) {
 	s.defAPI = client
 }
 func (s *GenerationService) StartGeneration(userID int64, opts GenerationOptions) (*models.GenerationRequest, error) {
-	debugLog("StartGeneration: userID=%d, type=%s, prompt=%s", userID, opts.Type, opts.Prompt)
+	debugLog("StartGeneration: userID=%d, prompt=%s", userID, opts.Prompt)
 	query := `
-		INSERT INTO generation_requests (user_id, type, status, input_image, prompt, tokens_used, tokens_primary_used, tokens_extra_used)
-		VALUES ($1, $2, 'pending', $3, $4, $5, $6, $7)
-		RETURNING id, user_id, type, status, input_image, output_image, prompt, error_msg, tokens_used, tokens_primary_used, tokens_extra_used, created_at, completed_at`
+		INSERT INTO generation_requests (user_id, username, model_type, model, status, input_image, prompt, tokens_used, tokens_primary_used, tokens_extra_used)
+		VALUES ($1, $2, $3, $4, 'pending', $5, $6, $7, $8, $9)
+		RETURNING id, user_id, username, model_type, model, status, input_image, output_image, prompt, error_msg, tokens_used, tokens_primary_used, tokens_extra_used, created_at, completed_at`
 
 	req := &models.GenerationRequest{}
 	inputForStore := opts.InputImage
@@ -71,8 +72,8 @@ func (s *GenerationService) StartGeneration(userID int64, opts GenerationOptions
 		inputForStore = strings.Join(opts.InputImages, ",")
 	}
 
-	err := s.db.QueryRow(query, userID, opts.Type, inputForStore, opts.Prompt, opts.TokensCost, opts.TokensPrimaryUsed, opts.TokensExtraUsed).Scan(
-		&req.ID, &req.UserID, &req.Type, &req.Status, &req.InputImage, &req.OutputImage,
+	err := s.db.QueryRow(query, userID, opts.Username, opts.ModelType, opts.Model, inputForStore, opts.Prompt, opts.TokensCost, opts.TokensPrimaryUsed, opts.TokensExtraUsed).Scan(
+		&req.ID, &req.UserID, &req.Username, &req.ModelType, &req.Model, &req.Status, &req.InputImage, &req.OutputImage,
 		&req.Prompt, &req.ErrorMsg, &req.TokensUsed, &req.TokensPrimaryUsed, &req.TokensExtraUsed, &req.CreatedAt, &req.CompletedAt,
 	)
 
@@ -89,7 +90,7 @@ func (s *GenerationService) StartGeneration(userID int64, opts GenerationOptions
 
 func (s *GenerationService) processGeneration(req *models.GenerationRequest, opts GenerationOptions) {
 	startTime := time.Now()
-	debugLog("processGeneration START: requestID=%d, type=%s, prompt=%s, model=%s", req.ID, opts.Type, opts.Prompt, opts.Model)
+	debugLog("processGeneration START: requestID=%d, prompt=%s, model=%s", req.ID, opts.Prompt, opts.Model)
 
 	images := opts.InputImages
 	if len(images) == 0 && opts.InputImage != "" {
@@ -140,7 +141,7 @@ func (s *GenerationService) processGeneration(req *models.GenerationRequest, opt
 		return
 	}
 
-	debugLog("Calling OpenRouter API for type: %s", opts.Type)
+	debugLog("Calling OpenRouter API")
 	resultURL, err = s.client.ChangeImage(opts.Model, images, opts.Prompt, opts.AspectRatio)
 
 	if err != nil {
@@ -204,7 +205,26 @@ func (s *GenerationService) HandleDefAPICallback(payload defapi.CallbackPayload)
 
 	url := payload.ResultURL()
 	if url == "" {
-		return fmt.Errorf("defapi callback missing result url")
+		reason := "defapi callback missing result url"
+		if msg, ok := payload.StatusReason["message"].(string); ok {
+			msg = strings.TrimSpace(msg)
+			if msg != "" {
+				reason = msg
+			}
+			if msg == "Request successful, but the official returned empty content. Since the official platform will still charge us for this, we have no choice but to bill this request as well." {
+				reason = "Произошла ошибка возможно вы нарушили правила бота."
+			}
+		}
+
+		_ = s.updateRequestStatus(req.ID, "failed", reason)
+		req.Status = "failed"
+		req.ErrorMsg = &reason
+		req.OutputImage = nil
+		req.CompletedAt = nil
+		if s.notify != nil {
+			s.notify(req.UserID, req)
+		}
+		return nil
 	}
 
 	if req.Status == "completed" {
@@ -375,12 +395,12 @@ func (s *GenerationService) updateExternalTaskID(requestID int64, taskID string)
 
 func (s *GenerationService) getGenerationRequestByExternalTaskID(taskID string) (*models.GenerationRequest, error) {
 	query := `
-		SELECT id, user_id, type, status, input_image, output_image, prompt, error_msg, tokens_used, tokens_primary_used, tokens_extra_used, created_at, completed_at
+		SELECT id, user_id, username, model_type, model, status, input_image, output_image, prompt, error_msg, tokens_used, tokens_primary_used, tokens_extra_used, created_at, completed_at
 		FROM generation_requests WHERE external_task_id = $1`
 
 	req := &models.GenerationRequest{}
 	err := s.db.QueryRow(query, taskID).Scan(
-		&req.ID, &req.UserID, &req.Type, &req.Status, &req.InputImage, &req.OutputImage,
+		&req.ID, &req.UserID, &req.Username, &req.ModelType, &req.Model, &req.Status, &req.InputImage, &req.OutputImage,
 		&req.Prompt, &req.ErrorMsg, &req.TokensUsed, &req.TokensPrimaryUsed, &req.TokensExtraUsed, &req.CreatedAt, &req.CompletedAt,
 	)
 
@@ -458,12 +478,12 @@ func (s *GenerationService) completeRequest(requestID int64, outputImage string)
 
 func (s *GenerationService) GetGenerationRequest(requestID int64) (*models.GenerationRequest, error) {
 	query := `
-		SELECT id, user_id, type, status, input_image, output_image, prompt, error_msg, tokens_used, tokens_primary_used, tokens_extra_used, created_at, completed_at
+		SELECT id, user_id, username, model_type, model, status, input_image, output_image, prompt, error_msg, tokens_used, tokens_primary_used, tokens_extra_used, created_at, completed_at
 		FROM generation_requests WHERE id = $1`
 
 	req := &models.GenerationRequest{}
 	err := s.db.QueryRow(query, requestID).Scan(
-		&req.ID, &req.UserID, &req.Type, &req.Status, &req.InputImage, &req.OutputImage,
+		&req.ID, &req.UserID, &req.Username, &req.ModelType, &req.Model, &req.Status, &req.InputImage, &req.OutputImage,
 		&req.Prompt, &req.ErrorMsg, &req.TokensUsed, &req.TokensPrimaryUsed, &req.TokensExtraUsed, &req.CreatedAt, &req.CompletedAt,
 	)
 
@@ -472,7 +492,7 @@ func (s *GenerationService) GetGenerationRequest(requestID int64) (*models.Gener
 
 func (s *GenerationService) GetUserGenerationRequests(userID int64, limit, offset int) ([]*models.GenerationRequest, error) {
 	query := `
-		SELECT id, user_id, type, status, input_image, output_image, prompt, error_msg, tokens_used, tokens_primary_used, tokens_extra_used, created_at, completed_at
+		SELECT id, user_id, username, model_type, model, status, input_image, output_image, prompt, error_msg, tokens_used, tokens_primary_used, tokens_extra_used, created_at, completed_at
 		FROM generation_requests
 		WHERE user_id = $1
 		ORDER BY created_at DESC
@@ -488,7 +508,7 @@ func (s *GenerationService) GetUserGenerationRequests(userID int64, limit, offse
 	for rows.Next() {
 		req := &models.GenerationRequest{}
 		err := rows.Scan(
-			&req.ID, &req.UserID, &req.Type, &req.Status, &req.InputImage, &req.OutputImage,
+			&req.ID, &req.UserID, &req.Username, &req.ModelType, &req.Model, &req.Status, &req.InputImage, &req.OutputImage,
 			&req.Prompt, &req.ErrorMsg, &req.TokensUsed, &req.TokensPrimaryUsed, &req.TokensExtraUsed, &req.CreatedAt, &req.CompletedAt,
 		)
 		if err != nil {

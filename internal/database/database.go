@@ -40,7 +40,9 @@ func RunMigrations(db *sql.DB) error {
 	CREATE TABLE IF NOT EXISTS generation_requests (
 		id SERIAL PRIMARY KEY,
 		user_id BIGINT NOT NULL REFERENCES users(telegram_id) ON DELETE CASCADE,
-		type VARCHAR(50) NOT NULL,
+		username VARCHAR(255),
+		model_type VARCHAR(50),
+		model VARCHAR(255),
 		status VARCHAR(50) DEFAULT 'pending',
 		input_image TEXT,
 		output_image TEXT,
@@ -117,6 +119,14 @@ func RunMigrations(db *sql.DB) error {
 	ALTER TABLE generation_requests ADD COLUMN IF NOT EXISTS tokens_primary_used INTEGER DEFAULT 0;
 	ALTER TABLE generation_requests ADD COLUMN IF NOT EXISTS tokens_extra_used INTEGER DEFAULT 0;`
 
+	upgradeGenerationRequestsModelSQL := `
+	ALTER TABLE generation_requests ADD COLUMN IF NOT EXISTS username VARCHAR(255);
+	ALTER TABLE generation_requests ADD COLUMN IF NOT EXISTS model_type VARCHAR(50);
+	ALTER TABLE generation_requests ADD COLUMN IF NOT EXISTS model VARCHAR(255);`
+
+	dropGenerationRequestsTypeSQL := `
+	ALTER TABLE generation_requests DROP COLUMN IF EXISTS type;`
+
 	defapiMigrationSQL := `
 	ALTER TABLE generation_requests ADD COLUMN IF NOT EXISTS external_task_id TEXT;`
 
@@ -144,6 +154,8 @@ func RunMigrations(db *sql.DB) error {
 		dropTokensSQL,
 		upgradeQuotasSQL,
 		upgradeGenerationRequestsTokensSQL,
+		upgradeGenerationRequestsModelSQL,
+		dropGenerationRequestsTypeSQL,
 		defapiMigrationSQL,
 		subscriptionSQL,
 		indexesSQL,
