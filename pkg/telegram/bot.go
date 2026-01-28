@@ -3173,17 +3173,35 @@ func (b *Bot) sendMainMenu(chatID int64, userID int64) {
 	)
 	replyKB.ResizeKeyboard = true
 
+	// инлайн-кнопки
+	inlineKB := tgbotapi.NewInlineKeyboardMarkup(
+		tgbotapi.NewInlineKeyboardRow(
+			tgbotapi.NewInlineKeyboardButtonData(loc.MenuBuyBtn, "buy"),
+			tgbotapi.NewInlineKeyboardButtonData(loc.MenuInviteFriendBtn, "invite"),
+		),
+		tgbotapi.NewInlineKeyboardRow(
+			tgbotapi.NewInlineKeyboardButtonData(loc.MenuSelectModelBtn, "models_menu"),
+		),
+	)
+
 	// Админ-кнопка только для админов
 	if isAdmin, err := b.userService.IsUserAdmin(userID); err == nil && isAdmin {
 		b.setChatCommands(chatID, true)
 	}
 
-	// Сообщение с reply-клавиатурой
-	reply := tgbotapi.NewMessage(chatID, text)
+	// Сообщение для установки reply-клавиатуры (минимально заметный текст)
+	reply := tgbotapi.NewMessage(chatID, "\u00a0")
 	reply.ReplyMarkup = replyKB
-
+	reply.DisableNotification = true
 	if _, err := b.api.Send(reply); err != nil {
-		log.Printf("Failed to send main menu: %v", err)
+		log.Printf("Failed to send main menu reply keyboard: %v", err)
+	}
+
+	// Сообщение с основным текстом и инлайн-кнопками
+	inlineMsg := tgbotapi.NewMessage(chatID, text)
+	inlineMsg.ReplyMarkup = inlineKB
+	if _, err := b.api.Send(inlineMsg); err != nil {
+		log.Printf("Failed to send inline main menu: %v", err)
 	}
 }
 
