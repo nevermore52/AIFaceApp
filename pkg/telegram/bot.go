@@ -3173,16 +3173,6 @@ func (b *Bot) sendMainMenu(chatID int64, userID int64) {
 	)
 	replyKB.ResizeKeyboard = true
 
-	// инлайн-кнопки (дублируем быстрые действия)
-	inlineKB := tgbotapi.NewInlineKeyboardMarkup(
-		tgbotapi.NewInlineKeyboardRow(
-			tgbotapi.NewInlineKeyboardButtonData(loc.MenuBuyBtn, "buy"),
-			tgbotapi.NewInlineKeyboardButtonData(loc.MenuInviteFriendBtn, "invite"),
-		),
-		tgbotapi.NewInlineKeyboardRow(
-			tgbotapi.NewInlineKeyboardButtonData(loc.MenuSelectModelBtn, "models_menu"),
-		),
-	)
 	// Админ-кнопка только для админов
 	if isAdmin, err := b.userService.IsUserAdmin(userID); err == nil && isAdmin {
 		b.setChatCommands(chatID, true)
@@ -3194,13 +3184,6 @@ func (b *Bot) sendMainMenu(chatID int64, userID int64) {
 
 	if _, err := b.api.Send(reply); err != nil {
 		log.Printf("Failed to send main menu: %v", err)
-	}
-
-	// Дополнительно — инлайн-кнопки в отдельном сообщении
-	inlineMsg := tgbotapi.NewMessage(chatID, loc.MenuBtn)
-	inlineMsg.ReplyMarkup = inlineKB
-	if _, err := b.api.Send(inlineMsg); err != nil {
-		log.Printf("Failed to send inline main menu: %v", err)
 	}
 }
 
