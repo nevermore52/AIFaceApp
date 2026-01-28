@@ -2741,7 +2741,11 @@ func (b *Bot) handleCallback(callback *tgbotapi.CallbackQuery) {
 	case "invite":
 		b.sendInviteInfo(chatID, userID)
 	case "models_menu":
-		b.sendModelMenu(chatID, userID, ModelCategoryPhoto, callback.Message.MessageID)
+		msgID := callback.Message.MessageID
+		if callback.Message != nil && callback.Message.Photo != nil && len(callback.Message.Photo) > 0 {
+			msgID = 0 // не редактируем фото-превью, отправляем новое меню без картинки
+		}
+		b.sendModelMenu(chatID, userID, ModelCategoryPhoto, msgID)
 	default:
 		// Обрабатываем confirm_generation
 		if strings.HasPrefix(data, "confirm_generation:") {
