@@ -565,7 +565,7 @@ func (b *Bot) isUserAllowed(userID int64) bool {
 // Доступные модели для выбора
 var modelOptions = []ModelOption{
 	{ID: "google/nano-banana", Label: "🚀 Nano Banana", Desc: locRU.ModelNanoBanana, Category: ModelCategoryPhoto, RequestCost: 1},
-	{ID: "google/nano-banana-pro", Label: "🌟 Nano Banana Pro", Desc: locRU.ModelNanoBananaPro, Category: ModelCategoryPhoto, RequestCost: 3},
+	{ID: "google/nano-banana-pro", Label: "🌟 Nano Banana Pro", Desc: locRU.ModelNanoBananaPro, Category: ModelCategoryPhoto, RequestCost: 4},
 	{ID: "hug-video", ApiModel: "Qubico/hug-video", Label: "🤗 Обнимашки", Desc: locRU.ModelHugVideo, Category: ModelCategoryVideo, RequestCost: 1, TaskType: "image_to_video"},
 	{ID: "music-suno", ApiModel: "suno", Label: "🎵 Suno Music", Desc: locRU.ModelSunoMusic, Category: ModelCategoryMusic, RequestCost: 1, TaskType: "music"},
 	{ID: "google/gemini-3-flash", Label: "💬 Gemini 3 Flash", Desc: "", Category: ModelCategoryChat, RequestCost: 1},
@@ -685,6 +685,7 @@ func (b *Bot) setCommands() {
 		{Command: "buy", Description: "Купить (подписку,доп.запросы)"},
 		{Command: "invite", Description: "Пригласить друзей"},
 		{Command: "rules", Description: "Правила использования"},
+		{Command: "help", Description: "Помощь"},
 		{Command: "privacy", Description: "Политика и Польз. соглашение"},
 		{Command: "settings", Description: "Настройки стиля общения"},
 	}
@@ -705,6 +706,7 @@ func (b *Bot) setChatCommands(chatID int64, isAdmin bool) {
 		{Command: "buy", Description: "Купить (подписку,доп.запросы)"},
 		{Command: "invite", Description: "Пригласить друзей"},
 		{Command: "rules", Description: "Правила использования"},
+		{Command: "help", Description: "Помощь"},
 		{Command: "privacy", Description: "Политика и Польз. соглашение"},
 		{Command: "settings", Description: "Настройки стиля общения"},
 	}
@@ -2686,7 +2688,7 @@ func (b *Bot) handleCallback(callback *tgbotapi.CallbackQuery) {
 		b.sendText(chatID, loc.LangChanged)
 		b.sendLanguageMenu(chatID, userID)
 	case "aspect_menu":
-		b.sendAspectRatioMenu(chatID, userID)
+		b.sendAspectRatioMenu(chatID, userID, callback.Message.MessageID)
 	case "set_style":
 		if !b.ensureChatStyleAllowed(chatID, userID) {
 			return
@@ -2750,7 +2752,7 @@ func (b *Bot) handleCallback(callback *tgbotapi.CallbackQuery) {
 		} else if strings.HasPrefix(data, "aspect_set:") {
 			ratio := strings.TrimPrefix(data, "aspect_set:")
 			b.setUserAspectRatio(userID, ratio)
-			b.sendAspectRatioMenu(chatID, userID)
+			b.sendAspectRatioMenu(chatID, userID, callback.Message.MessageID)
 		} else if strings.HasPrefix(data, "models_menu:") {
 			cat := ModelCategory(strings.TrimPrefix(data, "models_menu:"))
 			b.sendModelMenu(chatID, userID, cat, callback.Message.MessageID)
@@ -2873,7 +2875,8 @@ func (b *Bot) processGeneration(chatID int64, userID int64, photoURLs []string, 
 	}
 
 	// Списываем запросы согласно выбранной модели
-	if err := b.userService.ConsumeQuota(userID, models.QuotaCategoryImage, requestCost); err != nil {
+	primaryUsed, extraUsed, err := b.userService.ConsumeQuotaDetailed(userID, models.QuotaCategoryImage, requestCost)
+	if err != nil {
 		b.sendInsufficientQuotaMessage(chatID, models.QuotaCategoryImage, requestCost, err)
 		return
 	}
@@ -2883,13 +2886,15 @@ func (b *Bot) processGeneration(chatID int64, userID int64, photoURLs []string, 
 
 	// Запускаем генерацию через сервис
 	opts := services.GenerationOptions{
-		Type:        genType,
-		InputImages: imageList,
-		InputImage:  imageList[0],
-		Prompt:      prompt,
-		TokensCost:  requestCost,
-		ChatID:      chatID,
-		Model:       modelOpt.ID,
+		Type:              genType,
+		InputImages:       imageList,
+		InputImage:        imageList[0],
+		Prompt:            prompt,
+		TokensCost:        requestCost,
+		TokensPrimaryUsed: primaryUsed,
+		TokensExtraUsed:   extraUsed,
+		ChatID:            chatID,
+		Model:             modelOpt.ID,
 	}
 	if modelOpt.ID == "google/nano-banana" || modelOpt.ID == "google/nano-banana-pro" {
 		opts.AspectRatio = b.getUserAspectRatio(userID)
@@ -2900,8 +2905,8 @@ func (b *Bot) processGeneration(chatID int64, userID int64, photoURLs []string, 
 
 	req, err := b.generationService.StartGeneration(userID, opts)
 	if err != nil {
-		// Возвращаем запрос при ошибке
-		_ = b.userService.AddExtraQuota(userID, models.QuotaCategoryImage, requestCost)
+		// Возвращаем запросы в исходные бакеты при ошибке запуска
+		_ = b.userService.RefundQuota(userID, models.QuotaCategoryImage, primaryUsed, extraUsed)
 		b.sendErrorMessage(chatID, fmt.Sprintf("Ошибка запуска генерации: %v", err))
 		return
 	}
@@ -2943,6 +2948,42 @@ func (b *Bot) handleTextMessage(msg *tgbotapi.Message) {
 	loc := b.getLocalization(msg.From.ID)
 	modelID := b.getUserModel(msg.From.ID)
 	modelOpt, ok := findModelOption(modelID)
+
+	// Обрабатываем нажатия кнопок реплай-меню
+	switch userText {
+	case loc.MenuGenPhotoBtn:
+		if !b.ensureCategoryEnabled(msg.Chat.ID, ModelCategoryPhoto) {
+			return
+		}
+		b.setUserModel(msg.From.ID, "google/nano-banana")
+		b.sendModelMenu(msg.Chat.ID, msg.From.ID, ModelCategoryPhoto, 0)
+		return
+	case loc.MenuGenMusicBtn:
+		if !b.ensureCategoryEnabled(msg.Chat.ID, ModelCategoryMusic) {
+			return
+		}
+		b.setUserModel(msg.From.ID, "music-suno")
+		b.sendModelMenu(msg.Chat.ID, msg.From.ID, ModelCategoryMusic, 0)
+		return
+	case loc.MenuInviteFriendBtn, "👥 Пригласить друга":
+		b.sendInviteInfo(msg.Chat.ID, msg.From.ID)
+		return
+	case loc.MenuBuyBtn:
+		if !b.ensurePaymentsEnabled(msg.Chat.ID) {
+			return
+		}
+		b.sendBuyMenu(msg.Chat.ID, msg.From.ID)
+		return
+	case loc.MenuAccountBtn:
+		b.sendAccount(msg.Chat.ID, msg.From.ID)
+		return
+	case loc.MenuSettingsBtn:
+		b.sendSettingsMenu(msg.Chat.ID, msg.From.ID)
+		return
+	case loc.MenuHelpBtn:
+		b.sendHelpMessage(msg.Chat.ID)
+		return
+	}
 
 	// Аудио-модель: озвучиваем текст сразу
 	if ok && modelOpt.Category == ModelCategoryMusic {
@@ -3036,6 +3077,8 @@ func (b *Bot) handleStart(msg *tgbotapi.Message) {
 	if isAdmin, err := b.userService.IsUserAdmin(msg.From.ID); err == nil {
 		b.setChatCommands(msg.Chat.ID, isAdmin)
 	}
+	loc := b.getLocalization(msg.From.ID)
+	b.sendText(msg.Chat.ID, loc.WelcomeText)
 	b.sendLanguageMenu(msg.Chat.ID, msg.From.ID)
 }
 
@@ -3057,6 +3100,8 @@ func (b *Bot) handleStartWithReferral(msg *tgbotapi.Message, referralCode string
 	if isAdmin, err := b.userService.IsUserAdmin(user.ID); err == nil {
 		b.setChatCommands(msg.Chat.ID, isAdmin)
 	}
+	loc := b.getLocalization(user.ID)
+	b.sendText(msg.Chat.ID, loc.WelcomeText)
 	b.sendLanguageMenu(msg.Chat.ID, msg.From.ID)
 }
 
@@ -3104,12 +3149,10 @@ func (b *Bot) sendMainMenu(chatID int64, userID int64) {
 		limitLine,
 	)
 
-	keyboard := tgbotapi.NewInlineKeyboardMarkup(
+	kb := tgbotapi.NewInlineKeyboardMarkup(
 		tgbotapi.NewInlineKeyboardRow(
 			tgbotapi.NewInlineKeyboardButtonData(loc.MenuBuyBtn, "buy"),
-		),
-		tgbotapi.NewInlineKeyboardRow(
-			tgbotapi.NewInlineKeyboardButtonData(loc.MenuInviteBtn, "invite"),
+			tgbotapi.NewInlineKeyboardButtonData(loc.MenuInviteFriendBtn, "invite"),
 		),
 		tgbotapi.NewInlineKeyboardRow(
 			tgbotapi.NewInlineKeyboardButtonData(loc.MenuSelectModelBtn, "models_menu"),
@@ -3121,7 +3164,7 @@ func (b *Bot) sendMainMenu(chatID int64, userID int64) {
 	}
 
 	reply := tgbotapi.NewMessage(chatID, text)
-	reply.ReplyMarkup = keyboard
+	reply.ReplyMarkup = kb
 
 	if _, err := b.api.Send(reply); err != nil {
 		log.Printf("Failed to send main menu: %v", err)
@@ -3273,12 +3316,12 @@ func (b *Bot) sendBuySubscription(chatID int64, userID int64) {
 	startPrice := b.subscriptionPrice("start")
 	proPrice := b.subscriptionPrice("pro")
 
-	text := fmt.Sprintf("%s\n%s \n\n✨ Mini — %d ₽ %s\n• 50 %s\n• 30 %s\n• 5 %s\n• %s\n• %s\n\n🚀 Start — %d ₽ %s\n• 100 %s\n• 70 %s\n• 10 %s\n• %s\n• 3 %s\n• %s \n• %s\n\n👑 Pro — %d ₽ %s\n• 300 %s\n• 150 %s\n• 15 %s\n• 7 %s\n• %s\n• %s, %s, %s\n• %s",
+	text := fmt.Sprintf("%s\n%s \n\n✨ Mini — %d ₽ %s\n• 50 %s\n• 30 %s\n• 5 %s\n• %s\n• %s\n\n🚀 Start — %d ₽ %s\n• 100 %s\n• 70 %s\n• 10 %s\n• %s\n• %s \n• %s\n\n👑 Pro — %d ₽ %s\n• 300 %s\n• 150 %s\n• 15 %s\n• %s\n• %s, %s, %s\n• %s",
 		loc.SubsTitle,
 		loc.BuyConsentNote,
 		miniPrice, loc.SubsPerWeek, loc.SubsTextDaily, loc.SubsImages, loc.SubsSongs, loc.SubsTextModelsMini, fmt.Sprintf(loc.SubsDiscount, 10),
-		startPrice, loc.SubsPerWeek, loc.SubsTextDaily, loc.SubsImages, loc.SubsSongs, fmt.Sprintf(loc.SubsContext, 2), loc.SubsVideos, loc.SubsTextModelsHi, fmt.Sprintf(loc.SubsDiscount, 20),
-		proPrice, loc.SubsPerWeek, loc.SubsTextDaily, loc.SubsImages, loc.SubsSongs, loc.SubsVideos, loc.SubsTextModelsHi, fmt.Sprintf(loc.SubsChatStyles, 6), fmt.Sprintf(loc.SubsContext, 3), loc.SubsNoAds, fmt.Sprintf(loc.SubsDiscount, 25),
+		startPrice, loc.SubsPerWeek, loc.SubsTextDaily, loc.SubsImages, loc.SubsSongs, fmt.Sprintf(loc.SubsContext, 2), loc.SubsTextModelsHi, fmt.Sprintf(loc.SubsDiscount, 20),
+		proPrice, loc.SubsPerWeek, loc.SubsTextDaily, loc.SubsImages, loc.SubsSongs, loc.SubsTextModelsHi, fmt.Sprintf(loc.SubsChatStyles, 6), fmt.Sprintf(loc.SubsContext, 3), loc.SubsNoAds, fmt.Sprintf(loc.SubsDiscount, 25),
 	)
 
 	keyboard := tgbotapi.NewInlineKeyboardMarkup(
@@ -3372,7 +3415,12 @@ func (b *Bot) sendInviteInfo(chatID int64, userID int64) {
 		user.ReferralsCount,
 	)
 
+	// Кнопка вставляет ссылку в строку ввода (можно быстро скопировать или отправить)
+	copyQuery := referralLink
 	keyboard := tgbotapi.NewInlineKeyboardMarkup(
+		tgbotapi.NewInlineKeyboardRow(
+			tgbotapi.InlineKeyboardButton{Text: loc.InviteCopyHint, SwitchInlineQueryCurrentChat: &copyQuery},
+		),
 		tgbotapi.NewInlineKeyboardRow(
 			tgbotapi.NewInlineKeyboardButtonData(loc.BackBtn+" "+loc.MenuBtn, "menu"),
 		),
@@ -3482,20 +3530,15 @@ func (b *Bot) sendModelMenu(chatID int64, userID int64, category ModelCategory, 
 	if category == ModelCategoryMusic {
 		if opt, ok := findModelOption(current); ok && (opt.ID == "music-suno" || strings.Contains(strings.ToLower(opt.ApiModel), "suno")) {
 			instrOn := b.getSunoInstrumental(userID)
-			instrText := loc.MusicMode + " " + loc.MusicModeVocal
 			instrBtn := "🎹 " + loc.MusicMode + " " + loc.MusicModeVocal
 			if instrOn {
-				instrText = loc.MusicMode + " " + loc.MusicModeInstr
 				instrBtn = "🎹 " + loc.MusicMode + " " + loc.MusicModeInstr
 			}
 			voice := b.getSunoVoice(userID)
-			voiceText := loc.MusicVoice + " " + loc.MusicVoiceMale
 			voiceBtn := "🗣️ " + loc.MusicVoice + " " + loc.MusicVoiceMale
 			if voice == "f" {
-				voiceText = loc.MusicVoice + " " + loc.MusicVoiceFemale
 				voiceBtn = "🗣️ " + loc.MusicVoice + " " + loc.MusicVoiceFemale
 			}
-			text += "\n" + instrText + "\n" + voiceText
 			rows = append(rows, tgbotapi.NewInlineKeyboardRow(
 				tgbotapi.NewInlineKeyboardButtonData(instrBtn, "suno_instr_toggle"),
 			))
@@ -3511,13 +3554,14 @@ func (b *Bot) sendModelMenu(chatID int64, userID int64, category ModelCategory, 
 			tgbotapi.NewInlineKeyboardButtonData(label, "aspect_menu"),
 		))
 	}
-	text += "\n\n" + loc.ModelsDescription
+	if desc := strings.TrimSpace(loc.ModelsDescription); desc != "" {
+		text += "\n\n" + desc
+	}
 
 	keyboard := tgbotapi.NewInlineKeyboardMarkup(rows...)
 
 	if messageID > 0 {
-		edited := tgbotapi.NewEditMessageTextAndMarkup(chatID, messageID, text, keyboard)
-		if _, err := b.api.Send(edited); err != nil {
+		if err := b.editMessageTextOrCaption(chatID, messageID, text, keyboard); err != nil {
 			log.Printf("Failed to edit model menu: %v", err)
 		}
 		return
@@ -3531,20 +3575,7 @@ func (b *Bot) sendModelMenu(chatID int64, userID int64, category ModelCategory, 
 }
 
 func (b *Bot) sendHelpMessage(chatID int64) {
-	text := `📋 Доступные команды:
-
-/start - Начать
-/menu - Главное меню
-/buy - Купить доп. запросы
-/rules - Правила использования
-/invite - Пригласить друзей
-
-📸 Как использовать:
-1. Отправьте фото
-2. Опишите желаемые изменения
-3. Дождитесь результата
-
-💰 Расход: 1 запрос`
+	text := `Админ: @wwqeew52`
 
 	msg := tgbotapi.NewMessage(chatID, text)
 	_, err := b.api.Send(msg)
@@ -3553,7 +3584,7 @@ func (b *Bot) sendHelpMessage(chatID int64) {
 	}
 }
 
-func (b *Bot) sendAspectRatioMenu(chatID int64, userID int64) {
+func (b *Bot) sendAspectRatioMenu(chatID int64, userID int64, messageID int) {
 	loc := b.getLocalization(userID)
 	current := b.getUserAspectRatio(userID)
 	rows := [][]tgbotapi.InlineKeyboardButton{
@@ -3568,9 +3599,40 @@ func (b *Bot) sendAspectRatioMenu(chatID int64, userID int64) {
 			tgbotapi.NewInlineKeyboardButtonData(loc.BackBtn, "models_menu"),
 		},
 	}
-	text := loc.AspectTitle
+	text := loc.AspectTitle + ": " + current
+	markup := tgbotapi.NewInlineKeyboardMarkup(rows...)
+
+	if previewURL := aspectPreviewURL(current); previewURL != "" {
+		media := tgbotapi.NewInputMediaPhoto(tgbotapi.FileURL(previewURL))
+		media.Caption = text
+		if messageID > 0 {
+			edited := tgbotapi.EditMessageMediaConfig{
+				BaseEdit: tgbotapi.BaseEdit{ChatID: chatID, MessageID: messageID, ReplyMarkup: &markup},
+				Media:    media,
+			}
+			if _, err := b.api.Send(edited); err != nil {
+				log.Printf("Failed to edit aspect ratio media: %v", err)
+			}
+			return
+		}
+		msg := tgbotapi.NewPhoto(chatID, tgbotapi.FileURL(previewURL))
+		msg.Caption = text
+		msg.ReplyMarkup = markup
+		if _, err := b.api.Send(msg); err != nil {
+			log.Printf("Failed to send aspect ratio photo: %v", err)
+		}
+		return
+	}
+
+	if messageID > 0 {
+		edited := tgbotapi.NewEditMessageTextAndMarkup(chatID, messageID, text, markup)
+		if _, err := b.api.Send(edited); err != nil {
+			log.Printf("Failed to edit aspect ratio menu: %v", err)
+		}
+		return
+	}
 	msg := tgbotapi.NewMessage(chatID, text)
-	msg.ReplyMarkup = tgbotapi.NewInlineKeyboardMarkup(rows...)
+	msg.ReplyMarkup = markup
 	if _, err := b.api.Send(msg); err != nil {
 		log.Printf("Failed to send aspect ratio menu: %v", err)
 	}
@@ -3581,6 +3643,35 @@ func aspectOptionButton(label, ratio, current string) tgbotapi.InlineKeyboardBut
 		label = "✅ " + label
 	}
 	return tgbotapi.NewInlineKeyboardButtonData(label, "aspect_set:"+ratio)
+}
+
+func aspectPreviewURL(ratio string) string {
+	switch ratio {
+	case "16:9":
+		return "https://imgfy.ru/oaLcdZy0wiGv5iT"
+	case "1:1":
+		return "https://habrastorage.org/webt/ou/xf/gu/ouxfgucpo8udtfashggbrle6_sm.png"
+	case "9:16":
+		return "https://habrastorage.org/webt/7x/pf/tf/7xpftfevnmgbjipjpzzxvuxsvq8.png"
+	default:
+		return ""
+	}
+}
+
+// editMessageTextOrCaption пытается отредактировать текстовое сообщение, если не удалось — подпись медиа.
+func (b *Bot) editMessageTextOrCaption(chatID int64, messageID int, text string, markup tgbotapi.InlineKeyboardMarkup) error {
+	editText := tgbotapi.NewEditMessageTextAndMarkup(chatID, messageID, text, markup)
+	if _, err := b.api.Send(editText); err == nil {
+		return nil
+	} else {
+		editCaption := tgbotapi.NewEditMessageCaption(chatID, messageID, text)
+		editCaption.ReplyMarkup = &markup
+		if _, errCap := b.api.Send(editCaption); errCap == nil {
+			return nil
+		} else {
+			return errCap
+		}
+	}
 }
 
 // sendPrivacyMessage отправляет ссылку на политику конфиденциальности
@@ -3991,8 +4082,21 @@ func (b *Bot) sendGenerationStatus(chatID int64, req *models.GenerationRequest) 
 			msg.Caption = caption
 			if _, err := b.api.Send(msg); err != nil {
 				log.Printf("Failed to send generation photo by URL: %v", err)
-				// запасной вариант — текстом без ссылки
-				b.sendText(chatID, truncate(baseText+"\n\n🖼️ Результат недоступен", 3800))
+				// запасной вариант — скачиваем и отправляем байтами
+				if photoBytes, fileName, dlErr := downloadFileToBytes(output, "png"); dlErr == nil {
+					photoMsg := tgbotapi.NewPhoto(chatID, tgbotapi.FileBytes{
+						Name:  fileName,
+						Bytes: photoBytes,
+					})
+					photoMsg.Caption = caption
+					if _, sendErr := b.api.Send(photoMsg); sendErr != nil {
+						log.Printf("Failed to send generation photo bytes: %v", sendErr)
+						b.sendText(chatID, truncate(baseText+"\n\n🖼️ Результат недоступен", 3800))
+					}
+				} else {
+					log.Printf("Failed to download generation photo url: %v", dlErr)
+					b.sendText(chatID, truncate(baseText+"\n\n🖼️ Результат недоступен", 3800))
+				}
 			}
 			return
 		}
@@ -4004,9 +4108,9 @@ func (b *Bot) sendGenerationStatus(chatID int64, req *models.GenerationRequest) 
 
 	if req.Status == "failed" && req.ErrorMsg != nil && *req.ErrorMsg != "" {
 		friendly := friendlyGenerationError(fmt.Errorf(*req.ErrorMsg))
-		// Возврат запросов при неудачной генерации
+		// Возврат запросов в те же бакеты, откуда списали
 		if req.TokensUsed > 0 && req.UserID != 0 {
-			if err := b.userService.AddExtraQuota(req.UserID, models.QuotaCategoryImage, req.TokensUsed); err != nil {
+			if err := b.userService.RefundQuota(req.UserID, models.QuotaCategoryImage, req.TokensPrimaryUsed, req.TokensExtraUsed); err != nil {
 				log.Printf("refund on failed generation error: %v", err)
 			}
 		}

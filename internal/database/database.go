@@ -48,6 +48,8 @@ func RunMigrations(db *sql.DB) error {
 		prompt TEXT,
 		error_msg TEXT,
 		tokens_used INTEGER DEFAULT 0,
+		tokens_primary_used INTEGER DEFAULT 0,
+		tokens_extra_used INTEGER DEFAULT 0,
 		created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
 		completed_at TIMESTAMP WITH TIME ZONE NULL
 	);`
@@ -111,6 +113,10 @@ func RunMigrations(db *sql.DB) error {
 		END IF;
 	END $$;`
 
+	upgradeGenerationRequestsTokensSQL := `
+	ALTER TABLE generation_requests ADD COLUMN IF NOT EXISTS tokens_primary_used INTEGER DEFAULT 0;
+	ALTER TABLE generation_requests ADD COLUMN IF NOT EXISTS tokens_extra_used INTEGER DEFAULT 0;`
+
 	defapiMigrationSQL := `
 	ALTER TABLE generation_requests ADD COLUMN IF NOT EXISTS external_task_id TEXT;`
 
@@ -137,6 +143,7 @@ func RunMigrations(db *sql.DB) error {
 		referralMigrationSQL,
 		dropTokensSQL,
 		upgradeQuotasSQL,
+		upgradeGenerationRequestsTokensSQL,
 		defapiMigrationSQL,
 		subscriptionSQL,
 		indexesSQL,

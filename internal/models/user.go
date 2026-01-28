@@ -58,17 +58,19 @@ type TokenTransaction struct {
 }
 
 type GenerationRequest struct {
-	ID          int64      `json:"id" db:"id"`
-	UserID      int64      `json:"user_id" db:"user_id"`
-	Type        string     `json:"type" db:"type"`
-	Status      string     `json:"status" db:"status"`
-	InputImage  string     `json:"input_image" db:"input_image"`
-	OutputImage *string    `json:"output_image" db:"output_image"`
-	Prompt      *string    `json:"prompt" db:"prompt"`
-	ErrorMsg    *string    `json:"error_msg" db:"error_msg"`
-	TokensUsed  int        `json:"tokens_used" db:"tokens_used"`
-	CreatedAt   time.Time  `json:"created_at" db:"created_at"`
-	CompletedAt *time.Time `json:"completed_at" db:"completed_at"`
+	ID                int64      `json:"id" db:"id"`
+	UserID            int64      `json:"user_id" db:"user_id"`
+	Type              string     `json:"type" db:"type"`
+	Status            string     `json:"status" db:"status"`
+	InputImage        string     `json:"input_image" db:"input_image"`
+	OutputImage       *string    `json:"output_image" db:"output_image"`
+	Prompt            *string    `json:"prompt" db:"prompt"`
+	ErrorMsg          *string    `json:"error_msg" db:"error_msg"`
+	TokensUsed        int        `json:"tokens_used" db:"tokens_used"`
+	TokensPrimaryUsed int        `json:"tokens_primary_used" db:"tokens_primary_used"`
+	TokensExtraUsed   int        `json:"tokens_extra_used" db:"tokens_extra_used"`
+	CreatedAt         time.Time  `json:"created_at" db:"created_at"`
+	CompletedAt       *time.Time `json:"completed_at" db:"completed_at"`
 }
 
 type CategorySetting struct {

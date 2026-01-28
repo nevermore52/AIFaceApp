@@ -20,15 +20,21 @@ type Localization struct {
 	CmdAdmin    string
 
 	// Main menu
-	MenuTitle          string
-	MenuYourID         string
-	MenuSubscription   string
-	MenuCurrentModel   string
-	MenuLimit          string
-	MenuLimitFormat    string
-	MenuBuyBtn         string
-	MenuInviteBtn      string
-	MenuSelectModelBtn string
+	MenuTitle           string
+	MenuYourID          string
+	MenuSubscription    string
+	MenuCurrentModel    string
+	MenuLimit           string
+	MenuLimitFormat     string
+	MenuBuyBtn          string
+	MenuInviteBtn       string
+	MenuSelectModelBtn  string
+	MenuGenPhotoBtn     string
+	MenuGenMusicBtn     string
+	MenuInviteFriendBtn string
+	MenuAccountBtn      string
+	MenuSettingsBtn     string
+	MenuHelpBtn         string
 
 	// Account
 	AccountUserID       string
@@ -269,6 +275,7 @@ type Localization struct {
 	AspectSquare    string
 
 	// Common
+	WelcomeText string
 	BackBtn     string
 	MenuBtn     string
 	RequestUnit string
@@ -331,7 +338,7 @@ var locRU = Localization{
 	CmdStart:    "Начать",
 	CmdMenu:     "Главное меню",
 	CmdAccount:  "Аккаунт и лимиты",
-	CmdBuy:      "Купить (подписку,доп.запросы)",
+	CmdBuy:      "Купить (подписку, генерации)",
 	CmdInvite:   "Пригласить друзей",
 	CmdRules:    "Правила использования",
 	CmdPrivacy:  "Политика и Польз. соглашение",
@@ -339,22 +346,28 @@ var locRU = Localization{
 	CmdAdmin:    "Админ-панель",
 
 	// Main menu
-	MenuTitle:          "🍌 Ваш айди: %d\n⭐ Тип подписки: %s\n🧠 Текущая модель: %s %s — %s",
-	MenuYourID:         "🍌 Ваш айди",
-	MenuSubscription:   "⭐ Тип подписки",
-	MenuCurrentModel:   "🧠 Текущая модель",
-	MenuLimit:          "Лимит текущей модели: нет данных",
-	MenuLimitFormat:    "Лимит: %d (%d доп)",
-	MenuBuyBtn:         "💰 Покупка",
-	MenuInviteBtn:      "👥 Пригласить друзей",
-	MenuSelectModelBtn: "🧠 Выбрать модель",
+	MenuTitle:           "🍌 Ваш айди: %d\n⭐ Тип подписки: %s\n🧠 Текущая модель: %s %s — %s",
+	MenuYourID:          "🍌 Ваш айди",
+	MenuSubscription:    "⭐ Тип подписки",
+	MenuCurrentModel:    "🧠 Текущая модель",
+	MenuLimit:           "Лимит текущей модели: нет данных",
+	MenuLimitFormat:     "Лимит: %d (%d доп)",
+	MenuBuyBtn:          "💰 Покупка",
+	MenuInviteBtn:       "👥 Пригласить друзей",
+	MenuSelectModelBtn:  "🧠 Выбрать модель",
+	MenuGenPhotoBtn:     "🖼️ Генерация фото",
+	MenuGenMusicBtn:     "🎸 Генерация песни",
+	MenuInviteFriendBtn: "👥 Пригласить друзей",
+	MenuAccountBtn:      "🪪 Мой аккаунт",
+	MenuSettingsBtn:     "⚙️ Настройки",
+	MenuHelpBtn:         "🆘 Помощь",
 
 	// Account
 	AccountUserID:       "ID Пользователя: %d",
 	AccountSubscription: "⭐ Тип подписки: %s",
 	AccountValidUntil:   "📅 Действует до: %s",
 	AccountTextDaily:    "📝 Текстовые генерации (24 ч): %d",
-	AccountImagesWeekly: "🖼️ Картинок осталось: %d",
+	AccountImagesWeekly: "🖼️ Фото осталось: %d",
 	AccountMusicWeekly:  "🎵 Музыка: %d",
 	AccountVideoWeekly:  "🎬 Видео: %d",
 	AccountExtraText:    "📝 Доп. текстовые генерации: %d",
@@ -367,7 +380,7 @@ var locRU = Localization{
 	BuySelectAction:    "Выберите, что хотите купить:",
 	BuyConsentNote:     "Оплачивая, вы принимаете Политику конфиденциальности и Пользовательское соглашение (/privacy).",
 	BuySubscriptionBtn: "⭐ Подписку",
-	BuyExtrasBtn:       "💰 Доп. запросы",
+	BuyExtrasBtn:       "💰 Генерации",
 	BuyBackBtn:         "◀️ Назад",
 	BuyMenuBtn:         "🏠 Меню",
 
@@ -398,9 +411,9 @@ var locRU = Localization{
 	ExtrasImages:      "🖼️ Изображения",
 	ExtrasMusic:       "🎵 Музыка",
 	ExtrasVideo:       "🎬 Видео",
-	ExtrasTexts:       "📝 Текст",
-	ExtrasImage:       "🖼️ Доп. запросы изображений",
-	ExtrasMusico:      "🎵 Доп. музыка",
+	ExtrasTexts:       "📝 Текстовые запросы",
+	ExtrasImage:       "🖼️ Генерации изображений",
+	ExtrasMusico:      "🎵 Генерации музыки",
 	ExtrasVideos:      "🎬 Доп. видео",
 	ExtrasAllDisabled: "Все категории отключены администратором",
 
@@ -448,7 +461,7 @@ var locRU = Localization{
 	ModelsCurrent:     "Текущая",
 	ModelsCost:        "Расход: %d %s",
 	ModelsMaxPhotos:   "Максимум фото: %d",
-	ModelsDescription: "Категории моделей:\n📸 Фото — редактирование и генерация изображений.\n🎵 Песни — генерация треков.\n💬 Текст — ответы на вопросы и сопровождение.",
+	ModelsDescription: "",
 	ModelsCatPhoto:    "📸 Фото",
 	ModelsCatVideo:    "🎬 Видео",
 	ModelsCatMusic:    "🎵 Музыка",
@@ -459,14 +472,14 @@ var locRU = Localization{
 	InstrHugVideo:     "Отправьте 1 фото с двумя или более людьми и ожидайте.",
 
 	// Photo models descriptions
-	ModelNanoBanana:    "Фото: Старая модель, среднее качество, плохо работает с большими запросами и двумя фотографиями. Среднее время ожидания 1-2 минуты, максимум до 10 минут",
-	ModelNanoBananaPro: "Фото: Новейшая модель, лучшее качество. Среднее время ожидания 1-2 минуты, максимум до 10 минут",
+	ModelNanoBanana:    "Cреднее качество, плохо работает с двумя фотографиями. Среднее время ожидания 1 минута.",
+	ModelNanoBananaPro: "Новейшая модель, лучшее качество. Среднее время ожидания 1-2 минуты.",
 	ModelHugVideo:      "Видео: оживление фото с обнимашками.",
-	ModelSunoMusic:     "Музыка: генерация песни. До 10-15 минут.",
+	ModelSunoMusic:     "Генерация песни. Ожидание 5-10 минут.",
 	ModelGeminiFlash:   "Текст: быстрые ответы. Доступно с подпиской Start+.",
 	ModelGPT5Mini:      "Текст: быстрые ответы. Доступно с подпиской Mini+.",
 	ModelGPT5Nano:      "Текст: дольше ответы. Доступно с подпиской Mini+.",
-	ModelGPT41Mini:     "Чат-бот: быстрые ответы на текстовые запросы.",
+	ModelGPT41Mini:     "Текст: быстрые ответы на текстовые запросы.",
 
 	// Photo instructions
 	PhotoReceived:   "📷 Фото получено!",
@@ -534,17 +547,19 @@ var locRU = Localization{
 
 	// Rules
 	RulesTitle:   "📜 Правила бота:",
-	RulesContent: "1) 18+ контент запрещён к генерации и отправке.\n2) Нельзя загружать обнажёнку, жестокость, спам или нелегальный контент.\n3) Не нарушайте авторские права и чужие личные данные.\n4) Соблюдайте лимиты запросов и уважайте инфраструктуру.\n5) Используйте /menu для выбора модели и следуйте её инструкции.\n6) Запрещены любые оскорбления третьих лиц в песнях, фото, чат.\n\nНарушения могут привести к блокировке. Без возврата средств.",
+	RulesContent: "1) 18+ контент запрещён к генерации и отправке.\n2) Нельзя загружать обнажёнку, жестокость, спам или нелегальный контент.\n3) Не нарушайте авторские права и чужие личные данные.\n4) Соблюдайте лимиты запросов и уважайте инфраструктуру.\n5) Используйте /menu для выбора модели и следуйте её инструкции.\n6) Запрещены любые оскорбления третьих лиц в песнях, фото, чат.\n\nНарушение правил чревато получением ошибок от бота, за которые не будут возвращены запросы.",
 
 	// Privacy
 	PrivacyPolicy: "🔒 Политика конфиденциальности:",
 	PrivacyTerms:  "📜 Пользовательское соглашение:",
 
+	WelcomeText: "👋 Добро пожаловать! \nПри первом запуске бота вам доступна 1 пробная генерация фото, и 10 текстовых запросов каждый день.\nНажмите /menu, чтобы выбрать модель.",
+
 	// Help
-	HelpTitle:    "📋 Доступные команды:",
-	HelpCommands: "/start - Начать\n/menu - Главное меню\n/buy - Купить доп. запросы\n/rules - Правила использования\n/invite - Пригласить друзей",
-	HelpUsage:    "📸 Как использовать:\n1. Отправьте фото\n2. Опишите желаемые изменения\n3. Дождитесь результата",
-	HelpCost:     "💰 Расход: 1 запрос",
+	HelpTitle:    "",
+	HelpCommands: "",
+	HelpUsage:    "",
+	HelpCost:     "",
 
 	// Admin
 	AdminPanel:            "👑 Админ-панель",
@@ -656,15 +671,21 @@ var locEN = Localization{
 	CmdAdmin:    "Admin panel",
 
 	// Main menu
-	MenuTitle:          "🍌 Your ID: %d\n⭐ Subscription: %s\n🧠 Current model: %s %s — %s",
-	MenuYourID:         "🍌 Your ID",
-	MenuSubscription:   "⭐ Subscription",
-	MenuCurrentModel:   "🧠 Current model",
-	MenuLimit:          "Current model limit: no data",
-	MenuLimitFormat:    "Limit: %d (%d extra)",
-	MenuBuyBtn:         "💰 Purchase",
-	MenuInviteBtn:      "👥 Invite friends",
-	MenuSelectModelBtn: "🧠 Select model",
+	MenuTitle:           "🍌 Your ID: %d\n⭐ Subscription: %s\n🧠 Current model: %s %s — %s",
+	MenuYourID:          "🍌 Your ID",
+	MenuSubscription:    "⭐ Subscription",
+	MenuCurrentModel:    "🧠 Current model",
+	MenuLimit:           "Current model limit: no data",
+	MenuLimitFormat:     "Limit: %d (%d extra)",
+	MenuBuyBtn:          "💰 Purchase",
+	MenuInviteBtn:       "👥 Invite friends",
+	MenuSelectModelBtn:  "🧠 Select model",
+	MenuGenPhotoBtn:     "🖼️ Photo generation",
+	MenuGenMusicBtn:     "🎸 Song generation",
+	MenuInviteFriendBtn: "👥 Invite a friend",
+	MenuAccountBtn:      "🪪 My account",
+	MenuSettingsBtn:     "⚙️ Settings",
+	MenuHelpBtn:         "🆘 Help",
 
 	// Account
 	AccountUserID:       "User ID: %d",
@@ -741,6 +762,8 @@ var locEN = Localization{
 	LangEnglish: "🇬🇧 English",
 	LangChanged: "✅ Language changed to English",
 
+	WelcomeText: "👋 Welcome! You have access to 1 trial photo generation and 10 text queries every day. Press /menu to select a model.",
+
 	// Chat styles
 	StyleNormal:           "🙂 Normal",
 	StyleFormal:           "📘 Formal",
@@ -768,7 +791,7 @@ var locEN = Localization{
 	ModelsCurrent:     "Current:",
 	ModelsCost:        "Cost: %d %s",
 	ModelsMaxPhotos:   "Max photos: %d",
-	ModelsDescription: "Model categories:\n📸 Photo — image editing and generation.\n🎵 Songs — track generation.\n💬 Text — answers and assistance.",
+	ModelsDescription: "",
 	ModelsCatPhoto:    "📸 Photo",
 	ModelsCatVideo:    "🎬 Video",
 	ModelsCatMusic:    "🎵 Music",

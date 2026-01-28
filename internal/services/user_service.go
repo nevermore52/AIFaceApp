@@ -180,10 +180,104 @@ func (s *UserService) GetQuota(telegramID int64) (*models.UserQuota, error) {
 }
 
 func (s *UserService) ConsumeQuota(telegramID int64, category models.QuotaCategory, amount int) error {
+	_, _, err := s.ConsumeQuotaDetailed(telegramID, category, amount)
+	return err
+}
+
+// ConsumeQuotaDetailed списывает запросы и возвращает, сколько ушло из основного и дополнительного бакета.
+func (s *UserService) ConsumeQuotaDetailed(telegramID int64, category models.QuotaCategory, amount int) (primaryUsed, extraUsed int, err error) {
 	if amount < 1 {
 		amount = 1
 	}
 
+	if err = s.ensureDailyTextQuota(telegramID); err != nil {
+		return
+	}
+	if err = s.ensureWeeklyQuota(telegramID); err != nil {
+		return
+	}
+	if err = s.ensureCategorySettings(); err != nil {
+		return
+	}
+
+	if _, err = s.GetOrCreateUserQuota(telegramID); err != nil {
+		return
+	}
+
+	tx, txErr := s.db.Begin()
+	if txErr != nil {
+		err = txErr
+		return
+	}
+	defer tx.Rollback()
+
+	var primaryCol, extraCol string
+	switch category {
+	case models.QuotaCategoryText:
+		primaryCol, extraCol = "text_daily", "text_extra"
+	case models.QuotaCategoryImage:
+		primaryCol, extraCol = "image_weekly", "image_extra"
+	case models.QuotaCategoryMusic:
+		primaryCol, extraCol = "music_weekly", "music_extra"
+	case models.QuotaCategoryVideo:
+		primaryCol, extraCol = "video_weekly", "video_extra"
+	default:
+		err = fmt.Errorf("unknown quota category: %s", category)
+		return
+	}
+
+	var primary, extra int
+	row := tx.QueryRow(fmt.Sprintf(`SELECT %s, %s FROM user_quotas WHERE telegram_id = $1 FOR UPDATE`, primaryCol, extraCol), telegramID)
+	if err = row.Scan(&primary, &extra); err != nil {
+		return
+	}
+
+	if primary+extra < amount {
+		err = fmt.Errorf("недостаточно запросов (%d нужно, доступно %d)", amount, primary+extra)
+		return
+	}
+
+	origPrimary, origExtra := primary, extra
+	remain := amount
+	if primary >= remain {
+		primary -= remain
+		remain = 0
+	} else {
+		remain -= primary
+		primary = 0
+	}
+
+	if remain > 0 {
+		extra -= remain
+	}
+
+	primaryUsed = origPrimary - primary
+	extraUsed = origExtra - extra
+
+	if _, err = tx.Exec(fmt.Sprintf(`
+		UPDATE user_quotas
+		SET %s = $2, %s = $3
+		WHERE telegram_id = $1
+	`, primaryCol, extraCol), telegramID, primary, extra); err != nil {
+		return
+	}
+
+	err = tx.Commit()
+	return
+}
+
+// RefundQuota возвращает запросы в те же бакеты (основной/дополнительный), откуда они были списаны.
+func (s *UserService) RefundQuota(telegramID int64, category models.QuotaCategory, primaryAmount, extraAmount int) error {
+	if primaryAmount < 0 || extraAmount < 0 {
+		return fmt.Errorf("refund amounts must be non-negative")
+	}
+	if primaryAmount == 0 && extraAmount == 0 {
+		return nil
+	}
+
+	if _, err := s.GetOrCreateUserQuota(telegramID); err != nil {
+		return err
+	}
 	if err := s.ensureDailyTextQuota(telegramID); err != nil {
 		return err
 	}
@@ -193,16 +287,6 @@ func (s *UserService) ConsumeQuota(telegramID int64, category models.QuotaCatego
 	if err := s.ensureCategorySettings(); err != nil {
 		return err
 	}
-
-	if _, err := s.GetOrCreateUserQuota(telegramID); err != nil {
-		return err
-	}
-
-	tx, err := s.db.Begin()
-	if err != nil {
-		return err
-	}
-	defer tx.Rollback()
 
 	var primaryCol, extraCol string
 	switch category {
@@ -218,35 +302,19 @@ func (s *UserService) ConsumeQuota(telegramID int64, category models.QuotaCatego
 		return fmt.Errorf("unknown quota category: %s", category)
 	}
 
-	var primary, extra int
-	row := tx.QueryRow(fmt.Sprintf(`SELECT %s, %s FROM user_quotas WHERE telegram_id = $1 FOR UPDATE`, primaryCol, extraCol), telegramID)
-	if err = row.Scan(&primary, &extra); err != nil {
+	tx, err := s.db.Begin()
+	if err != nil {
 		return err
 	}
+	defer tx.Rollback()
 
-	if primary+extra < amount {
-		return fmt.Errorf("недостаточно запросов (%d нужно, доступно %d)", amount, primary+extra)
-	}
-
-	remain := amount
-	if primary >= remain {
-		primary -= remain
-		remain = 0
-	} else {
-		remain -= primary
-		primary = 0
-	}
-
-	if remain > 0 {
-		extra -= remain
-	}
-
-	_, err = tx.Exec(fmt.Sprintf(`
+	if _, err := tx.Exec(fmt.Sprintf(`
 		UPDATE user_quotas
-		SET %s = $2, %s = $3
+		SET %s = %s + $2,
+			%s = %s + $3,
+			updated_at = CURRENT_TIMESTAMP
 		WHERE telegram_id = $1
-	`, primaryCol, extraCol), telegramID, primary, extra)
-	if err != nil {
+	`, primaryCol, primaryCol, extraCol, extraCol), telegramID, primaryAmount, extraAmount); err != nil {
 		return err
 	}
 
@@ -839,10 +907,10 @@ func (s *UserService) setSubscriptionQuotas(telegramID int64, subType string) er
 		image, music, video = 30, 5, 0
 		textDaily = 50
 	case "start":
-		image, music, video = 70, 10, 3
+		image, music, video = 70, 10, 0
 		textDaily = 100
 	case "pro":
-		image, music, video = 150, 15, 7
+		image, music, video = 150, 15, 0
 		textDaily = 300
 	default:
 		return nil
@@ -866,9 +934,9 @@ func (s *UserService) setSubscriptionWeekly(telegramID int64, subType string) er
 	case "mini":
 		image, music, video = 30, 5, 0
 	case "start":
-		image, music, video = 70, 10, 3
+		image, music, video = 70, 10, 0
 	case "pro":
-		image, music, video = 150, 15, 7
+		image, music, video = 150, 15, 0
 	default:
 		return nil
 	}
