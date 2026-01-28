@@ -3189,8 +3189,8 @@ func (b *Bot) sendMainMenu(chatID int64, userID int64) {
 		b.setChatCommands(chatID, true)
 	}
 
-	// Сообщение для установки reply-клавиатуры (минимально заметный текст)
-	reply := tgbotapi.NewMessage(chatID, "\u00a0")
+	// Сообщение для установки reply-клавиатуры (краткий текст)
+	reply := tgbotapi.NewMessage(chatID, loc.MenuBtn)
 	reply.ReplyMarkup = replyKB
 	reply.DisableNotification = true
 	if _, err := b.api.Send(reply); err != nil {

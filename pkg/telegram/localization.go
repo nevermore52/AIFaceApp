@@ -346,7 +346,7 @@ var locRU = Localization{
 	CmdAdmin:    "Админ-панель",
 
 	// Main menu
-	MenuTitle:           "🍌 Ваш айди: %d\n⭐ Тип подписки: %s\n🧠 Текущая модель: %s %s — %s",
+	MenuTitle:           "🍌 Ваш айди: %d\n⭐ Тип подписки: %s\n🧠 Текущая ИИ модель: %s %s %s",
 	MenuYourID:          "🍌 Ваш айди",
 	MenuSubscription:    "⭐ Тип подписки",
 	MenuCurrentModel:    "🧠 Текущая модель",
@@ -357,7 +357,7 @@ var locRU = Localization{
 	MenuSelectModelBtn:  "🧠 Выбрать модель",
 	MenuGenPhotoBtn:     "🖼️ Генерация фото",
 	MenuGenMusicBtn:     "🎸 Генерация песни",
-	MenuInviteFriendBtn: "👥 Пригласить друзей",
+	MenuInviteFriendBtn: "👥 Пригласить друга",
 	MenuAccountBtn:      "🪪 Мой аккаунт",
 	MenuSettingsBtn:     "⚙️ Настройки",
 	MenuHelpBtn:         "🆘 Помощь",
