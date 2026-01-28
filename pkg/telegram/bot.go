@@ -3153,7 +3153,28 @@ func (b *Bot) sendMainMenu(chatID int64, userID int64) {
 		limitLine,
 	)
 
-	kb := tgbotapi.NewInlineKeyboardMarkup(
+	// reply-клавиатура
+	replyKB := tgbotapi.NewReplyKeyboard(
+		tgbotapi.NewKeyboardButtonRow(
+			tgbotapi.NewKeyboardButton(loc.MenuGenPhotoBtn),
+			tgbotapi.NewKeyboardButton(loc.MenuGenMusicBtn),
+		),
+		tgbotapi.NewKeyboardButtonRow(
+			tgbotapi.NewKeyboardButton(loc.MenuInviteFriendBtn),
+			tgbotapi.NewKeyboardButton(loc.MenuBuyBtn),
+		),
+		tgbotapi.NewKeyboardButtonRow(
+			tgbotapi.NewKeyboardButton(loc.MenuAccountBtn),
+			tgbotapi.NewKeyboardButton(loc.MenuSettingsBtn),
+		),
+		tgbotapi.NewKeyboardButtonRow(
+			tgbotapi.NewKeyboardButton(loc.MenuHelpBtn),
+		),
+	)
+	replyKB.ResizeKeyboard = true
+
+	// инлайн-кнопки (дублируем быстрые действия)
+	inlineKB := tgbotapi.NewInlineKeyboardMarkup(
 		tgbotapi.NewInlineKeyboardRow(
 			tgbotapi.NewInlineKeyboardButtonData(loc.MenuBuyBtn, "buy"),
 			tgbotapi.NewInlineKeyboardButtonData(loc.MenuInviteFriendBtn, "invite"),
@@ -3167,11 +3188,19 @@ func (b *Bot) sendMainMenu(chatID int64, userID int64) {
 		b.setChatCommands(chatID, true)
 	}
 
+	// Сообщение с reply-клавиатурой
 	reply := tgbotapi.NewMessage(chatID, text)
-	reply.ReplyMarkup = kb
+	reply.ReplyMarkup = replyKB
 
 	if _, err := b.api.Send(reply); err != nil {
 		log.Printf("Failed to send main menu: %v", err)
+	}
+
+	// Дополнительно — инлайн-кнопки в отдельном сообщении
+	inlineMsg := tgbotapi.NewMessage(chatID, loc.MenuBtn)
+	inlineMsg.ReplyMarkup = inlineKB
+	if _, err := b.api.Send(inlineMsg); err != nil {
+		log.Printf("Failed to send inline main menu: %v", err)
 	}
 }
 
