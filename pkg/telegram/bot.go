@@ -4318,7 +4318,8 @@ func (b *Bot) sendGenerationStatus(chatID int64, req *models.GenerationRequest) 
 	if req.Status == "failed" && req.ErrorMsg != nil && *req.ErrorMsg != "" {
 		friendly := friendlyGenerationError(fmt.Errorf(*req.ErrorMsg))
 		// Возврат запросов в те же бакеты, откуда списали
-		skipRefund := *req.ErrorMsg == "Произошла ошибка возможно вы нарушили правила бота.\n Попробуйте переформулировать запрос"
+		skipRefund := strings.Contains(*req.ErrorMsg, "Request successful, but the official returned empty content") ||
+			strings.Contains(*req.ErrorMsg, "Произошла ошибка возможно вы нарушили правила бота.")
 		if !skipRefund && req.TokensUsed > 0 && req.UserID != 0 {
 			if err := b.userService.RefundQuota(req.UserID, models.QuotaCategoryImage, req.TokensPrimaryUsed, req.TokensExtraUsed); err != nil {
 				log.Printf("refund on failed generation error: %v", err)
