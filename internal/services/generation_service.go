@@ -515,8 +515,8 @@ func (s *GenerationService) LogRequest(userID int64, opts LogRequestOptions) (*m
 
 	query := `
 		INSERT INTO generation_requests (user_id, username, model_type, model, status, input_image, output_image, external_task_id, prompt, error_msg, tokens_used, tokens_primary_used, tokens_extra_used, completed_at)
-		VALUES ($1, $2, $3, $4, $5, '', $6, $7, $8, $9, $10, $11, $12,
-			CASE WHEN $5 = 'completed' THEN CURRENT_TIMESTAMP ELSE NULL END)
+		VALUES ($1, $2, $3, $4, $5::text, '', $6, $7, $8, $9, $10, $11, $12,
+			CASE WHEN $5::text = 'completed' THEN CURRENT_TIMESTAMP ELSE NULL::timestamptz END)
 		RETURNING id, user_id, username, model_type, model, status, input_image, output_image, prompt, error_msg, tokens_used, tokens_primary_used, tokens_extra_used, created_at, completed_at`
 
 	req := &models.GenerationRequest{}
