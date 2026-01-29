@@ -14,6 +14,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"telegram-ai-face-bot/internal/config"
@@ -32,6 +33,10 @@ type Bot struct {
 	redisClient       *redis.Client
 	cfg               *config.Config
 	concurrencySem    chan struct{}
+	updates           tgbotapi.UpdatesChannel
+	shutdownOnce      sync.Once
+	shuttingDown      atomic.Bool
+	wg                sync.WaitGroup
 	albumMu           sync.Mutex
 	albumBuffers      map[string]*albumBuffer
 	recentMu          sync.Mutex
@@ -623,9 +628,9 @@ func (b *Bot) Start() error {
 	u := tgbotapi.NewUpdate(0)
 	u.Timeout = 60
 
-	updates := b.api.GetUpdatesChan(u)
+	b.updates = b.api.GetUpdatesChan(u)
 
-	for update := range updates {
+	for update := range b.updates {
 		// Копируем update в новую переменную, чтобы горутины не делили одну ссылку
 		upd := update
 		// Обрабатываем каждое событие асинхронно, чтобы не блокировать очередь
@@ -637,6 +642,20 @@ func (b *Bot) Start() error {
 	return nil
 }
 
+// Stop включает режим graceful shutdown:
+// - помечает бота как "перезагружается" (новые запросы отклоняются)
+// - останавливает long-polling
+// - ждёт завершения всех уже запущенных обработчиков
+func (b *Bot) Stop() {
+	b.shutdownOnce.Do(func() {
+		b.shuttingDown.Store(true)
+		if b.api != nil {
+			b.api.StopReceivingUpdates()
+		}
+	})
+	b.wg.Wait()
+}
+
 // safeHandleUpdate оборачивает обработку апдейта с восстановлением после паники
 func (b *Bot) safeHandleUpdate(update tgbotapi.Update) {
 	defer func() {
@@ -646,10 +665,22 @@ func (b *Bot) safeHandleUpdate(update tgbotapi.Update) {
 	}()
 
 	if update.Message != nil {
+		if b.shuttingDown.Load() {
+			b.sendText(update.Message.Chat.ID, "В данный момент бот перезагружается. Попробуйте ещё через пару минут.")
+			return
+		}
 		b.handleMessage(update.Message)
 		return
 	}
 	if update.CallbackQuery != nil {
+		if b.shuttingDown.Load() {
+			// убираем крутилку у пользователя
+			_, _ = b.api.Request(tgbotapi.NewCallback(update.CallbackQuery.ID, ""))
+			if update.CallbackQuery.Message != nil {
+				b.sendText(update.CallbackQuery.Message.Chat.ID, "В данный момент бот перезагружается. Попробуйте ещё через пару минут.")
+			}
+			return
+		}
 		b.handleCallback(update.CallbackQuery)
 		return
 	}
@@ -657,11 +688,16 @@ func (b *Bot) safeHandleUpdate(update tgbotapi.Update) {
 
 // goLimited запускает функцию в горутине с ограничением параллелизма
 func (b *Bot) goLimited(fn func()) {
+	b.wg.Add(1)
+	deferFunc := func() {
+		b.wg.Done()
+	}
 	select {
 	case b.concurrencySem <- struct{}{}:
 		go func() {
 			defer func() {
 				<-b.concurrencySem
+				deferFunc()
 				if r := recover(); r != nil {
 					log.Printf("panic in goroutine: %v", r)
 				}
@@ -670,6 +706,7 @@ func (b *Bot) goLimited(fn func()) {
 		}()
 	default:
 		// Если лимит исчерпан, обработаем синхронно, но с защитой
+		defer deferFunc()
 		defer func() {
 			if r := recover(); r != nil {
 				log.Printf("panic in goroutine (sync fallback): %v", r)
@@ -3668,13 +3705,13 @@ func (b *Bot) sendModelMenu(chatID int64, userID int64, category ModelCategory, 
 		if cost := modelRequestCost(current); cost > 0 {
 			text += "\n" + fmt.Sprintf(loc.ModelsCost, cost, requestWord(cost, loc))
 		}
+		if current == "google/nano-banana" {
+			text += "\n" + fmt.Sprintf(loc.ModelsMaxPhotos, 2) + "\n"
+		} else if current == "google/nano-banana-pro" {
+			text += "\n" + fmt.Sprintf(loc.ModelsMaxPhotos, 4) + "\n"
+		}
 		if instr := b.modelInstructionLoc(current, loc); instr != "" {
 			text += "\n" + instr
-		}
-		if current == "google/nano-banana" {
-			text += "\n" + fmt.Sprintf(loc.ModelsMaxPhotos, 2)
-		} else if current == "google/nano-banana-pro" {
-			text += "\n" + fmt.Sprintf(loc.ModelsMaxPhotos, 4)
 		}
 	}
 	if category == ModelCategoryMusic {
@@ -4203,8 +4240,8 @@ func (b *Bot) sendGenerationStatus(chatID int64, req *models.GenerationRequest) 
 	)
 
 	// Если есть картинка в data URL — отправляем как фото, чтобы не ловить "Request Entity Too Large"
-	if req.Status == "completed" && req.OutputImage != nil && *req.OutputImage != "" {
-		output := *req.OutputImage
+	if req.Status == "completed" && req.Output != nil && *req.Output != "" {
+		output := *req.Output
 		caption := truncate(baseText, 900) // подпись к фото
 
 		// Пытаемся отправить картинку

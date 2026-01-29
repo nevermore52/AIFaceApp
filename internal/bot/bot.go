@@ -1,6 +1,7 @@
 package bot
 
 import (
+	"context"
 	"database/sql"
 	"encoding/json"
 	"io"
@@ -8,6 +9,8 @@ import (
 	"net/http"
 	"strconv"
 	"strings"
+	"sync"
+	"time"
 
 	"telegram-ai-face-bot/internal/config"
 	"telegram-ai-face-bot/internal/defapi"
@@ -24,6 +27,8 @@ type Bot struct {
 	userService       *services.UserService
 	generationService *services.GenerationService
 	paymentService    *services.PaymentService
+	server            *http.Server
+	shutdownOnce      sync.Once
 }
 
 func NewBot(cfg *config.Config, db *sql.DB) (*Bot, error) {
@@ -64,6 +69,18 @@ func (b *Bot) Start() error {
 }
 
 func (b *Bot) Stop() {
+	b.shutdownOnce.Do(func() {
+		if b.tgBot != nil {
+			b.tgBot.Stop()
+		}
+		if b.server != nil {
+			ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+			defer cancel()
+			if err := b.server.Shutdown(ctx); err != nil {
+				log.Printf("webhook server shutdown error: %v", err)
+			}
+		}
+	})
 }
 func (b *Bot) startWebhookServer() {
 	mux := http.NewServeMux()
@@ -170,8 +187,10 @@ func (b *Bot) startWebhookServer() {
 	})
 
 	addr := b.tgBot.Config().Server.Host + ":" + b.tgBot.Config().Server.Port
+	server := &http.Server{Addr: addr, Handler: mux}
+	b.server = server
 	log.Printf("Starting webhook server on %s", addr)
-	if err := http.ListenAndServe(addr, mux); err != nil {
+	if err := server.ListenAndServe(); err != nil && err != http.ErrServerClosed {
 		log.Printf("webhook server error: %v", err)
 	}
 }

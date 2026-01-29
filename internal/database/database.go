@@ -45,7 +45,7 @@ func RunMigrations(db *sql.DB) error {
 		model VARCHAR(255),
 		status VARCHAR(50) DEFAULT 'pending',
 		input_image TEXT,
-		output_image TEXT,
+		output TEXT,
 		external_task_id TEXT,
 		prompt TEXT,
 		error_msg TEXT,
@@ -55,6 +55,20 @@ func RunMigrations(db *sql.DB) error {
 		created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
 		completed_at TIMESTAMP WITH TIME ZONE NULL
 	);`
+
+	renameGenerationRequestsOutputSQL := `
+	DO $$
+	BEGIN
+		IF EXISTS (
+			SELECT 1 FROM information_schema.columns
+			WHERE table_name = 'generation_requests' AND column_name = 'output_image'
+		) AND NOT EXISTS (
+			SELECT 1 FROM information_schema.columns
+			WHERE table_name = 'generation_requests' AND column_name = 'output'
+		) THEN
+			ALTER TABLE generation_requests RENAME COLUMN output_image TO output;
+		END IF;
+	END $$;`
 
 	categorySettingsSQL := `
 	CREATE TABLE IF NOT EXISTS category_settings (
@@ -147,6 +161,7 @@ func RunMigrations(db *sql.DB) error {
 	tables := []string{
 		userTableSQL,
 		generationRequestTableSQL,
+		renameGenerationRequestsOutputSQL,
 		categorySettingsSQL,
 		appSettingsSQL,
 		userQuotasSQL,

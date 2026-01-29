@@ -65,7 +65,7 @@ type GenerationRequest struct {
 	Model             string     `json:"model" db:"model"`
 	Status            string     `json:"status" db:"status"`
 	InputImage        string     `json:"input_image" db:"input_image"`
-	OutputImage       *string    `json:"output_image" db:"output_image"`
+	Output            *string    `json:"output" db:"output"`
 	Prompt            *string    `json:"prompt" db:"prompt"`
 	ErrorMsg          *string    `json:"error_msg" db:"error_msg"`
 	TokensUsed        int        `json:"tokens_used" db:"tokens_used"`
