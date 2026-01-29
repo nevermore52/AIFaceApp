@@ -887,7 +887,7 @@ func (b *Bot) handleCommand(msg *tgbotapi.Message) {
 	case "rules":
 		b.sendRulesMessage(msg.Chat.ID, msg.From.ID)
 	case "privacy":
-		b.sendPrivacyMessage(msg.Chat.ID)
+		b.sendPrivacyMessage(msg.Chat.ID, msg.From.ID)
 	case "settings":
 		b.sendSettingsMenu(msg.Chat.ID, msg.From.ID)
 	case "admin":
@@ -3533,8 +3533,8 @@ func (b *Bot) sendBuySubscription(chatID int64, userID int64) {
 		loc.SubsTitle,
 		loc.BuyConsentNote,
 		miniPrice, loc.SubsPerWeek, loc.SubsTextDaily, loc.SubsImages, loc.SubsSongs, loc.SubsTextModelsMini, fmt.Sprintf(loc.SubsDiscount, 10),
-		startPrice, loc.SubsPerWeek, loc.SubsTextDaily, loc.SubsImages, loc.SubsSongs, fmt.Sprintf(loc.SubsContext, 2), loc.SubsTextModelsHi, fmt.Sprintf(loc.SubsDiscount, 20),
-		proPrice, loc.SubsPerWeek, loc.SubsTextDaily, loc.SubsImages, loc.SubsSongs, loc.SubsTextModelsHi, fmt.Sprintf(loc.SubsChatStyles, 6), fmt.Sprintf(loc.SubsContext, 3), loc.SubsNoAds, fmt.Sprintf(loc.SubsDiscount, 25),
+		startPrice, loc.SubsPerWeek, loc.SubsTextDaily, loc.SubsImages, loc.SubsSongs, fmt.Sprintf(loc.SubsContext, 2), loc.SubsTextModelsHi, fmt.Sprintf(loc.SubsDiscount, 15),
+		proPrice, loc.SubsPerWeek, loc.SubsTextDaily, loc.SubsImages, loc.SubsSongs, loc.SubsTextModelsHi, fmt.Sprintf(loc.SubsChatStyles, 6), fmt.Sprintf(loc.SubsContext, 3), loc.SubsNoAds, fmt.Sprintf(loc.SubsDiscount, 20),
 	)
 
 	keyboard := tgbotapi.NewInlineKeyboardMarkup(
@@ -3892,8 +3892,9 @@ func (b *Bot) editMessageTextOrCaption(chatID int64, messageID int, text string,
 }
 
 // sendPrivacyMessage отправляет ссылку на политику конфиденциальности
-func (b *Bot) sendPrivacyMessage(chatID int64) {
-	text := "🔒 Политика конфиденциальности: https://telegra.ph/Politika-Konfidencialnosti-01-14-87\n\n📜 Пользовательское соглашение: https://telegra.ph/Polzovatelskoe-soglashenie-Usloviya-EHkspluatacii-i-Obsluzhivaniya-01-14"
+func (b *Bot) sendPrivacyMessage(chatID int64, userID int64) {
+	loc := b.getLocalization(userID)
+	text := loc.PrivacyPolicy + " https://telegra.ph/Politika-Konfidencialnosti-01-14-87\n\n" + loc.PrivacyTerms + " https://telegra.ph/Polzovatelskoe-soglashenie-Usloviya-EHkspluatacii-i-Obsluzhivaniya-01-14"
 	msg := tgbotapi.NewMessage(chatID, text)
 	if _, err := b.api.Send(msg); err != nil {
 		log.Printf("Failed to send privacy message: %v", err)
