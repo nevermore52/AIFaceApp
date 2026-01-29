@@ -70,9 +70,35 @@ func (b *Bot) Start() error {
 
 func (b *Bot) Stop() {
 	b.shutdownOnce.Do(func() {
+		// 1) Stop taking new Telegram updates immediately
 		if b.tgBot != nil {
 			b.tgBot.Stop()
 		}
+
+		// 2) Drain in-flight external tasks (DefAPI callbacks / Suno callbacks)
+		// Keep webhook server alive while we wait.
+		drainCtx, cancelDrain := context.WithTimeout(context.Background(), 2*time.Minute)
+		defer cancelDrain()
+
+		drainDone := make(chan struct{})
+		go func() {
+			defer close(drainDone)
+			if b.generationService != nil {
+				b.generationService.WaitInFlight()
+			}
+			if b.tgBot != nil {
+				b.tgBot.WaitSunoTasks(drainCtx)
+			}
+		}()
+
+		select {
+		case <-drainDone:
+			// drained
+		case <-drainCtx.Done():
+			log.Printf("shutdown drain timeout reached")
+		}
+
+		// 3) Now stop webhook server
 		if b.server != nil {
 			ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 			defer cancel()

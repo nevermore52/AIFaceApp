@@ -10,6 +10,7 @@ import (
 	"net/http"
 	"os"
 	"strings"
+	"sync"
 	"time"
 
 	"telegram-ai-face-bot/internal/defapi"
@@ -31,6 +32,10 @@ type GenerationService struct {
 	defAPI *defapi.Client
 	http   *http.Client
 	notify func(chatID int64, req *models.GenerationRequest)
+
+	inFlightMu      sync.Mutex
+	inFlightByReqID map[int64]struct{}
+	inFlightWg      sync.WaitGroup
 }
 
 func (s *GenerationService) ensureGenerationRequestsColumns() error {
@@ -82,10 +87,43 @@ type GenerationOptions struct {
 
 func NewGenerationService(db *sql.DB, client *openrouter.Client) *GenerationService {
 	return &GenerationService{
-		db:     db,
-		client: client,
-		http:   &http.Client{Timeout: 30 * time.Second},
+		db:              db,
+		client:          client,
+		http:            &http.Client{Timeout: 30 * time.Second},
+		inFlightByReqID: make(map[int64]struct{}),
 	}
+}
+
+func (s *GenerationService) markInFlight(reqID int64) {
+	if reqID == 0 {
+		return
+	}
+	s.inFlightMu.Lock()
+	_, exists := s.inFlightByReqID[reqID]
+	if !exists {
+		s.inFlightByReqID[reqID] = struct{}{}
+		s.inFlightWg.Add(1)
+	}
+	s.inFlightMu.Unlock()
+}
+
+func (s *GenerationService) markDone(reqID int64) {
+	if reqID == 0 {
+		return
+	}
+	s.inFlightMu.Lock()
+	_, exists := s.inFlightByReqID[reqID]
+	if exists {
+		delete(s.inFlightByReqID, reqID)
+		s.inFlightWg.Done()
+	}
+	s.inFlightMu.Unlock()
+}
+
+// WaitInFlight blocks until all StartGeneration background tasks are finished.
+// This is intended for graceful shutdown.
+func (s *GenerationService) WaitInFlight() {
+	s.inFlightWg.Wait()
 }
 
 func (s *GenerationService) SetDefAPIClient(client *defapi.Client) {
@@ -114,6 +152,8 @@ func (s *GenerationService) StartGeneration(userID int64, opts GenerationOptions
 		return nil, fmt.Errorf("failed to create generation request: %w", err)
 	}
 
+	s.markInFlight(req.ID)
+
 	debugLog("StartGeneration: DB record created with ID=%d, starting background processing...", req.ID)
 	go s.processGeneration(req, opts)
 
@@ -121,6 +161,13 @@ func (s *GenerationService) StartGeneration(userID int64, opts GenerationOptions
 }
 
 func (s *GenerationService) processGeneration(req *models.GenerationRequest, opts GenerationOptions) {
+	defer func() {
+		// For DefAPI async tasks we finish in HandleDefAPICallback.
+		if !(useDefAPIModel(opts.Model) && opts.UseDefAPI) {
+			s.markDone(req.ID)
+		}
+	}()
+
 	startTime := time.Now()
 	debugLog("processGeneration START: requestID=%d, prompt=%s, model=%s", req.ID, opts.Prompt, opts.Model)
 
@@ -167,6 +214,7 @@ func (s *GenerationService) processGeneration(req *models.GenerationRequest, opt
 			if s.notify != nil {
 				s.notify(opts.ChatID, req)
 			}
+			s.markDone(req.ID)
 			return
 		}
 		debugLog("processGeneration DefAPI task created: requestID=%d taskID=%s", req.ID, taskID)
@@ -232,6 +280,7 @@ func (s *GenerationService) HandleDefAPICallback(payload defapi.CallbackPayload)
 		if s.notify != nil {
 			s.notify(req.UserID, req)
 		}
+		s.markDone(req.ID)
 		return nil
 	}
 
@@ -256,10 +305,12 @@ func (s *GenerationService) HandleDefAPICallback(payload defapi.CallbackPayload)
 		if s.notify != nil {
 			s.notify(req.UserID, req)
 		}
+		s.markDone(req.ID)
 		return nil
 	}
 
 	if req.Status == "completed" {
+		s.markDone(req.ID)
 		return nil
 	}
 	if err := s.completeRequest(req.ID, url); err != nil {
@@ -274,6 +325,7 @@ func (s *GenerationService) HandleDefAPICallback(payload defapi.CallbackPayload)
 	if s.notify != nil {
 		s.notify(req.UserID, req)
 	}
+	s.markDone(req.ID)
 	return nil
 }
 func (s *GenerationService) GenerateAudio(text, model, taskType, stylePrompt string) (string, error) {

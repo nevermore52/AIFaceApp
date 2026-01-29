@@ -1,6 +1,7 @@
 package telegram
 
 import (
+	"context"
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
@@ -654,6 +655,27 @@ func (b *Bot) Stop() {
 		}
 	})
 	b.wg.Wait()
+}
+
+func (b *Bot) PendingSunoTasks() int {
+	b.sunoMu.Lock()
+	defer b.sunoMu.Unlock()
+	return len(b.sunoTasks)
+}
+
+func (b *Bot) WaitSunoTasks(ctx context.Context) {
+	ticker := time.NewTicker(250 * time.Millisecond)
+	defer ticker.Stop()
+	for {
+		if b.PendingSunoTasks() == 0 {
+			return
+		}
+		select {
+		case <-ctx.Done():
+			return
+		case <-ticker.C:
+		}
+	}
 }
 
 // safeHandleUpdate оборачивает обработку апдейта с восстановлением после паники
