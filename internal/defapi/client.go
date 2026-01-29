@@ -11,6 +11,25 @@ import (
 	"time"
 )
 
+func isRetryableStatus(code int) bool {
+	switch code {
+	case http.StatusBadGateway, http.StatusServiceUnavailable, http.StatusGatewayTimeout:
+		return true
+	default:
+		return false
+	}
+}
+
+func retryDelay(attempt int) time.Duration {
+	if attempt <= 0 {
+		return 0
+	}
+	if attempt == 1 {
+		return 700 * time.Millisecond
+	}
+	return 1500 * time.Millisecond
+}
+
 type Client struct {
 	apiKey  string
 	baseURL string
@@ -61,41 +80,57 @@ func (c *Client) CreateChatCompletion(model string, messages []map[string]string
 	url := base + "/api/v1/chat/completions"
 	log.Printf("[DEFAPI] chat request url=%s payload=%s", url, string(body))
 
-	req, err := http.NewRequest(http.MethodPost, url, bytes.NewReader(body))
-	if err != nil {
-		return "", fmt.Errorf("create defapi chat request: %w", err)
-	}
-	req.Header.Set("Authorization", "Bearer "+c.apiKey)
-	req.Header.Set("Content-Type", "application/json")
+	for attempt := 0; attempt < 3; attempt++ {
+		if d := retryDelay(attempt); d > 0 {
+			time.Sleep(d)
+		}
+		req, err := http.NewRequest(http.MethodPost, url, bytes.NewReader(body))
+		if err != nil {
+			return "", fmt.Errorf("create defapi chat request: %w", err)
+		}
+		req.Header.Set("Authorization", "Bearer "+c.apiKey)
+		req.Header.Set("Content-Type", "application/json")
 
-	resp, err := c.client.Do(req)
-	if err != nil {
-		return "", fmt.Errorf("defapi chat request failed: %w", err)
-	}
-	defer resp.Body.Close()
+		resp, err := c.client.Do(req)
+		if err != nil {
+			log.Printf("[DEFAPI] chat transport error attempt=%d err=%v", attempt+1, err)
+			if attempt < 2 {
+				continue
+			}
+			return "", fmt.Errorf("defapi chat request failed: %w", err)
+		}
 
-	raw, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return "", fmt.Errorf("read defapi chat response: %w", err)
-	}
-	log.Printf("[DEFAPI] chat response status=%d body=%s", resp.StatusCode, string(raw))
+		raw, readErr := io.ReadAll(resp.Body)
+		_ = resp.Body.Close()
+		if readErr != nil {
+			if attempt < 2 {
+				continue
+			}
+			return "", fmt.Errorf("read defapi chat response: %w", readErr)
+		}
+		log.Printf("[DEFAPI] chat response status=%d body=%s", resp.StatusCode, string(raw))
+		if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+			if isRetryableStatus(resp.StatusCode) && attempt < 2 {
+				continue
+			}
+			return "", fmt.Errorf("defapi chat status %d: %s", resp.StatusCode, string(raw))
+		}
 
-	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		return "", fmt.Errorf("defapi chat status %d: %s", resp.StatusCode, string(raw))
+		var parsed chatCompletionResponse
+		if err := json.Unmarshal(raw, &parsed); err != nil {
+			return "", fmt.Errorf("parse defapi chat response: %w", err)
+		}
+		if len(parsed.Choices) == 0 {
+			return "", fmt.Errorf("defapi chat response has no choices")
+		}
+		content := strings.TrimSpace(parsed.Choices[0].Message.Content)
+		if content == "" {
+			return "", fmt.Errorf("defapi chat response empty content")
+		}
+		return content, nil
 	}
 
-	var parsed chatCompletionResponse
-	if err := json.Unmarshal(raw, &parsed); err != nil {
-		return "", fmt.Errorf("parse defapi chat response: %w", err)
-	}
-	if len(parsed.Choices) == 0 {
-		return "", fmt.Errorf("defapi chat response has no choices")
-	}
-	content := strings.TrimSpace(parsed.Choices[0].Message.Content)
-	if content == "" {
-		return "", fmt.Errorf("defapi chat response empty content")
-	}
-	return content, nil
+	return "", fmt.Errorf("defapi chat request failed after retries")
 }
 
 type CreateImageResponse struct {
@@ -167,41 +202,62 @@ func (c *Client) CreateImageTask(model, prompt string, images []string, callback
 
 	url := normalizeEndpoint(c.baseURL)
 	log.Printf("[DEFAPI] request url=%s payload=%s", url, string(body))
-	req, err := http.NewRequest(http.MethodPost, url, bytes.NewReader(body))
-	if err != nil {
-		return "", fmt.Errorf("create defapi request: %w", err)
-	}
-	req.Header.Set("Authorization", "Bearer "+c.apiKey)
-	req.Header.Set("Content-Type", "application/json")
-	resp, err := c.client.Do(req)
-	if err != nil {
-		return "", fmt.Errorf("defapi request failed: %w", err)
-	}
-	defer resp.Body.Close()
 
-	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		raw, _ := io.ReadAll(io.LimitReader(resp.Body, 2048))
+	for attempt := 0; attempt < 3; attempt++ {
+		if d := retryDelay(attempt); d > 0 {
+			time.Sleep(d)
+		}
+		req, err := http.NewRequest(http.MethodPost, url, bytes.NewReader(body))
+		if err != nil {
+			return "", fmt.Errorf("create defapi request: %w", err)
+		}
+		req.Header.Set("Authorization", "Bearer "+c.apiKey)
+		req.Header.Set("Content-Type", "application/json")
+
+		resp, err := c.client.Do(req)
+		if err != nil {
+			log.Printf("[DEFAPI] transport error attempt=%d err=%v", attempt+1, err)
+			if attempt < 2 {
+				continue
+			}
+			return "", fmt.Errorf("defapi request failed: %w", err)
+		}
+
+		raw, readErr := io.ReadAll(resp.Body)
+		_ = resp.Body.Close()
+		if readErr != nil {
+			if attempt < 2 {
+				continue
+			}
+			return "", fmt.Errorf("read defapi response: %w", readErr)
+		}
 		log.Printf("[DEFAPI] response status=%d body=%s", resp.StatusCode, string(raw))
-		return "", fmt.Errorf("defapi status %d: %s", resp.StatusCode, string(raw))
+
+		if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+			if isRetryableStatus(resp.StatusCode) && attempt < 2 {
+				continue
+			}
+			limited := raw
+			if len(limited) > 2048 {
+				limited = limited[:2048]
+			}
+			return "", fmt.Errorf("defapi status %d: %s", resp.StatusCode, string(limited))
+		}
+
+		var parsed CreateImageResponse
+		if err := json.Unmarshal(raw, &parsed); err != nil {
+			return "", fmt.Errorf("parse defapi response: %w", err)
+		}
+		if parsed.Code != 0 {
+			return "", fmt.Errorf("defapi error: %s", strings.TrimSpace(parsed.Message))
+		}
+		if parsed.Data.TaskID == "" {
+			return "", fmt.Errorf("defapi response missing task_id")
+		}
+		return parsed.Data.TaskID, nil
 	}
 
-	raw, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return "", fmt.Errorf("read defapi response: %w", err)
-	}
-	log.Printf("[DEFAPI] response status=%d body=%s", resp.StatusCode, string(raw))
-
-	var parsed CreateImageResponse
-	if err := json.Unmarshal(raw, &parsed); err != nil {
-		return "", fmt.Errorf("parse defapi response: %w", err)
-	}
-	if parsed.Code != 0 {
-		return "", fmt.Errorf("defapi error: %s", strings.TrimSpace(parsed.Message))
-	}
-	if parsed.Data.TaskID == "" {
-		return "", fmt.Errorf("defapi response missing task_id")
-	}
-	return parsed.Data.TaskID, nil
+	return "", fmt.Errorf("defapi request failed after retries")
 }
 
 func normalizeEndpoint(baseURL string) string {

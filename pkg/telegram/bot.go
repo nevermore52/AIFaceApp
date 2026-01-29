@@ -1677,7 +1677,7 @@ func (b *Bot) processAudioMessage(msg *tgbotapi.Message, modelOpt ModelOption) {
 			resultURL, err = b.generationService.GenerateAudio(text, apiModel, modelOpt.TaskType, "")
 		}
 		if err != nil {
-			_, _ = b.generationService.LogRequest(userID, services.LogRequestOptions{
+			if _, logErr := b.generationService.LogRequest(userID, services.LogRequestOptions{
 				Username:          username,
 				ModelType:         string(modelOpt.Category),
 				Model:             apiModel,
@@ -1687,14 +1687,16 @@ func (b *Bot) processAudioMessage(msg *tgbotapi.Message, modelOpt ModelOption) {
 				TokensUsed:        requestCost,
 				TokensPrimaryUsed: primaryUsed,
 				TokensExtraUsed:   extraUsed,
-			})
+			}); logErr != nil {
+				log.Printf("LogRequest(music failed) error: %v", logErr)
+			}
 			_ = b.userService.RefundQuota(userID, models.QuotaCategoryMusic, primaryUsed, extraUsed)
 			b.sendErrorMessage(chatID, fmt.Sprintf("Не удалось озвучить: %s", friendlyGenerationError(err)))
 			return
 		}
 
 		if resultURL != "" {
-			_, _ = b.generationService.LogRequest(userID, services.LogRequestOptions{
+			if _, logErr := b.generationService.LogRequest(userID, services.LogRequestOptions{
 				Username:          username,
 				ModelType:         string(modelOpt.Category),
 				Model:             apiModel,
@@ -1704,14 +1706,16 @@ func (b *Bot) processAudioMessage(msg *tgbotapi.Message, modelOpt ModelOption) {
 				TokensUsed:        requestCost,
 				TokensPrimaryUsed: primaryUsed,
 				TokensExtraUsed:   extraUsed,
-			})
+			}); logErr != nil {
+				log.Printf("LogRequest(music completed) error: %v", logErr)
+			}
 			caption := fmt.Sprintf("🔊 Аудио готово\nМодель: %s\nСписано: %d музыкальных запрос(ов)", modelOpt.Label, requestCost)
 			b.sendAudioResult(chatID, caption, resultURL)
 			return
 		}
 
 		if taskID != "" {
-			req, _ := b.generationService.LogRequest(userID, services.LogRequestOptions{
+			req, logErr := b.generationService.LogRequest(userID, services.LogRequestOptions{
 				Username:          username,
 				ModelType:         string(modelOpt.Category),
 				Model:             apiModel,
@@ -1722,6 +1726,9 @@ func (b *Bot) processAudioMessage(msg *tgbotapi.Message, modelOpt ModelOption) {
 				TokensPrimaryUsed: primaryUsed,
 				TokensExtraUsed:   extraUsed,
 			})
+			if logErr != nil {
+				log.Printf("LogRequest(music processing) error: %v", logErr)
+			}
 			requestID := int64(0)
 			if req != nil {
 				requestID = req.ID
@@ -1742,7 +1749,7 @@ func (b *Bot) processAudioMessage(msg *tgbotapi.Message, modelOpt ModelOption) {
 
 		// На всякий случай, если нет ни URL, ни taskId
 		b.sendErrorMessage(chatID, "Сервис не вернул ссылку и taskId. Попробуйте позже.")
-		_, _ = b.generationService.LogRequest(userID, services.LogRequestOptions{
+		if _, logErr := b.generationService.LogRequest(userID, services.LogRequestOptions{
 			Username:          username,
 			ModelType:         string(modelOpt.Category),
 			Model:             apiModel,
@@ -1752,7 +1759,9 @@ func (b *Bot) processAudioMessage(msg *tgbotapi.Message, modelOpt ModelOption) {
 			TokensUsed:        requestCost,
 			TokensPrimaryUsed: primaryUsed,
 			TokensExtraUsed:   extraUsed,
-		})
+		}); logErr != nil {
+			log.Printf("LogRequest(music empty result) error: %v", logErr)
+		}
 		_ = b.userService.RefundQuota(userID, models.QuotaCategoryMusic, primaryUsed, extraUsed)
 	})
 }
@@ -1881,7 +1890,9 @@ func (b *Bot) finalizeSunoTask(taskID string, reason string) {
 		b.sendAudioResult(task.ChatID, caption, url)
 	}
 	if len(urls) > 0 {
-		_ = b.generationService.CompleteRequestByExternalTaskID(taskID, urls[0])
+		if err := b.generationService.CompleteRequestByExternalTaskID(taskID, urls[0]); err != nil {
+			log.Printf("CompleteRequestByExternalTaskID error: %v", err)
+		}
 	}
 }
 
@@ -1905,7 +1916,9 @@ func (b *Bot) HandleSunoError(taskID, errMsg string) {
 		return
 	}
 
-	_ = b.generationService.FailRequestByExternalTaskID(taskID, strings.TrimSpace(errMsg))
+	if err := b.generationService.FailRequestByExternalTaskID(taskID, strings.TrimSpace(errMsg)); err != nil {
+		log.Printf("FailRequestByExternalTaskID error: %v", err)
+	}
 	_ = b.userService.RefundQuota(task.UserID, models.QuotaCategoryMusic, task.PrimaryUsed, task.ExtraUsed)
 	message := fmt.Sprintf("Не удалось сгенерировать песню: %s", strings.TrimSpace(errMsg))
 	if strings.TrimSpace(errMsg) == "" {
@@ -3104,7 +3117,7 @@ func (b *Bot) handleTextMessage(msg *tgbotapi.Message) {
 		}
 
 		b.goLimited(func() {
-			req, _ := b.generationService.LogRequest(msg.From.ID, services.LogRequestOptions{
+			req, logErr := b.generationService.LogRequest(msg.From.ID, services.LogRequestOptions{
 				Username:          username,
 				ModelType:         string(modelOpt.Category),
 				Model:             apiModel,
@@ -3114,6 +3127,9 @@ func (b *Bot) handleTextMessage(msg *tgbotapi.Message) {
 				TokensPrimaryUsed: primaryUsed,
 				TokensExtraUsed:   extraUsed,
 			})
+			if logErr != nil {
+				log.Printf("LogRequest(chat processing) error: %v", logErr)
+			}
 			requestID := int64(0)
 			if req != nil {
 				requestID = req.ID
@@ -3133,14 +3149,18 @@ func (b *Bot) handleTextMessage(msg *tgbotapi.Message) {
 			resp, err := b.generationService.GenerateChat(apiModel, messages)
 			if err != nil {
 				if requestID != 0 {
-					_ = b.generationService.FailRequest(requestID, err.Error())
+					if updErr := b.generationService.FailRequest(requestID, err.Error()); updErr != nil {
+						log.Printf("FailRequest(chat) error: %v", updErr)
+					}
 				}
 				_ = b.userService.RefundQuota(msg.From.ID, models.QuotaCategoryText, primaryUsed, extraUsed)
 				b.sendErrorMessage(msg.Chat.ID, fmt.Sprintf("Не удалось ответить: %s", friendlyGenerationError(err)))
 				return
 			}
 			if requestID != 0 {
-				_ = b.generationService.CompleteRequest(requestID, resp)
+				if updErr := b.generationService.CompleteRequest(requestID, resp); updErr != nil {
+					log.Printf("CompleteRequest(chat) error: %v", updErr)
+				}
 			}
 			b.saveMessageToContext(msg.From.ID, loc.BotPrefix+" "+resp)
 			b.sendLongText(msg.Chat.ID, resp)
