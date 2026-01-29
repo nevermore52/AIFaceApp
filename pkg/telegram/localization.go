@@ -336,21 +336,13 @@ type Localization struct {
 
 var locRU = Localization{
 	// Commands
-	CmdStart:    "Начать",
-	CmdMenu:     "Главное меню",
-	CmdAccount:  "Аккаунт и лимиты",
-	CmdBuy:      "Купить (подписку, генерации)",
-	CmdInvite:   "Пригласить друзей",
-	CmdRules:    "Правила использования",
-	CmdPrivacy:  "Политика и Польз. соглашение",
-	CmdSettings: "Настройки",
-	CmdAdmin:    "Админ-панель",
-
-	// Main menu
+	CmdStart:            "Начать",
+	CmdMenu:             "Главное меню",
+	CmdAccount:          "Аккаунт и лимиты",
+	CmdBuy:              "Купить (подписку, генерации)",
+	CmdInvite:           "Пригласить друзей",
+	CmdRules:            "Правила использования",
 	MenuTitle:           "🍌  Ваш айди: %d\n⭐  Тип подписки: %s\n🧠  Текущая ИИ модель: %s %s %s",
-	MenuYourID:          "🍌 Ваш айди",
-	MenuSubscription:    "⭐ Тип подписки",
-	MenuCurrentModel:    "🧠 Текущая модель",
 	MenuLimit:           "Лимит текущей модели: нет данных",
 	MenuLimitFormat:     "Лимит: %d (%d доп)",
 	MenuBuyBtn:          "💰 Покупка",
@@ -362,6 +354,8 @@ var locRU = Localization{
 	MenuAccountBtn:      "🪪 Мой аккаунт",
 	MenuSettingsBtn:     "⚙️ Настройки",
 	MenuHelpBtn:         "🆘 Помощь",
+	MenuBtn:             "🏠 Меню",
+	BackBtn:             "◀️ Назад",
 
 	// Account
 	AccountUserID:       "ID Пользователя: %d",
@@ -460,6 +454,8 @@ var locRU = Localization{
 	ChatStyleProOnly:      "Стили общения доступны только с подпиской Pro и выше.",
 
 	ModelsCurrent:     "Текущая",
+	ModelsCategory:    "%s",
+	ModelsSelect:      "Выберите модель:",
 	ModelsCost:        "Расход: %d %s",
 	ModelsMaxPhotos:   "Максимум фото: %d",
 	ModelsDescription: "",
@@ -471,6 +467,12 @@ var locRU = Localization{
 	InstrTextModels:   "Отправьте любое сообщение в чат.",
 	InstrSunoMusic:    "Отправьте в чат описание музыки, которую хотите создать.",
 	InstrHugVideo:     "Отправьте 1 фото с двумя или более людьми и ожидайте.",
+
+	// Aspect ratio
+	AspectTitle:     "🔲 Формат",
+	AspectLandscape: "Альбомный 16:9",
+	AspectPortrait:  "Портретный 9:16",
+	AspectSquare:    "Квадрат 1:1",
 
 	// Photo models descriptions
 	ModelNanoBanana:    "Cреднее качество, плохо работает с двумя фотографиями. Среднее время ожидания 1 минута.",
@@ -518,6 +520,11 @@ var locEN = Localization{
 	ErrDefAPIEmptyBilled: "❌ Generation error: An error occurred; you may have violated the bot rules.",
 	// ... (other fields remain the same)
 	ErrModelRequiresMini: "This model requires a Start subscription or higher",
+	MenuTitle:            "🍌 Your ID: %d\n⭐ Subscription: %s\n🧠 Current AI model: %s %s %s",
+	MenuLimit:            "Current model limit: no data",
+	MenuLimitFormat:      "Limit: %d (%d extra)",
+	ModelsCategory:       "%s",
+	ModelsSelect:         "Select a model:",
 
 	// Cooldown
 	CooldownWait:   "⏳ Please wait %d more seconds before next request.",
@@ -574,7 +581,6 @@ var locEN = Localization{
 	BuyPackageLabelMusic:  "music requests",
 	BuyPackageLabelVideo:  "video requests",
 	BuyPackageBackBtn:     "◀️ Back to categories",
-
 	// Aspect ratio
 	AspectTitle:     "Format",
 	AspectLandscape: "Landscape 16:9",

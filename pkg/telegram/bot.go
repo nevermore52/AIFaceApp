@@ -2891,6 +2891,10 @@ func (b *Bot) handleCallback(callback *tgbotapi.CallbackQuery) {
 			}
 		} else if strings.HasPrefix(data, "aspect_set:") {
 			ratio := strings.TrimPrefix(data, "aspect_set:")
+			// If user tapped the current ratio, do nothing to avoid "message is not modified" errors.
+			if b.getUserAspectRatio(userID) == ratio {
+				return
+			}
 			b.setUserAspectRatio(userID, ratio)
 			b.sendAspectRatioMenu(chatID, userID, callback.Message.MessageID)
 		} else if strings.HasPrefix(data, "models_menu:") {
@@ -3723,7 +3727,7 @@ func (b *Bot) sendModelMenu(chatID int64, userID int64, category ModelCategory, 
 	text := fmt.Sprintf(loc.ModelsCategory, b.categoryLabelLoc(category, loc)) + "\n" + loc.ModelsSelect
 	currentDesc := b.modelDescriptionLoc(current, loc)
 	if currentDesc != "" {
-		text += "\n\n" + loc.ModelsCurrent + ": " + b.modelLabelLoc(current, loc) + " — " + currentDesc
+		text += "\n" + loc.ModelsCurrent + ": " + b.modelLabelLoc(current, loc) + " — " + currentDesc
 		if cost := modelRequestCost(current); cost > 0 {
 			text += "\n" + fmt.Sprintf(loc.ModelsCost, cost, requestWord(cost, loc))
 		}
@@ -3820,7 +3824,9 @@ func (b *Bot) sendAspectRatioMenu(chatID int64, userID int64, messageID int) {
 				Media:    media,
 			}
 			if _, err := b.api.Send(edited); err != nil {
-				log.Printf("Failed to edit aspect ratio media: %v", err)
+				if !strings.Contains(err.Error(), "message is not modified") {
+					log.Printf("Failed to edit aspect ratio media: %v", err)
+				}
 			}
 			return
 		}
@@ -3836,7 +3842,9 @@ func (b *Bot) sendAspectRatioMenu(chatID int64, userID int64, messageID int) {
 	if messageID > 0 {
 		edited := tgbotapi.NewEditMessageTextAndMarkup(chatID, messageID, text, markup)
 		if _, err := b.api.Send(edited); err != nil {
-			log.Printf("Failed to edit aspect ratio menu: %v", err)
+			if !strings.Contains(err.Error(), "message is not modified") {
+				log.Printf("Failed to edit aspect ratio menu: %v", err)
+			}
 		}
 		return
 	}
