@@ -371,13 +371,19 @@ var locRU = Localization{
 	AccountExtraVideo:   "🎬 Доп. видео: %d",
 
 	// Buy menu
-	BuyTitle:           "💳 Купить",
-	BuySelectAction:    "Выберите, что хотите купить:",
-	BuyConsentNote:     "Оплачивая, вы принимаете Политику конфиденциальности и Пользовательское соглашение (/privacy).",
-	BuySubscriptionBtn: "⭐ Подписку",
-	BuyExtrasBtn:       "💰 Генерации",
-	BuyBackBtn:         "◀️ Назад",
-	BuyMenuBtn:         "🏠 Меню",
+	BuyTitle:             "💳 Купить",
+	BuySelectAction:      "Выберите, что хотите купить:",
+	BuyConsentNote:       "Оплачивая, вы принимаете Политику конфиденциальности и Пользовательское соглашение (/privacy).",
+	BuySubscriptionBtn:   "⭐ Подписку",
+	BuyExtrasBtn:         "💰 Генерации",
+	BuyBackBtn:           "◀️ Назад",
+	BuyMenuBtn:           "🏠 Меню",
+	BuyPackageTitle:      "✅ Вы выбрали пакет %s: %d шт.\nПерейдите по ссылке для оплаты:\n%s",
+	BuyPackageLabelText:  "текстовые запросы",
+	BuyPackageLabelImage: "генерации изображений",
+	BuyPackageLabelMusic: "генерации музыки",
+	BuyPackageLabelVideo: "доп. видео",
+	BuyPackageBackBtn:    "◀️ Назад к категориям",
 
 	// Subscriptions
 	SubsTitle:          "⭐ Подписки",
