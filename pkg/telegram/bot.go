@@ -4244,6 +4244,15 @@ func numberAsFloat(v interface{}) float64 {
 }
 
 func (b *Bot) sendGenerationStatus(chatID int64, req *models.GenerationRequest) {
+	if req != nil && req.Status == "failed" && req.ErrorMsg != nil {
+		msg := strings.TrimSpace(*req.ErrorMsg)
+		if strings.Contains(msg, "Request successful, but the official returned empty content") ||
+			strings.Contains(msg, "Произошла ошибка возможно вы нарушили правила бота.") {
+			b.sendText(chatID, "❌ Ошибка: Произошла ошибка возможно вы нарушили правила бота.")
+			return
+		}
+	}
+
 	statusEmoji, statusText := b.statusInfo(req.Status)
 	typeLabel := "Редактирование фото"
 	displayTokens := req.TokensUsed
