@@ -2931,6 +2931,15 @@ func (b *Bot) handleCallback(callback *tgbotapi.CallbackQuery) {
 
 // ensureSubscribed проверяет подписку пользователя на обязательный канал
 func (b *Bot) ensureSubscribed(chatID int64, userID int64) bool {
+	// Пользователи с любой активной подпиской (Mini/Start/Pro) или premium-флагом
+	// не обязаны подписываться на канал.
+	if label, ok := b.userService.GetSubscriptionLabel(userID); ok && label != "Free" {
+		return true
+	}
+	if user, err := b.userService.GetUserByTelegramID(userID); err == nil && user != nil && user.IsPremium {
+		return true
+	}
+
 	member, err := b.api.GetChatMember(tgbotapi.GetChatMemberConfig{
 		ChatConfigWithUser: tgbotapi.ChatConfigWithUser{
 			SuperGroupUsername: requiredChannelUsername,
@@ -3529,12 +3538,12 @@ func (b *Bot) sendBuySubscription(chatID int64, userID int64) {
 	startPrice := b.subscriptionPrice("start")
 	proPrice := b.subscriptionPrice("pro")
 
-	text := fmt.Sprintf("%s\n%s \n\n✨ Mini — %d ₽ %s\n• 50 %s\n• 30 %s\n• 5 %s\n• %s\n• %s\n\n🚀 Start — %d ₽ %s\n• 100 %s\n• 70 %s\n• 10 %s\n• %s\n• %s \n• %s\n\n👑 Pro — %d ₽ %s\n• 300 %s\n• 150 %s\n• 15 %s\n• %s\n• %s, %s, %s\n• %s",
+	text := fmt.Sprintf("%s\n%s \n\n✨ Mini — %d ₽ %s\n• 50 %s\n• 30 %s\n• 5 %s\n• %s\n• %s\n• %s\n\n🚀 Start — %d ₽ %s\n• 100 %s\n• 70 %s\n• 10 %s\n• %s\n• %s \n• %s\n• %s\n\n👑 Pro — %d ₽ %s\n• 300 %s\n• 150 %s\n• 15 %s\n• %s\n• %s, %s, %s\n• %s\n• %s",
 		loc.SubsTitle,
 		loc.BuyConsentNote,
-		miniPrice, loc.SubsPerWeek, loc.SubsTextDaily, loc.SubsImages, loc.SubsSongs, loc.SubsTextModelsMini, fmt.Sprintf(loc.SubsDiscount, 10),
-		startPrice, loc.SubsPerWeek, loc.SubsTextDaily, loc.SubsImages, loc.SubsSongs, fmt.Sprintf(loc.SubsContext, 2), loc.SubsTextModelsHi, fmt.Sprintf(loc.SubsDiscount, 15),
-		proPrice, loc.SubsPerWeek, loc.SubsTextDaily, loc.SubsImages, loc.SubsSongs, loc.SubsTextModelsHi, fmt.Sprintf(loc.SubsChatStyles, 6), fmt.Sprintf(loc.SubsContext, 3), loc.SubsNoAds, fmt.Sprintf(loc.SubsDiscount, 20),
+		miniPrice, loc.SubsPerWeek, loc.SubsTextDaily, loc.SubsImages, loc.SubsSongs, loc.SubsTextModelsMini, fmt.Sprintf(loc.SubsDiscount, 10), loc.SubsNoChannel,
+		startPrice, loc.SubsPerWeek, loc.SubsTextDaily, loc.SubsImages, loc.SubsSongs, fmt.Sprintf(loc.SubsContext, 2), loc.SubsTextModelsHi, fmt.Sprintf(loc.SubsDiscount, 15), loc.SubsNoChannel,
+		proPrice, loc.SubsPerWeek, loc.SubsTextDaily, loc.SubsImages, loc.SubsSongs, loc.SubsTextModelsHi, fmt.Sprintf(loc.SubsChatStyles, 6), fmt.Sprintf(loc.SubsContext, 3), loc.SubsNoAds, fmt.Sprintf(loc.SubsDiscount, 20), loc.SubsNoChannel,
 	)
 
 	keyboard := tgbotapi.NewInlineKeyboardMarkup(

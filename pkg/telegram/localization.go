@@ -71,6 +71,7 @@ type Localization struct {
 	SubsDiscount       string
 	SubsContext        string
 	SubsNoAds          string
+	SubsNoChannel      string
 	SubsChatStyles     string
 	SubsTextModelsMini string
 	SubsTextModelsHi   string
@@ -408,6 +409,7 @@ var locRU = Localization{
 	SubsDiscount:       "Скидка %d%% на доп. запросы",
 	SubsContext:        "x%d контекст",
 	SubsNoAds:          "без рекламы",
+	SubsNoChannel:      "без обязательной подписки на канал",
 	SubsChatStyles:     "%d стилей общения GPT",
 	SubsTextModelsMini: "Текстовые модели: GPT-5 mini, GPT-5 nano",
 	SubsTextModelsHi:   "Текстовые модели: Gemini 3 Flash, GPT-5 mini, GPT-5 nano",
@@ -712,6 +714,7 @@ var locEN = Localization{
 	SubsDiscount:       "%d%% discount on extra requests",
 	SubsContext:        "x%d context",
 	SubsNoAds:          "no ads",
+	SubsNoChannel:      "no mandatory channel subscription",
 	SubsChatStyles:     "%d GPT chat styles",
 	SubsTextModelsMini: "Text models: GPT-5 mini, GPT-5 nano",
 	SubsTextModelsHi:   "Text models: Gemini 3 Flash, GPT-5 mini, GPT-5 nano",
