@@ -4248,7 +4248,8 @@ func (b *Bot) sendGenerationStatus(chatID int64, req *models.GenerationRequest) 
 		msg := strings.TrimSpace(*req.ErrorMsg)
 		if strings.Contains(msg, "Request successful, but the official returned empty content") ||
 			strings.Contains(msg, "Произошла ошибка возможно вы нарушили правила бота.") {
-			b.sendText(chatID, "❌ Ошибка: Произошла ошибка возможно вы нарушили правила бота.")
+			loc := b.getLocalization(req.UserID)
+			b.sendText(chatID, loc.ErrDefAPIEmptyBilled)
 			return
 		}
 	}
