@@ -371,8 +371,8 @@ var locRU = Localization{
 	AccountExtraVideo:   "🎬 Доп. видео: %d",
 
 	// Правила бота
-	RulesTitle:"📜 Правила сервиса:",
-	RulesContent:"1) Контент 18+ запрещен к генерации и отправке в том числе фото в нижнем белье и купальниках.\n2) Контент не должен содержать обнаженной натуры, насилия, спама или незаконного контента.\n3) Контент не должен нарушать авторские права или персональные данные.\n4) Запрещены оскорбления в адрес третьих лиц в песнях, фотографиях, чате. При запросах нарушающих правила сервиса, возврат средств не производится.",
+	RulesTitle:   "📜 Правила сервиса:",
+	RulesContent: "1) Контент 18+ запрещен к генерации и отправке в том числе фото в нижнем белье и купальниках.\n2) Контент не должен содержать обнаженной натуры, насилия, спама или незаконного контента.\n3) Контент не должен нарушать авторские права или персональные данные.\n4) Запрещены оскорбления в адрес третьих лиц в песнях, фотографиях, чате. При запросах нарушающих правила сервиса, возврат средств не производится.",
 
 	// Buy menu
 	BuyTitle:             "💳 Купить",
@@ -530,11 +530,25 @@ var locEN = Localization{
 	ErrDefAPIEmptyBilled: "❌ Generation error: An error occurred; you may have violated the bot rules.",
 	// ... (other fields remain the same)
 	ErrModelRequiresMini: "This model requires a Start subscription or higher",
-	MenuTitle:            "🍌 Your ID: %d\n⭐ Subscription: %s\n🧠 Current AI model: %s %s %s",
-	MenuLimit:            "Current model limit: no data",
-	MenuLimitFormat:      "Limit: %d (%d extra)",
-	ModelsCategory:       "%s",
-	ModelsSelect:         "Select a model:",
+
+	// Settings
+	SettingsTitle:     "⚙️ Settings",
+	SettingsChatStyle: "💬 Chat style",
+	SettingsLanguage:  "🌐 Language",
+	SettingsBackBtn:   "◀️ Menu",
+	SettingsSelect:    "Select a settings section.",
+
+	// Language
+	LangTitle:   "🌐 Select language",
+	LangRussian: "🇷🇺 Русский",
+	LangEnglish: "🇬🇧 English",
+	LangChanged: "✅ Language changed to English",
+
+	MenuTitle:       "🍌 Your ID: %d\n⭐ Subscription: %s\n🧠 Current AI model: %s %s %s",
+	MenuLimit:       "Current model limit: no data",
+	MenuLimitFormat: "Limit: %d (%d extra)",
+	ModelsCategory:  "%s",
+	ModelsSelect:    "Select a model:",
 
 	// Cooldown
 	CooldownWait:   "⏳ Please wait %d more seconds before next request.",
