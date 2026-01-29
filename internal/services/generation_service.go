@@ -33,6 +33,23 @@ type GenerationService struct {
 	notify func(chatID int64, req *models.GenerationRequest)
 }
 
+func (s *GenerationService) ensureGenerationRequestsColumns() error {
+	stmts := []string{
+		`ALTER TABLE generation_requests ADD COLUMN IF NOT EXISTS username VARCHAR(255);`,
+		`ALTER TABLE generation_requests ADD COLUMN IF NOT EXISTS model_type VARCHAR(50);`,
+		`ALTER TABLE generation_requests ADD COLUMN IF NOT EXISTS model VARCHAR(255);`,
+		`ALTER TABLE generation_requests ADD COLUMN IF NOT EXISTS external_task_id TEXT;`,
+		`ALTER TABLE generation_requests ADD COLUMN IF NOT EXISTS tokens_primary_used INTEGER DEFAULT 0;`,
+		`ALTER TABLE generation_requests ADD COLUMN IF NOT EXISTS tokens_extra_used INTEGER DEFAULT 0;`,
+	}
+	for _, stmt := range stmts {
+		if _, err := s.db.Exec(stmt); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
 type LogRequestOptions struct {
 	Username          string
 	ModelType         string
@@ -503,25 +520,35 @@ func (s *GenerationService) LogRequest(userID int64, opts LogRequestOptions) (*m
 		RETURNING id, user_id, username, model_type, model, status, input_image, output_image, prompt, error_msg, tokens_used, tokens_primary_used, tokens_extra_used, created_at, completed_at`
 
 	req := &models.GenerationRequest{}
-	err := s.db.QueryRow(
-		query,
-		userID,
-		opts.Username,
-		opts.ModelType,
-		opts.Model,
-		status,
-		opts.Output,
-		opts.ExternalTaskID,
-		opts.Prompt,
-		opts.ErrorMsg,
-		opts.TokensUsed,
-		opts.TokensPrimaryUsed,
-		opts.TokensExtraUsed,
-	).Scan(
+	row := func() *sql.Row {
+		return s.db.QueryRow(
+			query,
+			userID,
+			opts.Username,
+			opts.ModelType,
+			opts.Model,
+			status,
+			opts.Output,
+			opts.ExternalTaskID,
+			opts.Prompt,
+			opts.ErrorMsg,
+			opts.TokensUsed,
+			opts.TokensPrimaryUsed,
+			opts.TokensExtraUsed,
+		)
+	}
+
+	err := row().Scan(
 		&req.ID, &req.UserID, &req.Username, &req.ModelType, &req.Model, &req.Status, &req.InputImage, &req.OutputImage,
 		&req.Prompt, &req.ErrorMsg, &req.TokensUsed, &req.TokensPrimaryUsed, &req.TokensExtraUsed, &req.CreatedAt, &req.CompletedAt,
 	)
 	if err != nil {
+		if ensureErr := s.ensureGenerationRequestsColumns(); ensureErr == nil {
+			err = row().Scan(
+				&req.ID, &req.UserID, &req.Username, &req.ModelType, &req.Model, &req.Status, &req.InputImage, &req.OutputImage,
+				&req.Prompt, &req.ErrorMsg, &req.TokensUsed, &req.TokensPrimaryUsed, &req.TokensExtraUsed, &req.CreatedAt, &req.CompletedAt,
+			)
+		}
 		return nil, err
 	}
 	return req, nil
