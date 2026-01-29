@@ -409,7 +409,7 @@ var locRU = Localization{
 	SubsDiscount:       "Скидка %d%% на доп. запросы",
 	SubsContext:        "x%d контекст",
 	SubsNoAds:          "без рекламы",
-	SubsNoChannel:      "без обязательной подписки на канал",
+	SubsNoChannel:      "Без обязательной подписки на канал",
 	SubsChatStyles:     "%d стилей общения GPT",
 	SubsTextModelsMini: "Текстовые модели: GPT-5 mini, GPT-5 nano",
 	SubsTextModelsHi:   "Текстовые модели: Gemini 3 Flash, GPT-5 mini, GPT-5 nano",
