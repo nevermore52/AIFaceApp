@@ -710,9 +710,8 @@ func (s *GenerationService) GetGenerationStats() (map[string]any, error) {
 			COUNT(CASE WHEN status = 'completed' THEN 1 END) as completed_requests,
 			COUNT(CASE WHEN status = 'failed' THEN 1 END) as failed_requests,
 			COUNT(CASE WHEN status = 'processing' THEN 1 END) as processing_requests,
-			AVG(EXTRACT(EPOCH FROM (completed_at - created_at))) as avg_processing_time_seconds
-		FROM generation_requests
-		WHERE completed_at IS NOT NULL`
+			AVG(EXTRACT(EPOCH FROM (completed_at - created_at))) FILTER (WHERE status = 'completed' AND completed_at IS NOT NULL) as avg_processing_time_seconds
+		FROM generation_requests`
 
 	var total, completed, failed, processing int
 	var avgTime *float64
@@ -722,12 +721,17 @@ func (s *GenerationService) GetGenerationStats() (map[string]any, error) {
 		return nil, err
 	}
 
+	successRate := 0.0
+	if total > 0 {
+		successRate = float64(completed) / float64(total) * 100
+	}
+
 	stats := map[string]any{
 		"total_requests":      total,
 		"completed_requests":  completed,
 		"failed_requests":     failed,
 		"processing_requests": processing,
-		"success_rate":        float64(completed) / float64(total) * 100,
+		"success_rate":        successRate,
 	}
 
 	if avgTime != nil {

@@ -17,6 +17,7 @@ import (
 	"sync"
 	"sync/atomic"
 	"time"
+	"unicode/utf8"
 
 	"telegram-ai-face-bot/internal/config"
 	"telegram-ai-face-bot/internal/models"
@@ -4430,14 +4431,50 @@ func (b *Bot) sendText(chatID int64, text string) {
 
 // sendLongText разбивает длинное сообщение на части, чтобы не упереться в лимит Telegram (~4096)
 func (b *Bot) sendLongText(chatID int64, text string) {
-	const chunkSize = 4000
+	const maxChunkBytes = 3800
+	text = strings.TrimSpace(text)
 	for len(text) > 0 {
-		chunk := text
-		if len(chunk) > chunkSize {
-			chunk = text[:chunkSize]
-			text = text[chunkSize:]
-		} else {
-			text = ""
+		if len(text) <= maxChunkBytes {
+			msg := tgbotapi.NewMessage(chatID, text)
+			if _, err := b.api.Send(msg); err != nil {
+				log.Printf("Failed to send long message chunk: %v", err)
+			}
+			return
+		}
+
+		cut := maxChunkBytes
+		if cut > len(text) {
+			cut = len(text)
+		}
+
+		// Prefer splitting on a natural boundary near the end of the chunk.
+		if idx := strings.LastIndex(text[:cut], "\n"); idx > 0 && idx >= cut-600 {
+			cut = idx
+		} else if idx := strings.LastIndex(text[:cut], " "); idx > 0 && idx >= cut-300 {
+			cut = idx
+		}
+
+		// Ensure we don't cut in the middle of a UTF-8 encoded rune.
+		for cut > 0 && !utf8.ValidString(text[:cut]) {
+			cut--
+		}
+		if cut == 0 {
+			// Fallback: find a safe rune boundary.
+			cut = maxChunkBytes
+			for cut > 0 && !utf8.RuneStart(text[cut-1]) {
+				cut--
+			}
+			if cut == 0 {
+				// Give up and send what we can (should not normally happen).
+				cut = len(text)
+			}
+		}
+
+		chunk := strings.TrimSpace(text[:cut])
+		text = strings.TrimSpace(text[cut:])
+
+		if chunk == "" {
+			continue
 		}
 		msg := tgbotapi.NewMessage(chatID, chunk)
 		if _, err := b.api.Send(msg); err != nil {
