@@ -277,14 +277,16 @@ type Localization struct {
 	AspectSquare    string
 
 	// Common
-	WelcomeText string
-	BackBtn     string
-	MenuBtn     string
-	RequestUnit string
-	PhotoUnit   string
-	VideoUnit   string
-	TrackUnit   string
-	QueryUnit   string
+	WelcomeText         string
+	StartPromoTitle     string
+	StartPromoCountdown string
+	BackBtn             string
+	MenuBtn             string
+	RequestUnit         string
+	PhotoUnit           string
+	VideoUnit           string
+	TrackUnit           string
+	QueryUnit           string
 
 	// Additional fields for localization
 	ErrAdminRights               string
@@ -361,8 +363,6 @@ var locRU = Localization{
 	MenuAccountBtn:      "🪪 Мой аккаунт",
 	MenuSettingsBtn:     "⚙️ Настройки",
 	MenuHelpBtn:         "🆘 Помощь",
-	MenuBtn:             "🏠 Меню",
-	BackBtn:             "◀️ Назад",
 
 	// Account
 	AccountUserID:       "ID Пользователя: %d",
@@ -433,7 +433,7 @@ var locRU = Localization{
 	// Invite
 	InviteTitle:    "🎁 Вы будете получать 20% от покупок ваших рефералов!",
 	InviteExample:  "Например, пользователь купил 10 доп. запросов, вы получите 2 доп. запроса бесплатно! Не действует на подписки.",
-	InviteLink:     "Ваша личная реферальная ссылка:",
+	InviteLink:     "**Ваша личная реферальная ссылка**:",
 	InviteCopyHint: "*Нажмите, чтобы скопировать*",
 	InviteCount:    "👥 Приглашено пользователей:",
 
@@ -540,7 +540,7 @@ var locRU = Localization{
 	ErrInsufficientQuota:        "Недостаточно %s. Нужно %d.",
 	ErrNeedQuota:                "Недостаточно %s",
 	ErrServiceError:             "Сервис вернул ошибку. Прочитайте правила нашего бота /rules и попробуйте переформулировать ваш запрос и отправьте его снова.",
-	ErrDefAPIEmptyBilled:        "❌ Ошибка генерации: произошла ошибка; возможно, вы нарушили правила бота.",
+	ErrDefAPIEmptyBilled:        "❌ Ошибка генерации: возможно, вы нарушили правила бота. Попробуйте отправить запрос снова.",
 	ErrUnknownCommand:           "❓ Неизвестная команда. Используйте /help для получения списка доступных команд.",
 	ErrEmptyRequest:             "Пустой запрос",
 	ErrNoImage:                  "Отправьте изображение или фото",
@@ -597,13 +597,19 @@ var locRU = Localization{
 	SubsEnableBtn:         "Включить подписки",
 	SubsDisableBtn:        "Выключить подписки",
 
-	WelcomeText: "Привет! Я бот для генерации фото/музыки/текста. Используйте /menu.",
-	RequestUnit: "запрос(ов)",
-	PhotoUnit:   "фото",
-	VideoUnit:   "видео",
-	TrackUnit:   "трек",
-	QueryUnit:   "запрос",
+	// Common
+	WelcomeText:         "Добро пожаловать! Используйте /menu, чтобы выбрать модель и начать.",
+	StartPromoTitle:     "🔥 В данный момент действует скидка 50%% на фото запросы",
+	StartPromoCountdown: "⏳ До конца акции: %dд %dч %dм",
+	BackBtn:             "⬅️ Назад",
+	MenuBtn:             "🏠 Меню",
+	RequestUnit:         "запрос",
+	PhotoUnit:           "фото",
+	VideoUnit:           "видео",
+	TrackUnit:           "трек",
+	QueryUnit:           "запрос",
 
+	// ... (other fields remain the same)
 	ErrAdminRights:               "У вас нет прав администратора",
 	ErrCheckSubscription:         "Не удалось проверить подписку. Попробуйте ещё раз.",
 	ErrPaymentNotConfigured:      "Платёжный сервис не настроен",
@@ -868,7 +874,9 @@ var locEN = Localization{
 	PrivacyPolicy: "🔒 Privacy Policy:",
 	PrivacyTerms:  "📜 Terms of Service:",
 
-	WelcomeText: "Welcome! Use /menu to select a model and get started.",
+	WelcomeText:         "Welcome! Use /menu to select a model and get started.",
+	StartPromoTitle:     "🔥 50%% discounts until %s",
+	StartPromoCountdown: "⏳ Offer ends in: %dd %dh %dm",
 
 	// Help
 	HelpTitle:    "📋 Available commands:",

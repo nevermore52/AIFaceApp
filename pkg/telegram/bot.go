@@ -90,6 +90,53 @@ func (b *Bot) extrasPrice(category string, qty int) (int, bool) {
 	return b.paymentService.ExtrasPrice(category, qty)
 }
 
+func extrasDiscountActiveForCategory(category string) bool {
+	if category != "image" {
+		return false
+	}
+	deadline := time.Date(2026, time.March, 1, 0, 0, 0, 0, time.UTC)
+	return time.Now().UTC().Before(deadline)
+}
+
+func formatExtrasPriceMarkdownV2(category string, currentPrice int) string {
+	if currentPrice < 0 {
+		currentPrice = 0
+	}
+	if extrasDiscountActiveForCategory(category) {
+		oldPrice := currentPrice * 2
+		// MarkdownV2 strikethrough uses single-tilde: ~text~
+		// Required format: discounted price first, old price struck on the right.
+		return fmt.Sprintf("%d ₽ ~%d ₽~", currentPrice, oldPrice)
+	}
+	return fmt.Sprintf("%d ₽", currentPrice)
+}
+
+func escapeMarkdownV2(s string) string {
+	// Telegram MarkdownV2 reserved characters: _ * [ ] ( ) ~ ` > # + - = | { } . !
+	replacer := strings.NewReplacer(
+		"\\", "\\\\",
+		"_", "\\_",
+		"*", "\\*",
+		"[", "\\[",
+		"]", "\\]",
+		"(", "\\(",
+		")", "\\)",
+		"~", "\\~",
+		"`", "\\`",
+		">", "\\>",
+		"#", "\\#",
+		"+", "\\+",
+		"-", "\\-",
+		"=", "\\=",
+		"|", "\\|",
+		"{", "\\{",
+		"}", "\\}",
+		".", "\\.",
+		"!", "\\!",
+	)
+	return replacer.Replace(s)
+}
+
 func (b *Bot) getUserAspectRatio(userID int64) string {
 	ratio, err := b.redisClient.GetUserAspectRatio(userID)
 	if err != nil {
@@ -230,15 +277,16 @@ func (b *Bot) sendBuyExtrasCategory(chatID int64, userID int64, category string,
 	}
 
 	var sb strings.Builder
-	sb.WriteString(header + "\n\n" + loc.BuySelectAction + "\n")
+	sb.WriteString(escapeMarkdownV2(header) + "\n\n" + escapeMarkdownV2(loc.BuySelectAction) + "\n")
+	escapedUnit := escapeMarkdownV2(unit)
 	for _, p := range packs {
 		if price, ok := b.extrasPrice(category, p); ok {
-			sb.WriteString(fmt.Sprintf("• %d %s — %d ₽\n", p, unit, price))
+			sb.WriteString(fmt.Sprintf("• %d %s — %s\n", p, escapedUnit, formatExtrasPriceMarkdownV2(category, price)))
 		} else {
-			sb.WriteString(fmt.Sprintf("• %d %s\n", p, unit))
+			sb.WriteString(fmt.Sprintf("• %d %s\n", p, escapedUnit))
 		}
 	}
-	text := sb.String() + "\n" + loc.BuyConsentNote
+	text := sb.String() + "\n" + escapeMarkdownV2(loc.BuyConsentNote)
 
 	var rows [][]tgbotapi.InlineKeyboardButton
 	for i := 0; i < len(packs); i += 2 {
@@ -259,6 +307,7 @@ func (b *Bot) sendBuyExtrasCategory(chatID int64, userID int64, category string,
 
 	keyboard := tgbotapi.NewInlineKeyboardMarkup(rows...)
 	reply := tgbotapi.NewMessage(chatID, text)
+	reply.ParseMode = "MarkdownV2"
 	reply.ReplyMarkup = keyboard
 
 	if _, err := b.api.Send(reply); err != nil {
@@ -1478,11 +1527,6 @@ func instructionForModel(m ModelOption) string {
 1) Пришлите фото.
 2) В подписи опишите, что нужно сделать (ретушь, правки, изменение).
 
-Примеры:
-• "Убери шум и сделай ярче"
-• "Слегка разгладь кожу"
-• "Добавь лёгкий теплый фильтр"
-
 Используйте /menu для выбора другой модели.`
 	case "google/nano-banana-pro":
 		return base + `Принимает фото с подписью и возвращает улучшенное изображение (лучшее качество, но дольше).
@@ -1492,11 +1536,6 @@ func instructionForModel(m ModelOption) string {
 Как отправить:
 1) Пришлите фото.
 2) В подписи опишите, что нужно изменить или улучшить.
-
-Примеры:
-• "Сделай кинематографичный цвет"
-• "Сделай кожу чище, фон размытым"
-• "Убери бликов на лице"
 
 Используйте /menu для выбора другой модели.`
 	case "hug-video":
@@ -3264,13 +3303,31 @@ func (b *Bot) saveMessageToContext(userID int64, message string) {
 	}
 }
 
+func startPromoText(loc *Localization) string {
+	deadline := time.Date(2026, time.March, 1, 0, 0, 0, 0, time.UTC)
+	now := time.Now().UTC()
+	if !now.Before(deadline) {
+		return ""
+	}
+	left := deadline.Sub(now)
+	days := int(left.Hours()) / 24
+	hours := int(left.Hours()) % 24
+	minutes := int(left.Minutes()) % 60
+
+	return fmt.Sprintf(loc.StartPromoTitle) + "\n" + fmt.Sprintf(loc.StartPromoCountdown, days, hours, minutes)
+}
+
 // handleStart обрабатывает команду /start
 func (b *Bot) handleStart(msg *tgbotapi.Message) {
 	if isAdmin, err := b.userService.IsUserAdmin(msg.From.ID); err == nil {
 		b.setChatCommands(msg.Chat.ID, isAdmin)
 	}
 	loc := b.getLocalization(msg.From.ID)
-	b.sendText(msg.Chat.ID, loc.WelcomeText)
+	text := loc.WelcomeText
+	if promo := startPromoText(loc); promo != "" {
+		text += "\n\n" + promo
+	}
+	b.sendText(msg.Chat.ID, text)
 	b.sendLanguageMenu(msg.Chat.ID, msg.From.ID)
 }
 
@@ -3293,7 +3350,11 @@ func (b *Bot) handleStartWithReferral(msg *tgbotapi.Message, referralCode string
 		b.setChatCommands(msg.Chat.ID, isAdmin)
 	}
 	loc := b.getLocalization(user.ID)
-	b.sendText(msg.Chat.ID, loc.WelcomeText)
+	text := loc.WelcomeText
+	if promo := startPromoText(loc); promo != "" {
+		text += "\n\n" + promo
+	}
+	b.sendText(msg.Chat.ID, text)
 	b.sendLanguageMenu(msg.Chat.ID, msg.From.ID)
 }
 
@@ -3625,7 +3686,7 @@ func (b *Bot) sendInviteInfo(chatID int64, userID int64) {
 	}
 
 	botUsername := b.api.Self.UserName
-	referralLink := fmt.Sprintf("https://t.me/%s?start=%s", botUsername, user.ReferralCode)
+	referralLink := fmt.Sprintf("`https://t.me/%s?start=%s`", botUsername, user.ReferralCode)
 
 	text := fmt.Sprintf("%s\n%s\n\n%s\n%s\n%s\n\n%s %d",
 		loc.InviteTitle,
