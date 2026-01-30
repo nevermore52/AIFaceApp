@@ -2797,6 +2797,26 @@ func (b *Bot) handleCallback(callback *tgbotapi.CallbackQuery) {
 			return
 		}
 		b.handleAdminStats(chatID)
+	case "admin:stats:day":
+		if !b.ensureAdmin(chatID, userID) {
+			return
+		}
+		b.handleAdminStatsPeriod(chatID, "day")
+	case "admin:stats:week":
+		if !b.ensureAdmin(chatID, userID) {
+			return
+		}
+		b.handleAdminStatsPeriod(chatID, "week")
+	case "admin:stats:month":
+		if !b.ensureAdmin(chatID, userID) {
+			return
+		}
+		b.handleAdminStatsPeriod(chatID, "month")
+	case "admin:stats:all":
+		if !b.ensureAdmin(chatID, userID) {
+			return
+		}
+		b.handleAdminStats(chatID)
 	case "admin:users":
 		if !b.ensureAdmin(chatID, userID) {
 			return
@@ -4181,6 +4201,37 @@ func (b *Bot) handleAdminStats(chatID int64) {
 		b.sendErrorMessage(chatID, "Ошибка при получении статистики")
 		return
 	}
+	b.sendAdminStatsMessage(chatID, "за всё время", stats)
+}
+
+func (b *Bot) handleAdminStatsPeriod(chatID int64, period string) {
+	var from time.Time
+	label := ""
+	now := time.Now().UTC()
+	switch period {
+	case "day":
+		label = "за день"
+		from = now.Add(-24 * time.Hour)
+	case "week":
+		label = "за неделю"
+		from = now.Add(-7 * 24 * time.Hour)
+	case "month":
+		label = "за месяц"
+		from = now.Add(-30 * 24 * time.Hour)
+	default:
+		b.handleAdminStats(chatID)
+		return
+	}
+
+	stats, err := b.generationService.GetGenerationStatsSince(from)
+	if err != nil {
+		b.sendErrorMessage(chatID, "Ошибка при получении статистики")
+		return
+	}
+	b.sendAdminStatsMessage(chatID, label, stats)
+}
+
+func (b *Bot) sendAdminStatsMessage(chatID int64, periodLabel string, stats map[string]any) {
 
 	total := numberAsInt(stats["total_requests"])
 	completed := numberAsInt(stats["completed_requests"])
@@ -4189,13 +4240,14 @@ func (b *Bot) handleAdminStats(chatID int64) {
 	successRate := numberAsFloat(stats["success_rate"])
 	avgTime := numberAsFloat(stats["avg_processing_time_seconds"])
 
-	text := fmt.Sprintf(`📊 Статистика бота:
+	text := fmt.Sprintf(`📊 Статистика бота (%s):
 
 🎨 Всего запросов: %d
 ✅ Успешных: %d
 ❌ Ошибок: %d
 🔄 В процессе: %d
 📈 Успешность: %.1f%%`,
+		periodLabel,
 		total,
 		completed,
 		failed,
@@ -4207,8 +4259,21 @@ func (b *Bot) handleAdminStats(chatID int64) {
 		text += fmt.Sprintf("\n⏱️ Среднее время: %.1f сек", avgTime)
 	}
 
+	keyboard := tgbotapi.NewInlineKeyboardMarkup(
+		tgbotapi.NewInlineKeyboardRow(
+			tgbotapi.NewInlineKeyboardButtonData("📅 День", "admin:stats:day"),
+			tgbotapi.NewInlineKeyboardButtonData("📆 Неделя", "admin:stats:week"),
+			tgbotapi.NewInlineKeyboardButtonData("🗓️ Месяц", "admin:stats:month"),
+		),
+		tgbotapi.NewInlineKeyboardRow(
+			tgbotapi.NewInlineKeyboardButtonData("♾️ Всё время", "admin:stats:all"),
+			tgbotapi.NewInlineKeyboardButtonData("◀️ Назад", "admin:menu"),
+		),
+	)
+
 	msg := tgbotapi.NewMessage(chatID, text)
-	_, err = b.api.Send(msg)
+	msg.ReplyMarkup = keyboard
+	_, err := b.api.Send(msg)
 	if err != nil {
 		log.Printf("Failed to send admin stats: %v", err)
 	}
