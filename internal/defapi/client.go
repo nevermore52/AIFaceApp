@@ -165,6 +165,7 @@ func NewClient(apiKey, baseURL string) *Client {
 	}
 }
 
+
 func (c *Client) CreateImageTask(model, prompt string, images []string, callbackURL string, aspectRatio string) (string, error) {
 	if c == nil {
 		return "", fmt.Errorf("defapi client is nil")
