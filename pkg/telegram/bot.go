@@ -605,26 +605,24 @@ type ModelOption struct {
 	Category    ModelCategory
 	RequestCost int
 	TaskType    string
+	AdminOnly   bool
 }
 
 // isUserAllowed проверяет доступ по белому списку (ADMIN_TELEGRAM_IDS)
 func (b *Bot) isUserAllowed(userID int64) bool {
-	if len(b.cfg.AdminIDs) == 0 {
-		// Белый список не задан — доступ открыт
-		return true
+	isAdmin, err := b.userService.IsUserAdmin(userID)
+	if err != nil {
+		return false
 	}
-	for _, id := range b.cfg.AdminIDs {
-		if id == userID {
-			return true
-		}
-	}
-	return false
+	return isAdmin
 }
 
 // Доступные модели для выбора
 var modelOptions = []ModelOption{
 	{ID: "google/nano-banana", Label: "🚀 Nano Banana", Desc: locRU.ModelNanoBanana, Category: ModelCategoryPhoto, RequestCost: 1},
 	{ID: "google/nano-banana-pro", Label: "🌟 Nano Banana Pro", Desc: locRU.ModelNanoBananaPro, Category: ModelCategoryPhoto, RequestCost: 4},
+	{ID: "kie/nano-banana-edit", Label: "🚀 Nano Banana (Kie)", Desc: locRU.ModelNanoBanana, Category: ModelCategoryPhoto, RequestCost: 1, AdminOnly: true},
+	{ID: "kie/nano-banana-pro", Label: "🌟 Nano Banana Pro (Kie)", Desc: locRU.ModelNanoBananaPro, Category: ModelCategoryPhoto, RequestCost: 4, AdminOnly: true},
 	{ID: "hug-video", ApiModel: "Qubico/hug-video", Label: "🤗 Обнимашки", Desc: locRU.ModelHugVideo, Category: ModelCategoryVideo, RequestCost: 1, TaskType: "image_to_video"},
 	{ID: "music-suno", ApiModel: "suno", Label: "🎵 Suno Music", Desc: locRU.ModelSunoMusic, Category: ModelCategoryMusic, RequestCost: 1, TaskType: "music"},
 	{ID: "google/gemini-3-flash", Label: "💬 Gemini 3 Flash", Desc: "", Category: ModelCategoryChat, RequestCost: 1},
@@ -843,11 +841,7 @@ func (b *Bot) handleMessage(msg *tgbotapi.Message) {
 		cmd := msg.Command()
 		args := msg.CommandArguments()
 		if cmd == "start" && args != "" {
-			// Проверка доступа и подписки
-			if !b.isUserAllowed(user.ID) {
-				b.sendErrorMessage(msg.Chat.ID, "Доступ только для админов.")
-				return
-			}
+			// Проверка подписки
 			if !b.ensureSubscribed(msg.Chat.ID, user.ID) {
 				return
 			}
@@ -866,12 +860,6 @@ func (b *Bot) handleMessage(msg *tgbotapi.Message) {
 	)
 	if err != nil {
 		log.Printf("Failed to get/create user %d: %v", user.ID, err)
-		return
-	}
-
-	// Проверяем белый список админов
-	if !b.isUserAllowed(user.ID) {
-		b.sendErrorMessage(msg.Chat.ID, "Доступ только для админов.")
 		return
 	}
 
@@ -1442,6 +1430,13 @@ func modelOptionsByCategory(category ModelCategory) []ModelOption {
 	return result
 }
 
+func (b *Bot) isModelVisibleToUser(userID int64, m ModelOption) bool {
+	if m.AdminOnly {
+		return b.isUserAllowed(userID)
+	}
+	return true
+}
+
 func categoryLabel(cat ModelCategory) string {
 	switch cat {
 	case ModelCategoryPhoto:
@@ -1689,11 +1684,7 @@ func (b *Bot) processAudioMessage(msg *tgbotapi.Message, modelOpt ModelOption) {
 		username = userRec.Username
 	}
 
-	// Дополнительная проверка доступа и подписки
-	if !b.isUserAllowed(userID) {
-		b.sendErrorMessage(chatID, "Доступ только для админов.")
-		return
-	}
+	// Проверка подписки
 	if !b.ensureSubscribed(chatID, userID) {
 		return
 	}
@@ -2548,10 +2539,6 @@ func (b *Bot) sendLanguageMenu(chatID int64, userID int64) {
 
 // processVideoGeneration обрабатывает видео-генерацию из фото (image_to_video)
 func (b *Bot) processVideoGeneration(chatID int64, userID int64, photoURL string, modelOpt ModelOption) {
-	if !b.isUserAllowed(userID) {
-		b.sendErrorMessage(chatID, "Бот находится в разработке некоторое время. Доступ только для админов. Подпишитесь на наш канал @AIFaceApps, Там администратор оповестит о запуске бота.")
-		return
-	}
 	if !b.ensureSubscribed(chatID, userID) {
 		return
 	}
@@ -2878,11 +2865,13 @@ func (b *Bot) handleCallback(callback *tgbotapi.CallbackQuery) {
 		loc := b.getLocalization(userID)
 		b.sendText(chatID, loc.LangChanged)
 		b.sendLanguageMenu(chatID, userID)
+		b.sendMainMenu(chatID, userID)
 	case "set_lang:en":
 		b.setUserLanguage(userID, "en")
 		loc := b.getLocalization(userID)
 		b.sendText(chatID, loc.LangChanged)
 		b.sendLanguageMenu(chatID, userID)
+		b.sendMainMenu(chatID, userID)
 	case "aspect_menu":
 		b.sendAspectRatioMenu(chatID, userID, callback.Message.MessageID)
 	case "set_style":
@@ -2974,6 +2963,10 @@ func (b *Bot) handleCallback(callback *tgbotapi.CallbackQuery) {
 				b.sendErrorMessage(chatID, "Неизвестная модель")
 				return
 			}
+			if !b.isModelVisibleToUser(userID, opt) {
+				b.sendErrorMessage(chatID, "Доступ к этой модели только для админов")
+				return
+			}
 			if opt.Category == ModelCategoryChat && !b.isChatModelAllowed(userID, opt) {
 				b.sendErrorMessage(chatID, b.chatModelAccessMessage(opt.ID))
 				return
@@ -3032,12 +3025,6 @@ func (b *Bot) ensureSubscribed(chatID int64, userID int64) bool {
 
 // processGeneration обрабатывает генерацию изображения
 func (b *Bot) processGeneration(chatID int64, userID int64, photoURLs []string, genType string, prompt string) {
-	// Дополнительная проверка белого списка (защита от прямых вызовов)
-	if !b.isUserAllowed(userID) {
-		b.sendErrorMessage(chatID, "Бот находится в разработке некоторое время. Доступ только для админов. Подпишитесь на наш канал @AIFaceApps, Там администратор оповестит о запуске бота.")
-		return
-	}
-
 	// Проверяем обязательную подписку
 	if !b.ensureSubscribed(chatID, userID) {
 		return
@@ -3074,6 +3061,11 @@ func (b *Bot) processGeneration(chatID int64, userID int64, photoURLs []string, 
 			Category:    ModelCategoryPhoto,
 			RequestCost: 1,
 		}
+	}
+
+	if modelOpt.AdminOnly && !b.isUserAllowed(userID) {
+		b.sendErrorMessage(chatID, "Доступ к этой модели только для админов")
+		return
 	}
 
 	// Запрещаем запуск фото-генерации с не-фото моделью
@@ -3115,7 +3107,7 @@ func (b *Bot) processGeneration(chatID int64, userID int64, photoURLs []string, 
 		ModelType:         string(modelOpt.Category),
 		Username:          username,
 	}
-	if modelOpt.ID == "google/nano-banana" || modelOpt.ID == "google/nano-banana-pro" {
+	if modelOpt.ID == "google/nano-banana" || modelOpt.ID == "google/nano-banana-pro" || modelOpt.ID == "kie/nano-banana-edit" || modelOpt.ID == "kie/nano-banana-pro" {
 		opts.AspectRatio = b.getUserAspectRatio(userID)
 	}
 	if useDef, err := b.userService.IsNanoBananaDefAPIEnabled(); err == nil {
@@ -3165,41 +3157,43 @@ func (b *Bot) confirmGeneration(chatID int64, userID int64, requestIDStr string)
 func (b *Bot) handleTextMessage(msg *tgbotapi.Message) {
 	userText := strings.TrimSpace(msg.Text)
 	loc := b.getLocalization(msg.From.ID)
+	ruLoc := GetLocalization("ru")
+	enLoc := GetLocalization("en")
 	modelID := b.getUserModel(msg.From.ID)
 	modelOpt, ok := findModelOption(modelID)
 
 	// Обрабатываем нажатия кнопок реплай-меню
 	switch userText {
-	case loc.MenuGenPhotoBtn:
+	case loc.MenuGenPhotoBtn, ruLoc.MenuGenPhotoBtn, enLoc.MenuGenPhotoBtn:
 		if !b.ensureCategoryEnabled(msg.Chat.ID, ModelCategoryPhoto) {
 			return
 		}
 		b.setUserModel(msg.From.ID, "google/nano-banana")
 		b.sendModelMenu(msg.Chat.ID, msg.From.ID, ModelCategoryPhoto, 0)
 		return
-	case loc.MenuGenMusicBtn:
+	case loc.MenuGenMusicBtn, ruLoc.MenuGenMusicBtn, enLoc.MenuGenMusicBtn:
 		if !b.ensureCategoryEnabled(msg.Chat.ID, ModelCategoryMusic) {
 			return
 		}
 		b.setUserModel(msg.From.ID, "music-suno")
 		b.sendModelMenu(msg.Chat.ID, msg.From.ID, ModelCategoryMusic, 0)
 		return
-	case loc.MenuInviteFriendBtn, "👥 Пригласить друга":
+	case loc.MenuInviteFriendBtn, ruLoc.MenuInviteFriendBtn, enLoc.MenuInviteFriendBtn, "👥 Пригласить друга":
 		b.sendInviteInfo(msg.Chat.ID, msg.From.ID)
 		return
-	case loc.MenuBuyBtn:
+	case loc.MenuBuyBtn, ruLoc.MenuBuyBtn, enLoc.MenuBuyBtn:
 		if !b.ensurePaymentsEnabled(msg.Chat.ID) {
 			return
 		}
 		b.sendBuyMenu(msg.Chat.ID, msg.From.ID)
 		return
-	case loc.MenuAccountBtn:
+	case loc.MenuAccountBtn, ruLoc.MenuAccountBtn, enLoc.MenuAccountBtn:
 		b.sendAccount(msg.Chat.ID, msg.From.ID)
 		return
-	case loc.MenuSettingsBtn:
+	case loc.MenuSettingsBtn, ruLoc.MenuSettingsBtn, enLoc.MenuSettingsBtn:
 		b.sendSettingsMenu(msg.Chat.ID, msg.From.ID)
 		return
-	case loc.MenuHelpBtn:
+	case loc.MenuHelpBtn, ruLoc.MenuHelpBtn, enLoc.MenuHelpBtn:
 		b.sendHelpMessage(msg.Chat.ID)
 		return
 	}
@@ -3764,6 +3758,9 @@ func (b *Bot) sendModelMenu(chatID int64, userID int64, category ModelCategory, 
 	if current == "" {
 		for _, m := range modelOptions {
 			if containsCategory(enabledCats, m.Category) {
+				if !b.isModelVisibleToUser(userID, m) {
+					continue
+				}
 				if m.Category == ModelCategoryChat && !b.isChatModelAllowed(userID, m) {
 					continue
 				}
@@ -3797,6 +3794,9 @@ func (b *Bot) sendModelMenu(chatID int64, userID int64, category ModelCategory, 
 	options := modelOptionsByCategory(category)
 	row := []tgbotapi.InlineKeyboardButton{}
 	for i, m := range options {
+		if !b.isModelVisibleToUser(userID, m) {
+			continue
+		}
 		label := m.Label
 		if m.Category == ModelCategoryChat && !b.isChatModelAllowed(userID, m) {
 			label = "🔒 " + label
@@ -3851,7 +3851,7 @@ func (b *Bot) sendModelMenu(chatID int64, userID int64, category ModelCategory, 
 			))
 		}
 	}
-	if category == ModelCategoryPhoto && (current == "google/nano-banana" || current == "google/nano-banana-pro") {
+	if category == ModelCategoryPhoto && (current == "google/nano-banana" || current == "google/nano-banana-pro" || current == "kie/nano-banana-edit" || current == "kie/nano-banana-pro") {
 		ratio := b.getUserAspectRatio(userID)
 		label := loc.AspectTitle + ": " + ratio
 		rows = append(rows, tgbotapi.NewInlineKeyboardRow(

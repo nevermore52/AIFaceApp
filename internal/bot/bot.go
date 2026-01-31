@@ -14,6 +14,7 @@ import (
 
 	"telegram-ai-face-bot/internal/config"
 	"telegram-ai-face-bot/internal/defapi"
+	"telegram-ai-face-bot/internal/kieapi"
 	"telegram-ai-face-bot/internal/models"
 	"telegram-ai-face-bot/internal/openrouter"
 	"telegram-ai-face-bot/internal/payments"
@@ -42,6 +43,9 @@ func NewBot(cfg *config.Config, db *sql.DB) (*Bot, error) {
 	generationService := services.NewGenerationService(db, openRouterClient)
 	if cfg.DefAPI.APIKey != "" && cfg.DefAPI.BaseURL != "" {
 		generationService.SetDefAPIClient(defapi.NewClient(cfg.DefAPI.APIKey, cfg.DefAPI.BaseURL))
+	}
+	if cfg.KieAPI.APIKey != "" && cfg.KieAPI.BaseURL != "" {
+		generationService.SetKieAPIClient(kieapi.NewClient(cfg.KieAPI.APIKey, cfg.KieAPI.BaseURL))
 	}
 	paymentProvider := payments.NewPaymentProvider(cfg.Payment)
 	paymentService := services.NewPaymentService(paymentProvider, userService)
@@ -161,6 +165,39 @@ func (b *Bot) startWebhookServer() {
 			return
 		}
 		log.Printf("defapi callback handled OK task=%s from %s", payload.TaskID, r.RemoteAddr)
+		w.WriteHeader(http.StatusOK)
+	})
+
+	mux.HandleFunc("/kieapi/callback", func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost {
+			log.Printf("kieapi callback bad method: %s from %s", r.Method, r.RemoteAddr)
+			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+			return
+		}
+		body, err := io.ReadAll(r.Body)
+		if err != nil {
+			http.Error(w, "bad request", http.StatusBadRequest)
+			return
+		}
+		log.Printf("kieapi callback body: %s", string(body))
+
+		var payload kieapi.CallbackPayload
+		if err := json.Unmarshal(body, &payload); err != nil {
+			log.Printf("kieapi callback parse error: %v body=%s", err, truncateForLog(string(body), 300))
+			http.Error(w, "bad request", http.StatusBadRequest)
+			return
+		}
+		if strings.TrimSpace(payload.TaskID) == "" {
+			log.Printf("kieapi callback missing taskId body=%s", truncateForLog(string(body), 300))
+			http.Error(w, "bad request", http.StatusBadRequest)
+			return
+		}
+		if err := b.generationService.HandleKieAPICallback(payload); err != nil {
+			log.Printf("kieapi callback error: %v", err)
+			http.Error(w, "error", http.StatusBadRequest)
+			return
+		}
+		log.Printf("kieapi callback handled OK task=%s from %s", payload.TaskID, r.RemoteAddr)
 		w.WriteHeader(http.StatusOK)
 	})
 

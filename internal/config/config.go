@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"os"
 	"strconv"
-	"strings"
 
 	"github.com/joho/godotenv"
 )
@@ -15,8 +14,8 @@ type Config struct {
 	Redis         RedisConfig
 	OpenRouter    OpenRouterConfig
 	DefAPI        DefAPIConfig
+	KieAPI        KieAPIConfig
 	Payment       PaymentConfig
-	AdminIDs      []int64
 	Server        ServerConfig
 	DebugLogging  bool
 }
@@ -37,6 +36,12 @@ type OpenRouterConfig struct {
 type DefAPIConfig struct {
 	APIKey  string
 	BaseURL string
+}
+
+type KieAPIConfig struct {
+	APIKey      string
+	BaseURL     string
+	CallbackURL string
 }
 
 type PaymentConfig struct {
@@ -78,6 +83,12 @@ func Load() (*Config, error) {
 		BaseURL: getEnv("DEF_BASE_URL", ""),
 	}
 
+	cfg.KieAPI = KieAPIConfig{
+		APIKey:      getEnv("KIEAPI_API_KEY", ""),
+		BaseURL:     getEnv("KIEAPI_BASE_URL", "https://api.kie.ai"),
+		CallbackURL: getEnv("KIEAPI_CALLBACK_URL", ""),
+	}
+
 	cfg.Payment = PaymentConfig{
 		Provider:      getEnv("PAYMENT_PROVIDER", "yookassa"),
 		APIKey:        getEnv("PAYMENT_API_KEY", ""),
@@ -85,16 +96,6 @@ func Load() (*Config, error) {
 		YooKassaShop:  getEnv("YOOKASSA_SHOP_ID", ""),
 		YooKassaKey:   getEnv("YOOKASSA_SECRET_KEY", ""),
 		YooReturnURL:  getEnv("YOOKASSA_RETURN_URL", "https://t.me/AIFaceApps"),
-	}
-
-	adminIDsStr := getEnv("WHITELIST_TELEGRAM_IDS", "")
-	if adminIDsStr != "" {
-		ids := strings.Split(adminIDsStr, ",")
-		for _, id := range ids {
-			if parsedID, err := strconv.ParseInt(strings.TrimSpace(id), 10, 64); err == nil {
-				cfg.AdminIDs = append(cfg.AdminIDs, parsedID)
-			}
-		}
 	}
 
 	cfg.Server = ServerConfig{

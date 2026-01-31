@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"telegram-ai-face-bot/internal/defapi"
+	"telegram-ai-face-bot/internal/kieapi"
 	"telegram-ai-face-bot/internal/models"
 	"telegram-ai-face-bot/internal/openrouter"
 )
@@ -30,6 +31,7 @@ type GenerationService struct {
 	db     *sql.DB
 	client *openrouter.Client
 	defAPI *defapi.Client
+	kieAPI *kieapi.Client
 	http   *http.Client
 	notify func(chatID int64, req *models.GenerationRequest)
 
@@ -129,6 +131,11 @@ func (s *GenerationService) WaitInFlight() {
 func (s *GenerationService) SetDefAPIClient(client *defapi.Client) {
 	s.defAPI = client
 }
+
+func (s *GenerationService) SetKieAPIClient(client *kieapi.Client) {
+	s.kieAPI = client
+}
+
 func (s *GenerationService) StartGeneration(userID int64, opts GenerationOptions) (*models.GenerationRequest, error) {
 	debugLog("StartGeneration: userID=%d, prompt=%s", userID, opts.Prompt)
 	query := `
@@ -162,8 +169,8 @@ func (s *GenerationService) StartGeneration(userID int64, opts GenerationOptions
 
 func (s *GenerationService) processGeneration(req *models.GenerationRequest, opts GenerationOptions) {
 	defer func() {
-		// For DefAPI async tasks we finish in HandleDefAPICallback.
-		if !(useDefAPIModel(opts.Model) && opts.UseDefAPI) {
+		// For DefAPI/KieAPI async tasks we finish in callbacks.
+		if !(useDefAPIModel(opts.Model) && opts.UseDefAPI) && !useKieAPIModel(opts.Model) {
 			s.markDone(req.ID)
 		}
 	}()
@@ -218,6 +225,24 @@ func (s *GenerationService) processGeneration(req *models.GenerationRequest, opt
 			return
 		}
 		debugLog("processGeneration DefAPI task created: requestID=%d taskID=%s", req.ID, taskID)
+		return
+	}
+
+	if useKieAPIModel(opts.Model) {
+		taskID, err := s.createKieAPITask(req.ID, opts, images)
+		if err != nil {
+			debugLog("processGeneration KieAPI FAILED: requestID=%d, error=%v", req.ID, err)
+			_ = s.updateRequestStatus(req.ID, "failed", err.Error())
+			req.Status = "failed"
+			errMsg := err.Error()
+			req.ErrorMsg = &errMsg
+			if s.notify != nil {
+				s.notify(opts.ChatID, req)
+			}
+			s.markDone(req.ID)
+			return
+		}
+		debugLog("processGeneration KieAPI task created: requestID=%d taskID=%s", req.ID, taskID)
 		return
 	}
 
@@ -313,6 +338,123 @@ func (s *GenerationService) HandleDefAPICallback(payload defapi.CallbackPayload)
 		s.markDone(req.ID)
 		return nil
 	}
+	if err := s.completeRequest(req.ID, url); err != nil {
+		return err
+	}
+
+	req.Status = "completed"
+	req.ErrorMsg = nil
+	req.Output = &url
+	now := time.Now()
+	req.CompletedAt = &now
+	if s.notify != nil {
+		s.notify(req.UserID, req)
+	}
+	s.markDone(req.ID)
+	return nil
+}
+
+func useKieAPIModel(model string) bool {
+	model = strings.ToLower(strings.TrimSpace(model))
+	return model == "kie/nano-banana-edit" || model == "kie/nano-banana-pro"
+}
+
+func mapKieAPIModel(model string) string {
+	model = strings.ToLower(strings.TrimSpace(model))
+	switch model {
+	case "kie/nano-banana-edit":
+		return "google/nano-banana-edit"
+	case "kie/nano-banana-pro":
+		return "google/nano-banana-pro"
+	default:
+		return model
+	}
+}
+
+func (s *GenerationService) createKieAPITask(requestID int64, opts GenerationOptions, images []string) (string, error) {
+	if s.kieAPI == nil {
+		return "", fmt.Errorf("kieapi client is not configured")
+	}
+	callbackURL := strings.TrimSpace(os.Getenv("KIEAPI_CALLBACK_URL"))
+	if callbackURL == "" {
+		callbackURL = strings.TrimSpace(os.Getenv("KIE_CALLBACK_URL"))
+	}
+	if callbackURL == "" {
+		return "", fmt.Errorf("KIEAPI_CALLBACK_URL is not set")
+	}
+
+	apiModel := mapKieAPIModel(opts.Model)
+	payload := kieapi.CreateTaskRequest{
+		Model:       apiModel,
+		CallBackURL: callbackURL,
+		Input: map[string]any{
+			"prompt":       opts.Prompt,
+			"image_urls":   images,
+			"aspect_ratio": opts.AspectRatio,
+		},
+	}
+
+	taskID, err := s.kieAPI.CreateTask(payload)
+	if err != nil {
+		return "", err
+	}
+	if err := s.updateExternalTaskID(requestID, taskID); err != nil {
+		return "", err
+	}
+	return taskID, nil
+}
+
+func (s *GenerationService) HandleKieAPICallback(payload kieapi.CallbackPayload) error {
+	if strings.TrimSpace(payload.TaskID) == "" {
+		return fmt.Errorf("kieapi callback missing taskId")
+	}
+
+	req, err := s.getGenerationRequestByExternalTaskID(payload.TaskID)
+	if err != nil {
+		return err
+	}
+
+	status := strings.ToLower(strings.TrimSpace(payload.Status))
+	if status != "success" && status != "completed" && status != "succeeded" {
+		reason := strings.TrimSpace(payload.Msg)
+		if reason == "" {
+			reason = fmt.Sprintf("kieapi status=%s", payload.Status)
+		}
+		_ = s.updateRequestStatus(req.ID, "failed", reason)
+		req.Status = "failed"
+		req.ErrorMsg = &reason
+		req.Output = nil
+		req.CompletedAt = nil
+		if s.notify != nil {
+			s.notify(req.UserID, req)
+		}
+		s.markDone(req.ID)
+		return nil
+	}
+
+	url := strings.TrimSpace(payload.ResultURL())
+	if url == "" {
+		reason := strings.TrimSpace(payload.Msg)
+		if reason == "" {
+			reason = "kieapi callback missing result url"
+		}
+		_ = s.updateRequestStatus(req.ID, "failed", reason)
+		req.Status = "failed"
+		req.ErrorMsg = &reason
+		req.Output = nil
+		req.CompletedAt = nil
+		if s.notify != nil {
+			s.notify(req.UserID, req)
+		}
+		s.markDone(req.ID)
+		return nil
+	}
+
+	if req.Status == "completed" {
+		s.markDone(req.ID)
+		return nil
+	}
+
 	if err := s.completeRequest(req.ID, url); err != nil {
 		return err
 	}
