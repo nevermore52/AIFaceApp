@@ -405,20 +405,21 @@ func (s *GenerationService) createKieAPITask(requestID int64, opts GenerationOpt
 }
 
 func (s *GenerationService) HandleKieAPICallback(payload kieapi.CallbackPayload) error {
-	if strings.TrimSpace(payload.TaskID) == "" {
+	taskID := strings.TrimSpace(payload.TaskIDValue())
+	if taskID == "" {
 		return fmt.Errorf("kieapi callback missing taskId")
 	}
 
-	req, err := s.getGenerationRequestByExternalTaskID(payload.TaskID)
+	req, err := s.getGenerationRequestByExternalTaskID(taskID)
 	if err != nil {
 		return err
 	}
 
-	status := strings.ToLower(strings.TrimSpace(payload.Status))
+	status := strings.ToLower(strings.TrimSpace(payload.StatusValue()))
 	if status != "success" && status != "completed" && status != "succeeded" {
 		reason := strings.TrimSpace(payload.Msg)
 		if reason == "" {
-			reason = fmt.Sprintf("kieapi status=%s", payload.Status)
+			reason = fmt.Sprintf("kieapi status=%s", payload.StatusValue())
 		}
 		_ = s.updateRequestStatus(req.ID, "failed", reason)
 		req.Status = "failed"

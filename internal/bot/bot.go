@@ -187,7 +187,8 @@ func (b *Bot) startWebhookServer() {
 			http.Error(w, "bad request", http.StatusBadRequest)
 			return
 		}
-		if strings.TrimSpace(payload.TaskID) == "" {
+		taskID := strings.TrimSpace(payload.TaskIDValue())
+		if taskID == "" {
 			log.Printf("kieapi callback missing taskId body=%s", truncateForLog(string(body), 300))
 			http.Error(w, "bad request", http.StatusBadRequest)
 			return
@@ -197,7 +198,7 @@ func (b *Bot) startWebhookServer() {
 			http.Error(w, "error", http.StatusBadRequest)
 			return
 		}
-		log.Printf("kieapi callback handled OK task=%s from %s", payload.TaskID, r.RemoteAddr)
+		log.Printf("kieapi callback handled OK task=%s from %s", taskID, r.RemoteAddr)
 		w.WriteHeader(http.StatusOK)
 	})
 

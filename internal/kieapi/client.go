@@ -42,14 +42,56 @@ type CreateTaskResponse struct {
 }
 
 type CallbackPayload struct {
-	TaskID string `json:"taskId"`
-	Status string `json:"status"`
-	Result any    `json:"result"`
-	Msg    string `json:"msg"`
+	Code int    `json:"code"`
+	Msg  string `json:"msg"`
+	Data struct {
+		TaskID     string `json:"taskId"`
+		TaskIDAlt  string `json:"task_id"`
+		State      string `json:"state"`
+		Status     string `json:"status"`
+		Result     any    `json:"result"`
+		ResultJson string `json:"resultJson"`
+	} `json:"data"`
+}
+
+func (p CallbackPayload) TaskIDValue() string {
+	id := strings.TrimSpace(p.Data.TaskID)
+	if id == "" {
+		id = strings.TrimSpace(p.Data.TaskIDAlt)
+	}
+	return id
+}
+
+func (p CallbackPayload) StatusValue() string {
+	st := strings.TrimSpace(p.Data.State)
+	if st == "" {
+		st = strings.TrimSpace(p.Data.Status)
+	}
+	return st
 }
 
 func (p CallbackPayload) ResultURL() string {
-	return findFirstHTTP(p.Result)
+	if u := findFirstHTTP(p.Data.Result); u != "" {
+		return u
+	}
+	raw := strings.TrimSpace(p.Data.ResultJson)
+	if raw == "" {
+		return ""
+	}
+	var parsed struct {
+		ResultUrls []string `json:"resultUrls"`
+		ResultURLs []string `json:"result_urls"`
+	}
+	if err := json.Unmarshal([]byte(raw), &parsed); err != nil {
+		return ""
+	}
+	if len(parsed.ResultUrls) > 0 {
+		return strings.TrimSpace(parsed.ResultUrls[0])
+	}
+	if len(parsed.ResultURLs) > 0 {
+		return strings.TrimSpace(parsed.ResultURLs[0])
+	}
+	return ""
 }
 
 func (c *Client) CreateTask(req CreateTaskRequest) (string, error) {
@@ -113,7 +155,7 @@ func (c *Client) CreateTask(req CreateTaskRequest) (string, error) {
 	if msg == "" {
 		msg = strings.TrimSpace(parsed.Msg)
 	}
-	if parsed.Code != 0 {
+	if parsed.Code != 0 && parsed.Code != 200 {
 		limited := parsed.RawBody
 		if len(limited) > 2048 {
 			limited = limited[:2048]
