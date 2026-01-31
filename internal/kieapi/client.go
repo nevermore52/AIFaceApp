@@ -20,7 +20,7 @@ func NewClient(apiKey, baseURL string) *Client {
 	return &Client{
 		apiKey:  strings.TrimSpace(apiKey),
 		baseURL: strings.TrimRight(strings.TrimSpace(baseURL), "/"),
-		client: &http.Client{Timeout: 2 * time.Minute},
+		client:  &http.Client{Timeout: 2 * time.Minute},
 	}
 }
 
@@ -31,10 +31,13 @@ type CreateTaskRequest struct {
 }
 
 type CreateTaskResponse struct {
+	RawBody string `json:"-"`
 	Code    int    `json:"code"`
 	Message string `json:"message"`
+	Msg     string `json:"msg"`
 	Data    struct {
-		TaskID string `json:"taskId"`
+		TaskID    string `json:"taskId"`
+		TaskIDAlt string `json:"task_id"`
 	} `json:"data"`
 }
 
@@ -104,11 +107,28 @@ func (c *Client) CreateTask(req CreateTaskRequest) (string, error) {
 	if err := json.Unmarshal(raw, &parsed); err != nil {
 		return "", fmt.Errorf("parse kieapi response: %w", err)
 	}
+	parsed.RawBody = string(raw)
+
+	msg := strings.TrimSpace(parsed.Message)
+	if msg == "" {
+		msg = strings.TrimSpace(parsed.Msg)
+	}
 	if parsed.Code != 0 {
-		return "", fmt.Errorf("kieapi error: %s", strings.TrimSpace(parsed.Message))
+		limited := parsed.RawBody
+		if len(limited) > 2048 {
+			limited = limited[:2048]
+		}
+		return "", fmt.Errorf("kieapi error: code=%d message=%s raw=%s", parsed.Code, msg, limited)
 	}
 	if strings.TrimSpace(parsed.Data.TaskID) == "" {
-		return "", fmt.Errorf("kieapi response missing taskId")
+		parsed.Data.TaskID = strings.TrimSpace(parsed.Data.TaskIDAlt)
+	}
+	if strings.TrimSpace(parsed.Data.TaskID) == "" {
+		limited := parsed.RawBody
+		if len(limited) > 2048 {
+			limited = limited[:2048]
+		}
+		return "", fmt.Errorf("kieapi response missing taskId: raw=%s", limited)
 	}
 	return parsed.Data.TaskID, nil
 }
