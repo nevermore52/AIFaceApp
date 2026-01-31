@@ -1409,9 +1409,6 @@ func findModelOption(id string) (ModelOption, bool) {
 	if strings.EqualFold(id, "gemini") || strings.EqualFold(id, "gemini-2.5-flash-image") || strings.EqualFold(id, "nano-banana") {
 		id = "google/nano-banana"
 	}
-	if strings.EqualFold(id, "nano-banana-pro") {
-		id = "google/nano-banana-pro"
-	}
 	for _, m := range modelOptions {
 		if strings.EqualFold(m.ID, id) {
 			return m, true
@@ -3972,13 +3969,24 @@ func (b *Bot) editMessageTextOrCaption(chatID int64, messageID int, text string,
 	if _, err := b.api.Send(editText); err == nil {
 		return nil
 	} else {
-		editCaption := tgbotapi.NewEditMessageCaption(chatID, messageID, text)
-		editCaption.ReplyMarkup = &markup
-		if _, errCap := b.api.Send(editCaption); errCap == nil {
+		errText := err.Error()
+		if strings.Contains(errText, "message is not modified") {
 			return nil
-		} else {
-			return errCap
 		}
+		// Падаем на edit caption только если это действительно медиа-сообщение.
+		if strings.Contains(errText, "there is no text in the message to edit") || strings.Contains(errText, "message to edit not found") {
+			editCaption := tgbotapi.NewEditMessageCaption(chatID, messageID, text)
+			editCaption.ReplyMarkup = &markup
+			if _, errCap := b.api.Send(editCaption); errCap == nil {
+				return nil
+			} else {
+				if strings.Contains(errCap.Error(), "message is not modified") {
+					return nil
+				}
+				return errCap
+			}
+		}
+		return err
 	}
 }
 
