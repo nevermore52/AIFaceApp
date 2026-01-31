@@ -356,7 +356,7 @@ func (s *GenerationService) HandleDefAPICallback(payload defapi.CallbackPayload)
 
 func useKieAPIModel(model string) bool {
 	model = strings.ToLower(strings.TrimSpace(model))
-	return model == "kie/nano-banana-edit" || model == "kie/nano-banana-pro"
+	return model == "kie/nano-banana-edit" || model == "nano-banana-pro"
 }
 
 func mapKieAPIModel(model string) string {
@@ -384,14 +384,23 @@ func (s *GenerationService) createKieAPITask(requestID int64, opts GenerationOpt
 	}
 
 	apiModel := mapKieAPIModel(opts.Model)
+	input := map[string]any{
+		"prompt":       opts.Prompt,
+		"aspect_ratio": opts.AspectRatio,
+	}
+	if strings.EqualFold(strings.TrimSpace(opts.Model), "nano-banana-pro") {
+		if len(images) > 0 {
+			input["image_input"] = images
+		} else {
+			input["image_input"] = []string{}
+		}
+	} else {
+		input["image_urls"] = images
+	}
 	payload := kieapi.CreateTaskRequest{
 		Model:       apiModel,
 		CallBackURL: callbackURL,
-		Input: map[string]any{
-			"prompt":       opts.Prompt,
-			"image_urls":   images,
-			"aspect_ratio": opts.AspectRatio,
-		},
+		Input:       input,
 	}
 
 	taskID, err := s.kieAPI.CreateTask(payload)
