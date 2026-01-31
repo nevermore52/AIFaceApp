@@ -365,7 +365,7 @@ func mapKieAPIModel(model string) string {
 	case "kie/nano-banana-edit":
 		return "google/nano-banana-edit"
 	case "kie/nano-banana-pro":
-		return "google/nano-banana-pro"
+		return "nano-banana-pro"
 	default:
 		return model
 	}
