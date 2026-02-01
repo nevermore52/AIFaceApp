@@ -3951,7 +3951,7 @@ func (b *Bot) sendModelMenu(chatID int64, userID int64, category ModelCategory, 
 }
 
 func (b *Bot) sendHelpMessage(chatID int64) {
-	text := `Админ: @wwqeew52`
+	text := `Тех поддержка: @wwqeew52`
 
 	msg := tgbotapi.NewMessage(chatID, text)
 	_, err := b.api.Send(msg)
