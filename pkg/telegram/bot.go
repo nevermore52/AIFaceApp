@@ -4423,25 +4423,31 @@ func (b *Bot) sendGenerationStatus(chatID int64, req *models.GenerationRequest) 
 	}
 
 	statusEmoji, statusText := b.statusInfo(req.Status)
-	typeLabel := "Редактирование фото"
 	modelLabel := ""
+	modelHint := ""
 	if req != nil {
 		if opt, ok := findModelOption(req.Model); ok && opt.Label != "" {
 			modelLabel = opt.Label
 		} else {
 			modelLabel = req.Model
 		}
+		if strings.EqualFold(req.Model, "google/nano-banana") || strings.EqualFold(req.Model, "nano-banana") || strings.EqualFold(req.Model, "gemini") || strings.EqualFold(req.Model, "gemini-2.5-flash-image") || strings.EqualFold(req.Model, "kie/nano-banana-edit") {
+			modelHint = "если вас не устраивает результат попробуйте Nano Banana Pro"
+		}
 	}
 	baseText := fmt.Sprintf(`%s Статус генерации:
 
-📝 Тип: %s
-🔄 Статус: %s
-
-🤖 Модель: %s`,
+🤖 Модель: %s%s
+🔄 Статус: %s`,
 		statusEmoji,
-		typeLabel,
-		statusText,
 		modelLabel,
+		func() string {
+			if modelHint == "" {
+				return ""
+			}
+			return ", " + modelHint
+		}(),
+		statusText,
 	)
 
 	// Если есть картинка в data URL — отправляем как фото, чтобы не ловить "Request Entity Too Large"
