@@ -167,16 +167,16 @@ func (b *Bot) setUserAspectRatio(userID int64, ratio string) {
 }
 
 func (b *Bot) sendNanoBananaAPIStatus(chatID int64) {
-	enabled, err := b.userService.IsNanoBananaDefAPIEnabled()
+	provider, err := b.userService.GetNanoBananaProvider()
 	if err != nil {
 		b.sendErrorMessage(chatID, "Не удалось получить состояние Nano Banana API")
 		return
 	}
-	state := "PIAPI"
+	state := "KieAPI"
 	toggleLabel := "Переключить на DefAPI"
-	if enabled {
+	if strings.EqualFold(provider, "defapi") {
 		state = "DefAPI"
-		toggleLabel = "Переключить на PiAPI"
+		toggleLabel = "Переключить на KieAPI"
 	}
 	text := fmt.Sprintf("🍌 Nano Banana API: %s", state)
 	kb := tgbotapi.NewInlineKeyboardMarkup(
@@ -193,12 +193,16 @@ func (b *Bot) sendNanoBananaAPIStatus(chatID int64) {
 }
 
 func (b *Bot) toggleNanoBananaAPI(chatID int64) {
-	enabled, err := b.userService.IsNanoBananaDefAPIEnabled()
+	provider, err := b.userService.GetNanoBananaProvider()
 	if err != nil {
 		b.sendErrorMessage(chatID, "Не удалось проверить Nano Banana API")
 		return
 	}
-	if err := b.userService.SetNanoBananaDefAPIEnabled(!enabled); err != nil {
+	next := "defapi"
+	if strings.EqualFold(provider, "defapi") {
+		next = "kieapi"
+	}
+	if err := b.userService.SetNanoBananaProvider(next); err != nil {
 		b.sendErrorMessage(chatID, "Не удалось переключить Nano Banana API")
 		return
 	}
@@ -621,8 +625,6 @@ func (b *Bot) isUserAllowed(userID int64) bool {
 var modelOptions = []ModelOption{
 	{ID: "google/nano-banana", Label: "🚀 Nano Banana", Desc: locRU.ModelNanoBanana, Category: ModelCategoryPhoto, RequestCost: 1},
 	{ID: "google/nano-banana-pro", Label: "🌟 Nano Banana Pro", Desc: locRU.ModelNanoBananaPro, Category: ModelCategoryPhoto, RequestCost: 4},
-	{ID: "kie/nano-banana-edit", Label: "🚀 Nano Banana (Kie)", Desc: locRU.ModelNanoBanana, Category: ModelCategoryPhoto, RequestCost: 1, AdminOnly: true},
-	{ID: "kie/nano-banana-pro", Label: "🌟 Nano Banana Pro (Kie)", Desc: locRU.ModelNanoBananaPro, Category: ModelCategoryPhoto, RequestCost: 4, AdminOnly: true},
 	{ID: "hug-video", ApiModel: "Qubico/hug-video", Label: "🤗 Обнимашки", Desc: locRU.ModelHugVideo, Category: ModelCategoryVideo, RequestCost: 1, TaskType: "image_to_video"},
 	{ID: "music-suno", ApiModel: "suno", Label: "🎵 Suno Music", Desc: locRU.ModelSunoMusic, Category: ModelCategoryMusic, RequestCost: 1, TaskType: "music"},
 	{ID: "google/gemini-3-flash", Label: "💬 Gemini 3 Flash", Desc: "", Category: ModelCategoryChat, RequestCost: 1},
@@ -1408,6 +1410,12 @@ func findModelOption(id string) (ModelOption, bool) {
 	// Алиасы
 	if strings.EqualFold(id, "gemini") || strings.EqualFold(id, "gemini-2.5-flash-image") || strings.EqualFold(id, "nano-banana") {
 		id = "google/nano-banana"
+	}
+	if strings.EqualFold(id, "kie/nano-banana-edit") {
+		id = "google/nano-banana"
+	}
+	if strings.EqualFold(id, "kie/nano-banana-pro") {
+		id = "google/nano-banana-pro"
 	}
 	for _, m := range modelOptions {
 		if strings.EqualFold(m.ID, id) {
@@ -3104,11 +3112,18 @@ func (b *Bot) processGeneration(chatID int64, userID int64, photoURLs []string, 
 		ModelType:         string(modelOpt.Category),
 		Username:          username,
 	}
-	if modelOpt.ID == "google/nano-banana" || modelOpt.ID == "google/nano-banana-pro" || modelOpt.ID == "kie/nano-banana-edit" || modelOpt.ID == "kie/nano-banana-pro" {
+	if modelOpt.ID == "google/nano-banana" || modelOpt.ID == "google/nano-banana-pro" {
 		opts.AspectRatio = b.getUserAspectRatio(userID)
 	}
-	if useDef, err := b.userService.IsNanoBananaDefAPIEnabled(); err == nil {
-		opts.UseDefAPI = useDef
+	if modelOpt.ID == "google/nano-banana" || modelOpt.ID == "google/nano-banana-pro" {
+		if provider, err := b.userService.GetNanoBananaProvider(); err == nil {
+			opts.NanoBananaProvider = provider
+		}
+		opts.UseDefAPI = false
+	} else {
+		if useDef, err := b.userService.IsNanoBananaDefAPIEnabled(); err == nil {
+			opts.UseDefAPI = useDef
+		}
 	}
 
 	req, err := b.generationService.StartGeneration(userID, opts)

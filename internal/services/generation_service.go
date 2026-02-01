@@ -73,18 +73,19 @@ type LogRequestOptions struct {
 }
 
 type GenerationOptions struct {
-	InputImage        string
-	InputImages       []string
-	Prompt            string
-	TokensCost        int
-	TokensPrimaryUsed int
-	TokensExtraUsed   int
-	ChatID            int64
-	Model             string
-	ModelType         string
-	Username          string
-	UseDefAPI         bool
-	AspectRatio       string
+	InputImage         string
+	InputImages        []string
+	Prompt             string
+	TokensCost         int
+	TokensPrimaryUsed  int
+	TokensExtraUsed    int
+	ChatID             int64
+	Model              string
+	ModelType          string
+	Username           string
+	UseDefAPI          bool
+	NanoBananaProvider string
+	AspectRatio        string
 }
 
 func NewGenerationService(db *sql.DB, client *openrouter.Client) *GenerationService {
@@ -228,6 +229,45 @@ func (s *GenerationService) processGeneration(req *models.GenerationRequest, opt
 		return
 	}
 
+	// Nano Banana must never go to OpenRouter/PiAPI. Only DefAPI or KieAPI.
+	if strings.EqualFold(strings.TrimSpace(opts.Model), "google/nano-banana") || strings.EqualFold(strings.TrimSpace(opts.Model), "google/nano-banana-pro") {
+		provider := strings.ToLower(strings.TrimSpace(opts.NanoBananaProvider))
+		if provider == "defapi" {
+			taskID, err := s.createDefAPITask(req.ID, opts, images)
+			if err != nil {
+				debugLog("processGeneration DefAPI FAILED: requestID=%d, error=%v", req.ID, err)
+				_ = s.updateRequestStatus(req.ID, "failed", err.Error())
+				req.Status = "failed"
+				errMsg := err.Error()
+				req.ErrorMsg = &errMsg
+				if s.notify != nil {
+					s.notify(opts.ChatID, req)
+				}
+				s.markDone(req.ID)
+				return
+			}
+			debugLog("processGeneration DefAPI task created: requestID=%d taskID=%s", req.ID, taskID)
+			return
+		}
+
+		// default provider is kieapi
+		taskID, err := s.createKieAPITask(req.ID, opts, images)
+		if err != nil {
+			debugLog("processGeneration KieAPI FAILED: requestID=%d, error=%v", req.ID, err)
+			_ = s.updateRequestStatus(req.ID, "failed", err.Error())
+			req.Status = "failed"
+			errMsg := err.Error()
+			req.ErrorMsg = &errMsg
+			if s.notify != nil {
+				s.notify(opts.ChatID, req)
+			}
+			s.markDone(req.ID)
+			return
+		}
+		debugLog("processGeneration KieAPI task created: requestID=%d taskID=%s", req.ID, taskID)
+		return
+	}
+
 	if useKieAPIModel(opts.Model) {
 		taskID, err := s.createKieAPITask(req.ID, opts, images)
 		if err != nil {
@@ -362,6 +402,10 @@ func useKieAPIModel(model string) bool {
 func mapKieAPIModel(model string) string {
 	model = strings.ToLower(strings.TrimSpace(model))
 	switch model {
+	case "google/nano-banana":
+		return "google/nano-banana-edit"
+	case "google/nano-banana-pro":
+		return "nano-banana-pro"
 	case "kie/nano-banana-edit":
 		return "google/nano-banana-edit"
 	case "kie/nano-banana-pro":
@@ -391,7 +435,7 @@ func (s *GenerationService) createKieAPITask(requestID int64, opts GenerationOpt
 		"aspect_ratio": opts.AspectRatio,
 	}
 	modelID := strings.ToLower(strings.TrimSpace(opts.Model))
-	if modelID == "kie/nano-banana-pro" || modelID == "nano-banana-pro" {
+	if modelID == "kie/nano-banana-pro" || modelID == "nano-banana-pro" || modelID == "google/nano-banana-pro" {
 		if len(images) > 0 {
 			input["image_input"] = images
 		} else {

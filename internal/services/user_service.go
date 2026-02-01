@@ -433,6 +433,8 @@ func (s *UserService) ensureAppSettings() error {
 		ON CONFLICT (key) DO NOTHING;
 		INSERT INTO app_settings (key, value) VALUES ('nano_banana_defapi', 'false')
 		ON CONFLICT (key) DO NOTHING;
+		INSERT INTO app_settings (key, value) VALUES ('nano_banana_provider', 'kieapi')
+		ON CONFLICT (key) DO NOTHING;
 	`); err != nil {
 		return err
 	}
@@ -493,6 +495,38 @@ func (s *UserService) IsNanoBananaDefAPIEnabled() (bool, error) {
 		return false, nil
 	}
 	return enabled, nil
+}
+
+func (s *UserService) SetNanoBananaProvider(provider string) error {
+	if err := s.ensureAppSettings(); err != nil {
+		return err
+	}
+	provider = strings.ToLower(strings.TrimSpace(provider))
+	if provider != "defapi" {
+		provider = "kieapi"
+	}
+	_, err := s.db.Exec(`INSERT INTO app_settings (key, value) VALUES ('nano_banana_provider', $1)
+		ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value`, provider)
+	return err
+}
+
+func (s *UserService) GetNanoBananaProvider() (string, error) {
+	if err := s.ensureAppSettings(); err != nil {
+		return "kieapi", err
+	}
+	var raw string
+	err := s.db.QueryRow(`SELECT value FROM app_settings WHERE key = 'nano_banana_provider'`).Scan(&raw)
+	if err == sql.ErrNoRows {
+		return "kieapi", nil
+	}
+	if err != nil {
+		return "kieapi", err
+	}
+	provider := strings.ToLower(strings.TrimSpace(raw))
+	if provider != "defapi" {
+		provider = "kieapi"
+	}
+	return provider, nil
 }
 
 func (s *UserService) SetSubscriptionsEnabled(enabled bool) error {
