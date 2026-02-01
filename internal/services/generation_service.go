@@ -23,7 +23,7 @@ var debugLogging = os.Getenv("DEBUG_LOGGING") != "false"
 
 func debugLog(format string, v ...any) {
 	if debugLogging {
-		log.Printf("[PIAPI GENERATION] "+format, v...)
+		log.Printf("[API GENERATION] "+format, v...)
 	}
 }
 

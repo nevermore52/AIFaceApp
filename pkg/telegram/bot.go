@@ -4424,19 +4424,24 @@ func (b *Bot) sendGenerationStatus(chatID int64, req *models.GenerationRequest) 
 
 	statusEmoji, statusText := b.statusInfo(req.Status)
 	typeLabel := "Редактирование фото"
-	displayTokens := req.TokensUsed
-	if req.Status == "failed" {
-		displayTokens = 0 // показываем 0 при ошибке, даже если списание было
+	modelLabel := ""
+	if req != nil {
+		if opt, ok := findModelOption(req.Model); ok && opt.Label != "" {
+			modelLabel = opt.Label
+		} else {
+			modelLabel = req.Model
+		}
 	}
 	baseText := fmt.Sprintf(`%s Статус генерации:
 
 📝 Тип: %s
 🔄 Статус: %s
-🎫 Использовано запросов: %d`,
+
+🤖 Модель: %s`,
 		statusEmoji,
 		typeLabel,
 		statusText,
-		displayTokens,
+		modelLabel,
 	)
 
 	// Если есть картинка в data URL — отправляем как фото, чтобы не ловить "Request Entity Too Large"

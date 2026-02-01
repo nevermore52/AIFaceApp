@@ -23,7 +23,7 @@ type Client struct {
 
 func (c *Client) debugLog(format string, v ...any) {
 	if c.debugLogging {
-		log.Printf("[PIAPI DEBUG] "+format, v...)
+		log.Printf("[API DEBUG] "+format, v...)
 	}
 }
 
