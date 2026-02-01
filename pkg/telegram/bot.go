@@ -2124,6 +2124,7 @@ func (b *Bot) sendSunoBalance(chatID int64) {
 	}
 
 	b.sendDefAPIBalance(chatID)
+	b.sendKieAPIBalance(chatID)
 }
 
 func (b *Bot) sendDefAPIBalance(chatID int64) {
@@ -2183,6 +2184,65 @@ func (b *Bot) sendDefAPIBalance(chatID int64) {
 	}
 
 	b.sendText(chatID, fmt.Sprintf("Баланс DefAPI (HTTP %d):\n%s", resp.StatusCode, rawShown))
+}
+
+func (b *Bot) sendKieAPIBalance(chatID int64) {
+	if b.cfg == nil {
+		b.sendErrorMessage(chatID, "Конфиг не загружен")
+		return
+	}
+	apiKey := strings.TrimSpace(b.cfg.KieAPI.APIKey)
+	baseURL := strings.TrimSpace(b.cfg.KieAPI.BaseURL)
+	if apiKey == "" || baseURL == "" {
+		b.sendErrorMessage(chatID, "KIEAPI_API_KEY или KIEAPI_BASE_URL не заданы")
+		return
+	}
+	baseURL = strings.TrimRight(baseURL, "/")
+	url := baseURL + "/api/v1/chat/credit"
+
+	req, err := http.NewRequest(http.MethodGet, url, nil)
+	if err != nil {
+		b.sendErrorMessage(chatID, fmt.Sprintf("Ошибка создания KieAPI запроса: %v", err))
+		return
+	}
+	req.Header.Set("Authorization", "Bearer "+apiKey)
+	req.Header.Set("Accept", "application/json")
+
+	client := &http.Client{Timeout: 10 * time.Second}
+	resp, err := client.Do(req)
+	if err != nil {
+		b.sendErrorMessage(chatID, fmt.Sprintf("Запрос KieAPI баланса не удался: %v", err))
+		return
+	}
+	defer resp.Body.Close()
+
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		b.sendErrorMessage(chatID, fmt.Sprintf("Ошибка чтения ответа KieAPI: %v", err))
+		return
+	}
+
+	var (
+		balanceStr string
+		rawShown   = string(body)
+	)
+
+	var payload interface{}
+	if err := json.Unmarshal(body, &payload); err == nil {
+		if s, ok := findStringByKeys(payload, "credit", "credits", "balance", "available_credits", "available"); ok {
+			balanceStr = s
+		} else if num, ok := findNumberByKeys(payload, "credit", "credits", "balance", "available_credits", "available"); ok {
+			balanceStr = fmt.Sprintf("%.8f", num)
+		}
+	}
+
+	if balanceStr != "" {
+		msg := fmt.Sprintf("Баланс KieAPI: %s\n(HTTP %d)", balanceStr, resp.StatusCode)
+		b.sendText(chatID, msg)
+		return
+	}
+
+	b.sendText(chatID, fmt.Sprintf("Баланс KieAPI (HTTP %d):\n%s", resp.StatusCode, rawShown))
 }
 
 // findNumberByKeys ищет первое числовое значение по ключам (float64/числовая строка)
