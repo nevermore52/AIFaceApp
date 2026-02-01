@@ -356,7 +356,7 @@ func (s *GenerationService) HandleDefAPICallback(payload defapi.CallbackPayload)
 
 func useKieAPIModel(model string) bool {
 	model = strings.ToLower(strings.TrimSpace(model))
-	return model == "kie/nano-banana-edit" || model == "kie/nano-banana-pro"
+	return model == "kie/nano-banana-edit" || model == "kie/nano-banana-pro" || model == "nano-banana-pro"
 }
 
 func mapKieAPIModel(model string) string {
@@ -365,6 +365,8 @@ func mapKieAPIModel(model string) string {
 	case "kie/nano-banana-edit":
 		return "google/nano-banana-edit"
 	case "kie/nano-banana-pro":
+		return "nano-banana-pro"
+	case "nano-banana-pro":
 		return "nano-banana-pro"
 	default:
 		return model
@@ -388,7 +390,8 @@ func (s *GenerationService) createKieAPITask(requestID int64, opts GenerationOpt
 		"prompt":       opts.Prompt,
 		"aspect_ratio": opts.AspectRatio,
 	}
-	if strings.EqualFold(strings.TrimSpace(opts.Model), "kie/nano-banana-pro") {
+	modelID := strings.ToLower(strings.TrimSpace(opts.Model))
+	if modelID == "kie/nano-banana-pro" || modelID == "nano-banana-pro" {
 		if len(images) > 0 {
 			input["image_input"] = images
 		} else {

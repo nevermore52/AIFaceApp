@@ -622,7 +622,7 @@ var modelOptions = []ModelOption{
 	{ID: "google/nano-banana", Label: "🚀 Nano Banana", Desc: locRU.ModelNanoBanana, Category: ModelCategoryPhoto, RequestCost: 1},
 	{ID: "google/nano-banana-pro", Label: "🌟 Nano Banana Pro", Desc: locRU.ModelNanoBananaPro, Category: ModelCategoryPhoto, RequestCost: 4},
 	{ID: "kie/nano-banana-edit", Label: "🚀 Nano Banana (Kie)", Desc: locRU.ModelNanoBanana, Category: ModelCategoryPhoto, RequestCost: 1, AdminOnly: true},
-	{ID: "nano-banana-pro", Label: "🌟 Nano Banana Pro (Kie)", Desc: locRU.ModelNanoBananaPro, Category: ModelCategoryPhoto, RequestCost: 4, AdminOnly: true},
+	{ID: "kie/nano-banana-pro", Label: "🌟 Nano Banana Pro (Kie)", Desc: locRU.ModelNanoBananaPro, Category: ModelCategoryPhoto, RequestCost: 4, AdminOnly: true},
 	{ID: "hug-video", ApiModel: "Qubico/hug-video", Label: "🤗 Обнимашки", Desc: locRU.ModelHugVideo, Category: ModelCategoryVideo, RequestCost: 1, TaskType: "image_to_video"},
 	{ID: "music-suno", ApiModel: "suno", Label: "🎵 Suno Music", Desc: locRU.ModelSunoMusic, Category: ModelCategoryMusic, RequestCost: 1, TaskType: "music"},
 	{ID: "google/gemini-3-flash", Label: "💬 Gemini 3 Flash", Desc: "", Category: ModelCategoryChat, RequestCost: 1},
@@ -3104,7 +3104,7 @@ func (b *Bot) processGeneration(chatID int64, userID int64, photoURLs []string, 
 		ModelType:         string(modelOpt.Category),
 		Username:          username,
 	}
-	if modelOpt.ID == "google/nano-banana" || modelOpt.ID == "google/nano-banana-pro" || modelOpt.ID == "kie/nano-banana-edit" || modelOpt.ID == "nano-banana-pro" {
+	if modelOpt.ID == "google/nano-banana" || modelOpt.ID == "google/nano-banana-pro" || modelOpt.ID == "kie/nano-banana-edit" || modelOpt.ID == "kie/nano-banana-pro" {
 		opts.AspectRatio = b.getUserAspectRatio(userID)
 	}
 	if useDef, err := b.userService.IsNanoBananaDefAPIEnabled(); err == nil {
@@ -3848,7 +3848,7 @@ func (b *Bot) sendModelMenu(chatID int64, userID int64, category ModelCategory, 
 			))
 		}
 	}
-	if category == ModelCategoryPhoto && (current == "google/nano-banana" || current == "google/nano-banana-pro" || current == "kie/nano-banana-edit" || current == "nano-banana-pro") {
+	if category == ModelCategoryPhoto && (current == "google/nano-banana" || current == "google/nano-banana-pro" || current == "kie/nano-banana-edit" || current == "kie/nano-banana-pro") {
 		ratio := b.getUserAspectRatio(userID)
 		label := loc.AspectTitle + ": " + ratio
 		rows = append(rows, tgbotapi.NewInlineKeyboardRow(
