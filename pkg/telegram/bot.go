@@ -4492,7 +4492,7 @@ func (b *Bot) sendGenerationStatus(chatID int64, req *models.GenerationRequest) 
 			modelLabel = req.Model
 		}
 		if strings.EqualFold(req.Model, "google/nano-banana") || strings.EqualFold(req.Model, "nano-banana") || strings.EqualFold(req.Model, "gemini") || strings.EqualFold(req.Model, "gemini-2.5-flash-image") || strings.EqualFold(req.Model, "kie/nano-banana-edit") {
-			modelHint = "Если вас не устраивает результат попробуйте Nano Banana Pro"
+			modelHint = "❗️Если вас не устраивает результат, попробуйте выбрать Pro модель"
 		}
 	}
 	baseText := fmt.Sprintf(`%s Статус генерации:
@@ -4507,7 +4507,7 @@ func (b *Bot) sendGenerationStatus(chatID int64, req *models.GenerationRequest) 
 			if modelHint == "" {
 				return ""
 			}
-			return ", " + modelHint
+			return modelHint
 		}(),
 		
 	)
