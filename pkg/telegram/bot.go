@@ -843,7 +843,17 @@ func (b *Bot) handleMessage(msg *tgbotapi.Message) {
 		cmd := msg.Command()
 		args := msg.CommandArguments()
 		if cmd == "start" && args != "" {
-			// Проверка подписки
+			// Сначала создаем/обновляем пользователя с referrer_id, а потом проверяем подписку
+			if _, err := b.userService.GetOrCreateUserWithReferrer(
+				user.ID,
+				user.UserName,
+				user.FirstName,
+				user.LastName,
+				user.LanguageCode,
+				args,
+			); err != nil {
+				log.Printf("Failed to create user with referral: %v", err)
+			}
 			if !b.ensureSubscribed(msg.Chat.ID, user.ID) {
 				return
 			}
@@ -4509,7 +4519,6 @@ func (b *Bot) sendGenerationStatus(chatID int64, req *models.GenerationRequest) 
 			}
 			return modelHint
 		}(),
-		
 	)
 
 	// Если есть картинка в data URL — отправляем как фото, чтобы не ловить "Request Entity Too Large"
