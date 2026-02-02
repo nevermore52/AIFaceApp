@@ -171,6 +171,12 @@ func (s *PaymentService) ProcessSuccessfulPayment(userID int64, category string,
 	if err := s.userService.AddExtraQuota(userID, qCat, qty); err != nil {
 		return err
 	}
+	buyer, err := s.userService.GetUserByTelegramID(userID)
+	if err == nil && buyer.ReferrerID != nil {
+		if err := s.userService.AddReferralPurchaseBonus(*buyer.ReferrerID, qCat, qty); err != nil {
+			log.Printf("failed to add referral purchase bonus: buyer=%d referrer=%d category=%s qty=%d err=%v", userID, *buyer.ReferrerID, category, qty, err)
+		}
+	}
 	if s.notifier != nil {
 		s.notifier(userID, category, qty)
 	}

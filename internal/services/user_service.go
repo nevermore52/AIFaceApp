@@ -701,13 +701,13 @@ func (s *UserService) AddReferralBonus(referrerID int64) error {
 	return tx.Commit()
 }
 
-func (s *UserService) AddReferralPurchaseBonus(referrerID int64, purchaseAmount int) error {
-	bonus := purchaseAmount * 20 / 100
-	if bonus < 1 {
-		bonus = 1
+func (s *UserService) AddReferralPurchaseBonus(referrerID int64, category models.QuotaCategory, purchaseQty int) error {
+	bonus := purchaseQty * 20 / 100
+	if bonus <= 0 {
+		return nil
 	}
 
-	return s.AddExtraQuota(referrerID, models.QuotaCategoryImage, bonus)
+	return s.AddExtraQuota(referrerID, category, bonus)
 }
 
 func (s *UserService) GetOrCreateUserQuota(telegramID int64) (*models.UserQuota, error) {
