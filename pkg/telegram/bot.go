@@ -3090,7 +3090,7 @@ func (b *Bot) ensureSubscribed(chatID int64, userID int64) bool {
 	kb := tgbotapi.NewInlineKeyboardMarkup(
 		tgbotapi.NewInlineKeyboardRow(btn),
 	)
-	text := "Для использования бота нужна подписка на канал @AIFaceApps.\nНажмите «Подписаться», затем вернитесь и повторите команду."
+	text := "Для использования бота нужна подписка на канал t.me/AIFaceApps.\nНажмите «Подписаться», затем вернитесь и повторите команду."
 	msg := tgbotapi.NewMessage(chatID, text)
 	msg.ReplyMarkup = kb
 	if _, err := b.api.Send(msg); err != nil {
