@@ -2603,6 +2603,7 @@ func (b *Bot) sendLanguageMenu(chatID int64, userID int64) {
 	}
 	rows = append(rows, tgbotapi.NewInlineKeyboardRow(
 		tgbotapi.NewInlineKeyboardButtonData(loc.BackBtn, "settings"),
+		tgbotapi.NewInlineKeyboardButtonData(loc.MenuBtn, "menu"),
 	))
 
 	msg := tgbotapi.NewMessage(chatID, loc.LangTitle)
