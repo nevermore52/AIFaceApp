@@ -814,6 +814,17 @@ func (s *GenerationService) FailRequest(requestID int64, reason string) error {
 	return s.updateRequestStatus(requestID, "failed", reason)
 }
 
+func (s *GenerationService) ResetRequestTokensUsed(requestID int64) error {
+	_, err := s.db.Exec(`
+		UPDATE generation_requests
+		SET tokens_used = 0,
+			tokens_primary_used = 0,
+			tokens_extra_used = 0
+		WHERE id = $1
+	`, requestID)
+	return err
+}
+
 func (s *GenerationService) CompleteRequestByExternalTaskID(taskID string, output string) error {
 	if strings.TrimSpace(taskID) == "" {
 		return fmt.Errorf("external task id is empty")

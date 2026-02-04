@@ -24,9 +24,9 @@ func NewPaymentService(provider *payments.PaymentProvider, userService *UserServ
 		userService: userService,
 		priceTable: map[string]map[int]int{
 			"image": {
-				10:  39,
-				50:  195,
-				100: 375,
+				10:  49,
+				50:  225,
+				100: 455,
 				250: 880,
 				500: 1710,
 			},
@@ -38,11 +38,11 @@ func NewPaymentService(provider *payments.PaymentProvider, userService *UserServ
 				500: 500,
 			},
 			"music": {
-				1:   45,
-				5:   199,
-				10:  349,
-				50:  1599,
-				100: 2899,
+				1:   19,
+				5:   89,
+				10:  169,
+				50:  849,
+				100: 1499,
 			},
 			"video": {
 				1:   45,

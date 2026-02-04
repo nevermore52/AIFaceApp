@@ -1782,7 +1782,7 @@ func (b *Bot) processAudioMessage(msg *tgbotapi.Message, modelOpt ModelOption) {
 			resultURL, err = b.generationService.GenerateAudio(text, apiModel, modelOpt.TaskType, "")
 		}
 		if err != nil {
-			if _, logErr := b.generationService.LogRequest(userID, services.LogRequestOptions{
+			req, logErr := b.generationService.LogRequest(userID, services.LogRequestOptions{
 				Username:          username,
 				ModelType:         string(modelOpt.Category),
 				Model:             apiModel,
@@ -1792,10 +1792,16 @@ func (b *Bot) processAudioMessage(msg *tgbotapi.Message, modelOpt ModelOption) {
 				TokensUsed:        requestCost,
 				TokensPrimaryUsed: primaryUsed,
 				TokensExtraUsed:   extraUsed,
-			}); logErr != nil {
+			})
+			if logErr != nil {
 				log.Printf("LogRequest(music failed) error: %v", logErr)
 			}
 			_ = b.userService.RefundQuota(userID, models.QuotaCategoryMusic, primaryUsed, extraUsed)
+			if req != nil {
+				if resetErr := b.generationService.ResetRequestTokensUsed(req.ID); resetErr != nil {
+					log.Printf("ResetRequestTokensUsed(music failed) error: %v", resetErr)
+				}
+			}
 			b.sendErrorMessage(chatID, fmt.Sprintf("Не удалось озвучить: %s", friendlyGenerationError(err)))
 			return
 		}
@@ -1854,7 +1860,7 @@ func (b *Bot) processAudioMessage(msg *tgbotapi.Message, modelOpt ModelOption) {
 
 		// На всякий случай, если нет ни URL, ни taskId
 		b.sendErrorMessage(chatID, "Сервис не вернул ссылку и taskId. Попробуйте позже.")
-		if _, logErr := b.generationService.LogRequest(userID, services.LogRequestOptions{
+		req, logErr := b.generationService.LogRequest(userID, services.LogRequestOptions{
 			Username:          username,
 			ModelType:         string(modelOpt.Category),
 			Model:             apiModel,
@@ -1864,10 +1870,16 @@ func (b *Bot) processAudioMessage(msg *tgbotapi.Message, modelOpt ModelOption) {
 			TokensUsed:        requestCost,
 			TokensPrimaryUsed: primaryUsed,
 			TokensExtraUsed:   extraUsed,
-		}); logErr != nil {
+		})
+		if logErr != nil {
 			log.Printf("LogRequest(music empty result) error: %v", logErr)
 		}
 		_ = b.userService.RefundQuota(userID, models.QuotaCategoryMusic, primaryUsed, extraUsed)
+		if req != nil {
+			if resetErr := b.generationService.ResetRequestTokensUsed(req.ID); resetErr != nil {
+				log.Printf("ResetRequestTokensUsed(music empty result) error: %v", resetErr)
+			}
+		}
 	})
 }
 
@@ -2025,6 +2037,11 @@ func (b *Bot) HandleSunoError(taskID, errMsg string) {
 		log.Printf("FailRequestByExternalTaskID error: %v", err)
 	}
 	_ = b.userService.RefundQuota(task.UserID, models.QuotaCategoryMusic, task.PrimaryUsed, task.ExtraUsed)
+	if task.RequestID != 0 {
+		if resetErr := b.generationService.ResetRequestTokensUsed(task.RequestID); resetErr != nil {
+			log.Printf("ResetRequestTokensUsed(suno error) error: %v", resetErr)
+		}
+	}
 	message := fmt.Sprintf("Не удалось сгенерировать песню: %s", strings.TrimSpace(errMsg))
 	if strings.TrimSpace(errMsg) == "" {
 		message = "Не удалось сгенерировать песню. Попробуйте изменить запрос и повторить."
@@ -3363,6 +3380,11 @@ func (b *Bot) handleTextMessage(msg *tgbotapi.Message) {
 					}
 				}
 				_ = b.userService.RefundQuota(msg.From.ID, models.QuotaCategoryText, primaryUsed, extraUsed)
+				if requestID != 0 {
+					if resetErr := b.generationService.ResetRequestTokensUsed(requestID); resetErr != nil {
+						log.Printf("ResetRequestTokensUsed(chat) error: %v", resetErr)
+					}
+				}
 				b.sendErrorMessage(msg.Chat.ID, fmt.Sprintf("Не удалось ответить: %s", friendlyGenerationError(err)))
 				return
 			}
@@ -4584,6 +4606,9 @@ func (b *Bot) sendGenerationStatus(chatID int64, req *models.GenerationRequest) 
 		if !skipRefund && req.TokensUsed > 0 && req.UserID != 0 {
 			if err := b.userService.RefundQuota(req.UserID, models.QuotaCategoryImage, req.TokensPrimaryUsed, req.TokensExtraUsed); err != nil {
 				log.Printf("refund on failed generation error: %v", err)
+			}
+			if resetErr := b.generationService.ResetRequestTokensUsed(req.ID); resetErr != nil {
+				log.Printf("ResetRequestTokensUsed(image failed) error: %v", resetErr)
 			}
 		}
 		baseText += fmt.Sprintf("\n\n❌ Ошибка: %s", friendly)
