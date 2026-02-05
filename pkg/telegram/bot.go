@@ -854,9 +854,6 @@ func (b *Bot) handleMessage(msg *tgbotapi.Message) {
 			); err != nil {
 				log.Printf("Failed to create user with referral: %v", err)
 			}
-			if !b.ensureSubscribed(msg.Chat.ID, user.ID) {
-				return
-			}
 			b.handleStartWithReferral(msg, args)
 			return
 		}
@@ -880,11 +877,6 @@ func (b *Bot) handleMessage(msg *tgbotapi.Message) {
 		if !b.checkCooldown(msg.Chat.ID, user.ID) {
 			return
 		}
-	}
-
-	// Проверяем обязательную подписку
-	if !b.ensureSubscribed(msg.Chat.ID, user.ID) {
-		return
 	}
 
 	// Обрабатываем команды
@@ -1697,11 +1689,6 @@ func (b *Bot) processAudioMessage(msg *tgbotapi.Message, modelOpt ModelOption) {
 	username := ""
 	if userRec != nil {
 		username = userRec.Username
-	}
-
-	// Проверка подписки
-	if !b.ensureSubscribed(chatID, userID) {
-		return
 	}
 
 	if !b.ensureCategoryEnabled(chatID, ModelCategoryMusic) {
@@ -2632,10 +2619,6 @@ func (b *Bot) sendLanguageMenu(chatID int64, userID int64) {
 
 // processVideoGeneration обрабатывает видео-генерацию из фото (image_to_video)
 func (b *Bot) processVideoGeneration(chatID int64, userID int64, photoURL string, modelOpt ModelOption) {
-	if !b.ensureSubscribed(chatID, userID) {
-		return
-	}
-
 	if !b.ensureCategoryEnabled(chatID, ModelCategoryVideo) {
 		return
 	}
@@ -3075,17 +3058,7 @@ func (b *Bot) handleCallback(callback *tgbotapi.CallbackQuery) {
 	// (пусто — ответили мгновенно в начале)
 }
 
-// ensureSubscribed проверяет подписку пользователя на обязательный канал
-func (b *Bot) ensureSubscribed(chatID int64, userID int64) bool {
-	// Пользователи с любой активной подпиской (Mini/Start/Pro) или premium-флагом
-	// не обязаны подписываться на канал.
-	if label, ok := b.userService.GetSubscriptionLabel(userID); ok && label != "Free" {
-		return true
-	}
-	if user, err := b.userService.GetUserByTelegramID(userID); err == nil && user != nil && user.IsPremium {
-		return true
-	}
-
+func (b *Bot) isChannelMember(userID int64) (bool, error) {
 	member, err := b.api.GetChatMember(tgbotapi.GetChatMemberConfig{
 		ChatConfigWithUser: tgbotapi.ChatConfigWithUser{
 			SuperGroupUsername: requiredChannelUsername,
@@ -3093,36 +3066,32 @@ func (b *Bot) ensureSubscribed(chatID int64, userID int64) bool {
 		},
 	})
 	if err != nil {
-		log.Printf("ensureSubscribed error: %v", err)
-		b.sendErrorMessage(chatID, "Не удалось проверить подписку. Попробуйте ещё раз.")
-		return false
+		return false, err
 	}
-
 	status := member.Status
 	if status == "creator" || status == "administrator" || status == "member" || (status == "restricted" && member.IsMember) {
-		return true
+		return true, nil
 	}
+	return false, nil
+}
 
-	btn := tgbotapi.NewInlineKeyboardButtonData("Проверить подписку", "menu")
+func (b *Bot) sendChannelTrialMenu(chatID int64) {
+	joinBtn := tgbotapi.NewInlineKeyboardButtonURL("Подписаться", requiredChannelLink)
+	checkBtn := tgbotapi.NewInlineKeyboardButtonData("Проверить подписку", "menu")
 	kb := tgbotapi.NewInlineKeyboardMarkup(
-		tgbotapi.NewInlineKeyboardRow(btn),
+		tgbotapi.NewInlineKeyboardRow(joinBtn),
+		tgbotapi.NewInlineKeyboardRow(checkBtn),
 	)
-	text := "Для использования бота нужна подписка на канал t.me/AIFaceApps.\nНажмите «Подписаться», затем вернитесь и повторите команду."
+	text := "Подпишитесь на канал t.me/AIFaceApps, чтобы получить 1 пробную генерацию фото.\nПосле подписки нажмите «Проверить подписку» и попробуйте снова."
 	msg := tgbotapi.NewMessage(chatID, text)
 	msg.ReplyMarkup = kb
 	if _, err := b.api.Send(msg); err != nil {
-		log.Printf("ensureSubscribed send message error: %v", err)
+		log.Printf("sendChannelTrialMenu send message error: %v", err)
 	}
-	return false
 }
 
 // processGeneration обрабатывает генерацию изображения
 func (b *Bot) processGeneration(chatID int64, userID int64, photoURLs []string, genType string, prompt string) {
-	// Проверяем обязательную подписку
-	if !b.ensureSubscribed(chatID, userID) {
-		return
-	}
-
 	if !b.ensureCategoryEnabled(chatID, ModelCategoryPhoto) {
 		return
 	}
@@ -3175,6 +3144,35 @@ func (b *Bot) processGeneration(chatID int64, userID int64, photoURLs []string, 
 	// Списываем запросы согласно выбранной модели
 	primaryUsed, extraUsed, err := b.userService.ConsumeQuotaDetailed(userID, models.QuotaCategoryImage, requestCost)
 	if err != nil {
+		// 1 пробная генерация фото за подписку на канал (только 1 раз)
+		if requestCost == 1 {
+			claimed, cErr := b.userService.HasClaimedChannelTrial(userID)
+			if cErr == nil && !claimed {
+				member, mErr := b.isChannelMember(userID)
+				if mErr != nil {
+					log.Printf("channel member check error: %v", mErr)
+					b.sendErrorMessage(chatID, "Не удалось проверить подписку. Попробуйте ещё раз.")
+					return
+				}
+				if !member {
+					b.sendChannelTrialMenu(chatID)
+					return
+				}
+				if err := b.userService.AddExtraQuota(userID, models.QuotaCategoryImage, 1); err != nil {
+					log.Printf("failed to grant channel trial quota: %v", err)
+					b.sendErrorMessage(chatID, "Не удалось выдать пробную генерацию. Попробуйте ещё раз.")
+					return
+				}
+				_ = b.userService.MarkChannelTrialClaimed(userID)
+				primaryUsed, extraUsed, err = b.userService.ConsumeQuotaDetailed(userID, models.QuotaCategoryImage, requestCost)
+				if err == nil {
+					b.sendText(chatID, "✅ Пробная генерация активирована")
+				} else {
+					b.sendInsufficientQuotaMessage(chatID, models.QuotaCategoryImage, requestCost, err)
+					return
+				}
+			}
+		}
 		b.sendInsufficientQuotaMessage(chatID, models.QuotaCategoryImage, requestCost, err)
 		return
 	}

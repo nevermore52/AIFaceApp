@@ -362,6 +362,28 @@ func (s *UserService) AddExtraQuota(telegramID int64, category models.QuotaCateg
 	return err
 }
 
+func (s *UserService) ensureChannelTrialColumn() error {
+	_, err := s.db.Exec(`ALTER TABLE users ADD COLUMN IF NOT EXISTS channel_trial_claimed BOOLEAN NOT NULL DEFAULT FALSE`)
+	return err
+}
+
+func (s *UserService) HasClaimedChannelTrial(telegramID int64) (bool, error) {
+	if err := s.ensureChannelTrialColumn(); err != nil {
+		return false, err
+	}
+	var claimed bool
+	err := s.db.QueryRow(`SELECT channel_trial_claimed FROM users WHERE telegram_id = $1`, telegramID).Scan(&claimed)
+	return claimed, err
+}
+
+func (s *UserService) MarkChannelTrialClaimed(telegramID int64) error {
+	if err := s.ensureChannelTrialColumn(); err != nil {
+		return err
+	}
+	_, err := s.db.Exec(`UPDATE users SET channel_trial_claimed = TRUE, updated_at = CURRENT_TIMESTAMP WHERE telegram_id = $1`, telegramID)
+	return err
+}
+
 var allCategories = []string{"photo", "video", "music", "chat"}
 
 func (s *UserService) ensureCategorySettings() error {
