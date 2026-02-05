@@ -136,7 +136,7 @@ func (s *UserService) CreateUser(telegramID int64, username, firstName, lastName
 
 	if _, quotaErr := s.db.Exec(`
 		INSERT INTO user_quotas (telegram_id, text_daily, text_extra, image_weekly, image_extra, music_weekly, music_extra, video_weekly, video_extra)
-		VALUES ($1, 10, 0, 0, 1, 0, 0, 0, 0)
+		VALUES ($1, 10, 0, 0, 0, 0, 0, 0, 0)
 		ON CONFLICT (telegram_id) DO NOTHING
 	`, telegramID); quotaErr != nil {
 		return nil, quotaErr

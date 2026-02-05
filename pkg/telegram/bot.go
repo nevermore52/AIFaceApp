@@ -2959,7 +2959,7 @@ func (b *Bot) handleCallback(callback *tgbotapi.CallbackQuery) {
 			return
 		}
 		if !member {
-			b.sendChannelTrialMenu(chatID)
+			b.sendText(chatID, "Не удалось проверить подписку, попробуйте еще раз")
 			return
 		}
 		if err := b.userService.AddExtraQuota(userID, models.QuotaCategoryImage, 1); err != nil {
@@ -3121,10 +3121,8 @@ func (b *Bot) isChannelMember(userID int64) (bool, error) {
 }
 
 func (b *Bot) sendChannelTrialMenu(chatID int64) {
-	joinBtn := tgbotapi.NewInlineKeyboardButtonURL("Подписаться", requiredChannelLink)
 	checkBtn := tgbotapi.NewInlineKeyboardButtonData("Проверить подписку", "trial:check")
 	kb := tgbotapi.NewInlineKeyboardMarkup(
-		tgbotapi.NewInlineKeyboardRow(joinBtn),
 		tgbotapi.NewInlineKeyboardRow(checkBtn),
 	)
 	text := "Подпишитесь на канал t.me/AIFaceApps, чтобы получить 1 пробную генерацию фото.\nПосле подписки нажмите «Проверить подписку» и попробуйте снова."
