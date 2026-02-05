@@ -599,7 +599,7 @@ var locRU = Localization{
 
 	// Common
 	WelcomeText:         "Добро пожаловать! Используйте /menu, чтобы выбрать модель и начать.",
-	StartPromoTitle:     "🔥 В данный момент действует скидка 50%% на фото запросы",
+	StartPromoTitle:     "🔥 В данный момент действует скидка 50%% на фото генерации",
 	StartPromoCountdown: "⏳ До конца акции: %dд %dч %dм",
 	BackBtn:             "⬅️ Назад",
 	MenuBtn:             "🏠 Меню",

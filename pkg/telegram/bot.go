@@ -3190,6 +3190,7 @@ func (b *Bot) processGeneration(chatID int64, userID int64, photoURLs []string, 
 	primaryUsed, extraUsed, err := b.userService.ConsumeQuotaDetailed(userID, models.QuotaCategoryImage, requestCost)
 	if err != nil {
 		// 1 пробная генерация фото за подписку на канал (только 1 раз)
+		// Выдача происходит только по кнопке "Проверить подписку" (trial:check)
 		if requestCost == 1 {
 			claimed, cErr := b.userService.HasClaimedChannelTrial(userID)
 			if cErr == nil && !claimed {
@@ -3203,19 +3204,7 @@ func (b *Bot) processGeneration(chatID int64, userID int64, photoURLs []string, 
 					b.sendChannelTrialMenu(chatID)
 					return
 				}
-				if err := b.userService.AddExtraQuota(userID, models.QuotaCategoryImage, 1); err != nil {
-					log.Printf("failed to grant channel trial quota: %v", err)
-					b.sendErrorMessage(chatID, "Не удалось выдать пробную генерацию. Попробуйте ещё раз.")
-					return
-				}
-				_ = b.userService.MarkChannelTrialClaimed(userID)
-				primaryUsed, extraUsed, err = b.userService.ConsumeQuotaDetailed(userID, models.QuotaCategoryImage, requestCost)
-				if err == nil {
-					b.sendText(chatID, "✅ Пробная генерация активирована")
-				} else {
-					b.sendInsufficientQuotaMessage(chatID, models.QuotaCategoryImage, requestCost, err)
-					return
-				}
+				b.sendText(chatID, "Чтобы получить 1 пробную генерацию, нажмите «Проверить подписку» в /start")
 			}
 		}
 		b.sendInsufficientQuotaMessage(chatID, models.QuotaCategoryImage, requestCost, err)
@@ -3491,7 +3480,15 @@ func (b *Bot) handleStart(msg *tgbotapi.Message) {
 		text += "\n\n" + promo
 	}
 	b.sendText(msg.Chat.ID, text)
-	b.sendStartTrialMenu(msg.Chat.ID)
+	claimed, err := b.userService.HasClaimedChannelTrial(msg.From.ID)
+	if err != nil {
+		log.Printf("trial claimed check error: %v", err)
+		b.sendStartTrialMenu(msg.Chat.ID)
+		return
+	}
+	if !claimed {
+		b.sendStartTrialMenu(msg.Chat.ID)
+	}
 }
 
 // handleStartWithReferral обрабатывает /start с реферальным кодом
@@ -3518,7 +3515,15 @@ func (b *Bot) handleStartWithReferral(msg *tgbotapi.Message, referralCode string
 		text += "\n\n" + promo
 	}
 	b.sendText(msg.Chat.ID, text)
-	b.sendStartTrialMenu(msg.Chat.ID)
+	claimed, err := b.userService.HasClaimedChannelTrial(user.ID)
+	if err != nil {
+		log.Printf("trial claimed check error: %v", err)
+		b.sendStartTrialMenu(msg.Chat.ID)
+		return
+	}
+	if !claimed {
+		b.sendStartTrialMenu(msg.Chat.ID)
+	}
 }
 
 // sendMainMenu отправляет главное меню
