@@ -3103,7 +3103,7 @@ func (b *Bot) ensureSubscribed(chatID int64, userID int64) bool {
 		return true
 	}
 
-	btn := tgbotapi.NewInlineKeyboardButtonURL("Подписаться", requiredChannelLink)
+	btn := tgbotapi.NewInlineKeyboardButtonData("Проверить подписку", "menu")
 	kb := tgbotapi.NewInlineKeyboardMarkup(
 		tgbotapi.NewInlineKeyboardRow(btn),
 	)
