@@ -78,7 +78,7 @@ func (b *Bot) sendStartTrialMenu(chatID int64) {
 	kb := tgbotapi.NewInlineKeyboardMarkup(
 		tgbotapi.NewInlineKeyboardRow(btn),
 	)
-	text := fmt.Sprintf("Чтобы получить 1 пробную генерацию фото — подпишитесь на канал %s\n%s", requiredChannelUsername, requiredChannelLink)
+	text := fmt.Sprintf("Чтобы получить 1 пробную генерацию фото — подпишитесь на канал %s\n%s и нажмите «Проверить подписку»", requiredChannelUsername, requiredChannelLink)
 	msg := tgbotapi.NewMessage(chatID, text)
 	msg.ReplyMarkup = kb
 	if _, err := b.api.Send(msg); err != nil {
