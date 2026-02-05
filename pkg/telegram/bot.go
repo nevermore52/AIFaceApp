@@ -73,6 +73,19 @@ func (b *Bot) isChatModelAllowed(userID int64, model ModelOption) bool {
 	}
 }
 
+func (b *Bot) sendStartTrialMenu(chatID int64) {
+	btn := tgbotapi.NewInlineKeyboardButtonData("Проверить подписку", "trial:check")
+	kb := tgbotapi.NewInlineKeyboardMarkup(
+		tgbotapi.NewInlineKeyboardRow(btn),
+	)
+	text := fmt.Sprintf("Чтобы получить 1 пробную генерацию фото — подпишитесь на канал %s\n%s", requiredChannelUsername, requiredChannelLink)
+	msg := tgbotapi.NewMessage(chatID, text)
+	msg.ReplyMarkup = kb
+	if _, err := b.api.Send(msg); err != nil {
+		log.Printf("sendStartTrialMenu send message error: %v", err)
+	}
+}
+
 func (b *Bot) chatModelAccessMessage(modelID string) string {
 	switch modelID {
 	case "google/gemini-3-flash":
@@ -2927,6 +2940,38 @@ func (b *Bot) handleCallback(callback *tgbotapi.CallbackQuery) {
 			return
 		}
 		b.sendSunoBalance(chatID)
+	case "trial:check":
+		claimed, err := b.userService.HasClaimedChannelTrial(userID)
+		if err != nil {
+			log.Printf("trial claimed check error: %v", err)
+			b.sendErrorMessage(chatID, "Не удалось проверить пробный запрос")
+			return
+		}
+		if claimed {
+			b.sendText(chatID, "Вы уже получали пробный запрос")
+			b.sendMainMenu(chatID, userID)
+			return
+		}
+		member, mErr := b.isChannelMember(userID)
+		if mErr != nil {
+			log.Printf("trial member check error: %v", mErr)
+			b.sendErrorMessage(chatID, "Не удалось проверить подписку. Попробуйте ещё раз.")
+			return
+		}
+		if !member {
+			b.sendChannelTrialMenu(chatID)
+			return
+		}
+		if err := b.userService.AddExtraQuota(userID, models.QuotaCategoryImage, 1); err != nil {
+			log.Printf("trial grant quota error: %v", err)
+			b.sendErrorMessage(chatID, "Не удалось выдать пробный запрос")
+			return
+		}
+		if err := b.userService.MarkChannelTrialClaimed(userID); err != nil {
+			log.Printf("trial mark claimed error: %v", err)
+		}
+		b.sendText(chatID, "Пробный запрос успешно выдан")
+		b.sendMainMenu(chatID, userID)
 	case "settings":
 		b.sendSettingsMenu(chatID, userID)
 	case "settings:style":
@@ -3077,7 +3122,7 @@ func (b *Bot) isChannelMember(userID int64) (bool, error) {
 
 func (b *Bot) sendChannelTrialMenu(chatID int64) {
 	joinBtn := tgbotapi.NewInlineKeyboardButtonURL("Подписаться", requiredChannelLink)
-	checkBtn := tgbotapi.NewInlineKeyboardButtonData("Проверить подписку", "menu")
+	checkBtn := tgbotapi.NewInlineKeyboardButtonData("Проверить подписку", "trial:check")
 	kb := tgbotapi.NewInlineKeyboardMarkup(
 		tgbotapi.NewInlineKeyboardRow(joinBtn),
 		tgbotapi.NewInlineKeyboardRow(checkBtn),
@@ -3446,7 +3491,7 @@ func (b *Bot) handleStart(msg *tgbotapi.Message) {
 		text += "\n\n" + promo
 	}
 	b.sendText(msg.Chat.ID, text)
-	b.sendLanguageMenu(msg.Chat.ID, msg.From.ID)
+	b.sendStartTrialMenu(msg.Chat.ID)
 }
 
 // handleStartWithReferral обрабатывает /start с реферальным кодом
@@ -3473,7 +3518,7 @@ func (b *Bot) handleStartWithReferral(msg *tgbotapi.Message, referralCode string
 		text += "\n\n" + promo
 	}
 	b.sendText(msg.Chat.ID, text)
-	b.sendLanguageMenu(msg.Chat.ID, msg.From.ID)
+	b.sendStartTrialMenu(msg.Chat.ID)
 }
 
 // sendMainMenu отправляет главное меню
