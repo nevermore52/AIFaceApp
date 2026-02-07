@@ -974,7 +974,7 @@ func (b *Bot) handlePhoto(msg *tgbotapi.Message) {
 	caption := strings.TrimSpace(msg.Caption)
 	if caption == "" && modelOpt.Category == ModelCategoryPhoto {
 		// Для фото без описания просим добавить подпись
-		examples := []string{loc.PhotoExample1, loc.PhotoExample2, loc.PhotoExample3, loc.PhotoExample4}
+		examples := []string{loc.PhotoExample1, loc.PhotoExample3, loc.PhotoExample4}
 		text := loc.PhotoReceived + "\n\n" + loc.PhotoAddCaption + "\n\n" + loc.PhotoExamples + "\n• " + strings.Join(examples, "\n• ")
 		reply := tgbotapi.NewMessage(chatID, text)
 		_, _ = b.api.Send(reply)
@@ -1197,6 +1197,14 @@ func (b *Bot) flushAlbum(mediaGroupID string) {
 	}
 
 	caption := strings.TrimSpace(buf.caption)
+	if caption == "" {
+		loc := b.getLocalization(buf.userID)
+		examples := []string{loc.PhotoExample1, loc.PhotoExample3, loc.PhotoExample4}
+		text := loc.PhotoReceived + "\n\n" + loc.PhotoAddCaption + "\n\n" + loc.PhotoExamples + "\n• " + strings.Join(examples, "\n• ")
+		reply := tgbotapi.NewMessage(buf.chatID, text)
+		_, _ = b.api.Send(reply)
+		return
+	}
 
 	// Тип генерации по описанию
 	genType := b.detectGenerationType(caption)
@@ -4553,6 +4561,13 @@ func numberAsFloat(v interface{}) float64 {
 func (b *Bot) sendGenerationStatus(chatID int64, req *models.GenerationRequest) {
 	if req != nil && req.Status == "failed" && req.ErrorMsg != nil {
 		msg := strings.TrimSpace(*req.ErrorMsg)
+		if strings.Contains(msg, "prompt is required") {
+			loc := b.getLocalization(req.UserID)
+			examples := []string{loc.PhotoExample1, loc.PhotoExample3, loc.PhotoExample4}
+			text := loc.PhotoReceived + "\n\n" + loc.PhotoAddCaption + "\n\n" + loc.PhotoExamples + "\n• " + strings.Join(examples, "\n• ")
+			b.sendText(chatID, text)
+			return
+		}
 		if strings.Contains(msg, "Request successful, but the official returned empty content") ||
 			strings.Contains(msg, "Произошла ошибка возможно вы нарушили правила бота.") {
 			loc := b.getLocalization(req.UserID)
