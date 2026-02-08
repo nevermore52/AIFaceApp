@@ -390,10 +390,10 @@ var locRU = Localization{
 	BuyBackBtn:           "◀️ Назад",
 	BuyMenuBtn:           "🏠 Меню",
 	BuyPackageTitle:      "✅ Вы выбрали пакет %s: %d шт.\nПерейдите по ссылке для оплаты:\n%s",
-	BuyPackageLabelText:  "текстовые запросы",
-	BuyPackageLabelImage: "генерации изображений",
-	BuyPackageLabelMusic: "генерации музыки",
-	BuyPackageLabelVideo: "доп. видео",
+	BuyPackageLabelText:  "текстовых запросов",
+	BuyPackageLabelImage: "генераций фото",
+	BuyPackageLabelMusic: "генераций музыки",
+	BuyPackageLabelVideo: "генераций видео",
 	BuyPackageBackBtn:    "◀️ Назад к категориям",
 
 	// Subscriptions

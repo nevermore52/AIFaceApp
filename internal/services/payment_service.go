@@ -26,7 +26,7 @@ func NewPaymentService(provider *payments.PaymentProvider, userService *UserServ
 			"image": {
 				10:  49,
 				50:  225,
-				100: 455,
+				100: 425,
 				250: 880,
 				500: 1710,
 			},
@@ -41,7 +41,7 @@ func NewPaymentService(provider *payments.PaymentProvider, userService *UserServ
 				1:   19,
 				5:   89,
 				10:  169,
-				50:  849,
+				50:  812,
 				100: 1499,
 			},
 			"video": {

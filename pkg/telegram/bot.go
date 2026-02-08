@@ -5,6 +5,7 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
+	"html"
 	"io"
 	"log"
 	"net/http"
@@ -118,9 +119,7 @@ func formatExtrasPriceMarkdownV2(category string, currentPrice int) string {
 	}
 	if extrasDiscountActiveForCategory(category) {
 		oldPrice := currentPrice * 2
-		// MarkdownV2 strikethrough uses single-tilde: ~text~
-		// Required format: discounted price first, old price struck on the right.
-		return fmt.Sprintf("%d ₽ ~%d ₽~", currentPrice, oldPrice)
+		return fmt.Sprintf("%d ₽ <s>%d ₽</s>", currentPrice, oldPrice)
 	}
 	return fmt.Sprintf("%d ₽", currentPrice)
 }
@@ -295,16 +294,17 @@ func (b *Bot) sendBuyExtrasCategory(chatID int64, userID int64, category string,
 	}
 
 	var sb strings.Builder
-	sb.WriteString(escapeMarkdownV2(header) + "\n\n" + escapeMarkdownV2(loc.BuySelectAction) + "\n")
-	escapedUnit := escapeMarkdownV2(unit)
+	sb.WriteString(html.EscapeString(header) + "\n\n" + html.EscapeString(loc.BuySelectAction) + "\n")
+	escapedUnit := html.EscapeString(unit)
 	for _, p := range packs {
 		if price, ok := b.extrasPrice(category, p); ok {
-			sb.WriteString(fmt.Sprintf("• %d %s — %s\n", p, escapedUnit, formatExtrasPriceMarkdownV2(category, price)))
+			perItem := float64(price) / float64(p)
+			sb.WriteString(fmt.Sprintf("• %d %s — %s (%0.1f ₽/шт)\n", p, escapedUnit, formatExtrasPriceMarkdownV2(category, price), perItem))
 		} else {
 			sb.WriteString(fmt.Sprintf("• %d %s\n", p, escapedUnit))
 		}
 	}
-	text := sb.String() + "\n" + escapeMarkdownV2(loc.BuyConsentNote)
+	text := sb.String() + "\n" + html.EscapeString(loc.BuyConsentNote)
 
 	var rows [][]tgbotapi.InlineKeyboardButton
 	for i := 0; i < len(packs); i += 2 {
@@ -325,7 +325,7 @@ func (b *Bot) sendBuyExtrasCategory(chatID int64, userID int64, category string,
 
 	keyboard := tgbotapi.NewInlineKeyboardMarkup(rows...)
 	reply := tgbotapi.NewMessage(chatID, text)
-	reply.ParseMode = "MarkdownV2"
+	reply.ParseMode = "HTML"
 	reply.ReplyMarkup = keyboard
 
 	if _, err := b.api.Send(reply); err != nil {
@@ -3997,17 +3997,19 @@ func (b *Bot) sendModelMenu(chatID int64, userID int64, category ModelCategory, 
 			if instrOn {
 				instrBtn = "🎹 " + loc.MusicMode + " " + loc.MusicModeInstr
 			}
-			voice := b.getSunoVoice(userID)
-			voiceBtn := "🗣️ " + loc.MusicVoice + " " + loc.MusicVoiceMale
-			if voice == "f" {
-				voiceBtn = "🗣️ " + loc.MusicVoice + " " + loc.MusicVoiceFemale
-			}
 			rows = append(rows, tgbotapi.NewInlineKeyboardRow(
 				tgbotapi.NewInlineKeyboardButtonData(instrBtn, "suno_instr_toggle"),
 			))
-			rows = append(rows, tgbotapi.NewInlineKeyboardRow(
-				tgbotapi.NewInlineKeyboardButtonData(voiceBtn, "suno_voice_toggle"),
-			))
+			if !instrOn {
+				voice := b.getSunoVoice(userID)
+				voiceBtn := "🗣️ " + loc.MusicVoice + " " + loc.MusicVoiceMale
+				if voice == "f" {
+					voiceBtn = "🗣️ " + loc.MusicVoice + " " + loc.MusicVoiceFemale
+				}
+				rows = append(rows, tgbotapi.NewInlineKeyboardRow(
+					tgbotapi.NewInlineKeyboardButtonData(voiceBtn, "suno_voice_toggle"),
+				))
+			}
 		}
 	}
 	if category == ModelCategoryPhoto && (current == "google/nano-banana" || current == "google/nano-banana-pro" || current == "kie/nano-banana-edit" || current == "kie/nano-banana-pro") {
