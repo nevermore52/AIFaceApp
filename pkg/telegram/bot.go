@@ -581,8 +581,6 @@ func categoryLabelByKey(key string) string {
 	}
 }
 
-const piapiHealthAlertChatID int64 = 812157835
-
 const requiredChannelUsername = "@AIFaceApps"
 const requiredChannelLink = "https://t.me/AIFaceApps"
 
@@ -685,9 +683,6 @@ func (b *Bot) Start() error {
 
 	// Устанавливаем команды меню
 	b.setCommands()
-
-	// Периодический healthcheck PiAPI
-	go b.startPiAPIHealthCheck()
 
 	u := tgbotapi.NewUpdate(0)
 	u.Timeout = 60
@@ -4170,18 +4165,6 @@ func (b *Bot) sendRulesMessage(chatID int64, userID int64) {
 	msg := tgbotapi.NewMessage(chatID, text)
 	if _, err := b.api.Send(msg); err != nil {
 		log.Printf("Failed to send rules message: %v", err)
-	}
-}
-
-func (b *Bot) startPiAPIHealthCheck() {
-	ticker := time.NewTicker(10 * time.Minute)
-	defer ticker.Stop()
-	for {
-		if err := b.generationService.HealthCheckPiAPI(); err != nil {
-			alert := fmt.Sprintf("⚠️ PiAPI healthcheck error: %v", err)
-			b.sendText(piapiHealthAlertChatID, alert)
-		}
-		<-ticker.C
 	}
 }
 
