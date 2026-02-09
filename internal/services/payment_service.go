@@ -15,7 +15,7 @@ type PaymentService struct {
 	userService *UserService
 	priceTable  map[string]map[int]int
 	subPrices   map[string]int
-	notifier    func(userID int64, category string, qty int)
+	notifier    func(userID int64, category string, qty int, amount float64, paymentID string)
 }
 
 func NewPaymentService(provider *payments.PaymentProvider, userService *UserService) *PaymentService {
@@ -141,7 +141,7 @@ func (s *PaymentService) SubscriptionPrice(plan string) (int, bool) {
 	return price, ok
 }
 
-func (s *PaymentService) ProcessSuccessfulPayment(userID int64, category string, qty int) error {
+func (s *PaymentService) ProcessSuccessfulPayment(userID int64, category string, qty int, amount float64, paymentID string) error {
 	if _, err := s.userService.GetOrCreateUser(userID, "", "", "", ""); err != nil {
 		return fmt.Errorf("ensure user: %w", err)
 	}
@@ -151,7 +151,7 @@ func (s *PaymentService) ProcessSuccessfulPayment(userID int64, category string,
 			return err
 		}
 		if s.notifier != nil {
-			s.notifier(userID, category, qty)
+			s.notifier(userID, category, qty, amount, paymentID)
 		}
 		return nil
 	}
@@ -178,7 +178,7 @@ func (s *PaymentService) ProcessSuccessfulPayment(userID int64, category string,
 		}
 	}
 	if s.notifier != nil {
-		s.notifier(userID, category, qty)
+		s.notifier(userID, category, qty, amount, paymentID)
 	}
 	return nil
 }
@@ -191,10 +191,10 @@ func (s *PaymentService) HandleYooKassaWebhook(body []byte, authHeader string) e
 	if err != nil {
 		return err
 	}
-	log.Printf("yookassa webhook ok: payment_id=%s user=%d category=%s qty=%d", data.PaymentID, data.UserID, data.Category, data.Qty)
-	return s.ProcessSuccessfulPayment(data.UserID, data.Category, data.Qty)
+	log.Printf("yookassa webhook ok: payment_id=%s user=%d category=%s qty=%d amount=%.2f", data.PaymentID, data.UserID, data.Category, data.Qty, data.Amount)
+	return s.ProcessSuccessfulPayment(data.UserID, data.Category, data.Qty, data.Amount, data.PaymentID)
 }
 
-func (s *PaymentService) SetNotifier(fn func(userID int64, category string, qty int)) {
+func (s *PaymentService) SetNotifier(fn func(userID int64, category string, qty int, amount float64, paymentID string)) {
 	s.notifier = fn
 }

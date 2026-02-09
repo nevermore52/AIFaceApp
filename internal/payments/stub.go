@@ -147,6 +147,7 @@ type YooWebhookData struct {
 	UserID    int64
 	Category  string
 	Qty       int
+	Amount    float64
 }
 
 func (p *PaymentProvider) ParseYooKassaWebhook(body []byte, authHeader string) (*YooWebhookData, error) {
@@ -165,9 +166,13 @@ func (p *PaymentProvider) ParseYooKassaWebhook(body []byte, authHeader string) (
 	var payload struct {
 		Event  string `json:"event"`
 		Object struct {
-			ID       string         `json:"id"`
-			Status   string         `json:"status"`
-			Paid     bool           `json:"paid"`
+			ID     string `json:"id"`
+			Status string `json:"status"`
+			Paid   bool   `json:"paid"`
+			Amount struct {
+				Value    string `json:"value"`
+				Currency string `json:"currency"`
+			} `json:"amount"`
 			Metadata map[string]any `json:"metadata"`
 		} `json:"object"`
 	}
@@ -208,11 +213,22 @@ func (p *PaymentProvider) ParseYooKassaWebhook(body []byte, authHeader string) (
 		return nil, fmt.Errorf("category missing")
 	}
 
+	amountValue := strings.TrimSpace(payload.Object.Amount.Value)
+	amount := 0.0
+	if amountValue != "" {
+		parsedAmount, err := strconv.ParseFloat(amountValue, 64)
+		if err != nil {
+			return nil, fmt.Errorf("invalid amount: %v", err)
+		}
+		amount = parsedAmount
+	}
+
 	return &YooWebhookData{
 		PaymentID: payload.Object.ID,
 		UserID:    userID,
 		Category:  cat,
 		Qty:       int(qty),
+		Amount:    amount,
 	}, nil
 }
 

@@ -777,6 +777,31 @@ func (s *UserService) IsUserAdmin(telegramID int64) (bool, error) {
 	return isAdmin, err
 }
 
+func (s *UserService) GetAdminUsers() ([]*models.User, error) {
+	rows, err := s.db.Query(`
+		SELECT telegram_id, username, first_name, last_name
+		FROM users
+		WHERE is_admin = TRUE
+	`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var users []*models.User
+	for rows.Next() {
+		user := &models.User{}
+		if err := rows.Scan(&user.TelegramID, &user.Username, &user.FirstName, &user.LastName); err != nil {
+			return nil, err
+		}
+		users = append(users, user)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return users, nil
+}
+
 func (s *UserService) isSubscriptionActive(subType string, subEnd *time.Time) bool {
 	if strings.TrimSpace(subType) == "" {
 		return false

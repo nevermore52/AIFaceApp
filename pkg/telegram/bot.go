@@ -4743,12 +4743,13 @@ func (b *Bot) sendLongText(chatID int64, text string) {
 }
 
 // notifyPaymentSuccess отправляет уведомление о зачислении запросов
-func (b *Bot) notifyPaymentSuccess(userID int64, category string, qty int) {
+func (b *Bot) notifyPaymentSuccess(userID int64, category string, qty int, amount float64, paymentID string) {
 	if strings.HasPrefix(category, "subscription:") {
 		plan := strings.TrimPrefix(category, "subscription:")
 		plan = strings.Title(plan)
 		text := fmt.Sprintf("✅ Подписка %s активирована!\nСрок: %d дней", plan, qty)
 		b.sendText(userID, text)
+		b.notifyAdminsAboutPurchase(userID, fmt.Sprintf("Подписка %s", plan), qty, amount, paymentID)
 		return
 	}
 	label := categoryLabelByKey(category)
@@ -4757,6 +4758,43 @@ func (b *Bot) notifyPaymentSuccess(userID int64, category string, qty int) {
 	}
 	text := fmt.Sprintf("✅ Оплата зачислена!\nКатегория: %s\nКоличество: %d", label, qty)
 	b.sendText(userID, text)
+	b.notifyAdminsAboutPurchase(userID, label, qty, amount, paymentID)
+}
+
+func (b *Bot) notifyAdminsAboutPurchase(userID int64, label string, qty int, amount float64, paymentID string) {
+	buyer, err := b.userService.GetUserByTelegramID(userID)
+	if err != nil {
+		log.Printf("notifyAdminsAboutPurchase get user error: %v", err)
+	}
+	username := ""
+	firstName := ""
+	lastName := ""
+	if buyer != nil {
+		username = buyer.Username
+		firstName = buyer.FirstName
+		lastName = buyer.LastName
+	}
+	nameParts := strings.TrimSpace(strings.Join([]string{firstName, lastName}, " "))
+	if nameParts == "" {
+		nameParts = "-"
+	}
+	userLabel := fmt.Sprintf("ID: %d", userID)
+	if username != "" {
+		userLabel += fmt.Sprintf(" (@%s)", username)
+	}
+
+	text := fmt.Sprintf("💳 Новая покупка\nСумма: %.2f ₽\nТариф: %s\nКоличество: %d\nПлатёж: %s\nПокупатель: %s\nИмя: %s", amount, label, qty, paymentID, userLabel, nameParts)
+	admins, err := b.userService.GetAdminUsers()
+	if err != nil {
+		log.Printf("notifyAdminsAboutPurchase get admins error: %v", err)
+		return
+	}
+	for _, admin := range admins {
+		if admin == nil || admin.TelegramID == 0 {
+			continue
+		}
+		b.sendText(admin.TelegramID, text)
+	}
 }
 
 // sendSubscriptionInfo показывает инфо о текущей подписке и кнопки управления
