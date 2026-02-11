@@ -4766,7 +4766,7 @@ func (b *Bot) notifyAdminsAboutPurchase(userID int64, label string, qty int, amo
 		userLabel += fmt.Sprintf(" (@%s)", username)
 	}
 
-	text := fmt.Sprintf("💳 Новая покупка\nСумма: %.2f ₽\nТариф: %s\nКоличество: %d\nПлатёж: %s\nПокупатель: %s\nИмя: %s", amount, label, qty, paymentID, userLabel, nameParts)
+	text := fmt.Sprintf("💳 Новая покупка\nСумма: %.2f ₽\nТариф: %s\nКоличество: %d\nПлатёж: %s\nПокупатель: %s\nИмя: %s", amount, label, qty, paymentID, userLabel, username)
 	admins, err := b.userService.GetAdminUsers()
 	if err != nil {
 		log.Printf("notifyAdminsAboutPurchase get admins error: %v", err)
