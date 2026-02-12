@@ -603,6 +603,9 @@ func (b *Bot) sendAdminMenu(chatID int64) {
 			tgbotapi.NewInlineKeyboardButtonData("👥 Пользователи", "admin:users"),
 		),
 		tgbotapi.NewInlineKeyboardRow(
+			tgbotapi.NewInlineKeyboardButtonData("👤 Кол-во пользователей", "admin:users_count"),
+		),
+		tgbotapi.NewInlineKeyboardRow(
 			tgbotapi.NewInlineKeyboardButtonData("⚙️ Категории", "admin:categories"),
 			tgbotapi.NewInlineKeyboardButtonData("💳 Платежи", "admin:payments"),
 		),
@@ -3038,6 +3041,11 @@ func (b *Bot) handleCallback(callback *tgbotapi.CallbackQuery) {
 			return
 		}
 		b.handleAdminUsers(chatID)
+	case "admin:users_count":
+		if !b.ensureAdmin(chatID, userID) {
+			return
+		}
+		b.handleAdminUsersCount(chatID)
 	case "admin:payments":
 		if !b.ensureAdmin(chatID, userID) {
 			return
@@ -4694,6 +4702,15 @@ func (b *Bot) handleAdminUsers(chatID int64) {
 	if err != nil {
 		log.Printf("Failed to send admin users: %v", err)
 	}
+}
+
+func (b *Bot) handleAdminUsersCount(chatID int64) {
+	total, err := b.userService.CountUsers()
+	if err != nil {
+		b.sendErrorMessage(chatID, "Ошибка при получении количества пользователей")
+		return
+	}
+	b.sendText(chatID, fmt.Sprintf("👤 Всего пользователей: %d", total))
 }
 
 func (b *Bot) handleAdminHelp(chatID int64) {

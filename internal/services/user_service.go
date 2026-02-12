@@ -1082,6 +1082,12 @@ func (s *UserService) GetAllUsers(limit, offset int) ([]*models.User, error) {
 	return users, rows.Err()
 }
 
+func (s *UserService) CountUsers() (int, error) {
+	var total int
+	err := s.db.QueryRow(`SELECT COUNT(*) FROM users`).Scan(&total)
+	return total, err
+}
+
 func (s *UserService) GetUserStats(telegramID int64) (map[string]any, error) {
 	query := `
 		SELECT
