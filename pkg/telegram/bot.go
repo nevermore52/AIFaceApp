@@ -12,6 +12,7 @@ import (
 	"net/url"
 	"os"
 	"path"
+	"regexp"
 	"sort"
 	"strconv"
 	"strings"
@@ -72,6 +73,75 @@ func (b *Bot) isChatModelAllowed(userID int64, model ModelOption) bool {
 	default:
 		return true
 	}
+}
+
+// sendMarkdownLong отправляет сообщение с разметкой (markdown-подобной) с учетом лимита Telegram.
+// Для рассылок используем HTML, чтобы избежать конфликтов экранирования.
+func (b *Bot) sendMarkdownLong(chatID int64, text string) error {
+	const maxChunkBytes = 3800
+	text = strings.TrimSpace(convertBroadcastMarkupToHTML(text))
+	for len(text) > 0 {
+		if len(text) <= maxChunkBytes {
+			msg := tgbotapi.NewMessage(chatID, text)
+			msg.ParseMode = tgbotapi.ModeHTML
+			msg.DisableWebPagePreview = true
+			_, err := b.api.Send(msg)
+			return err
+		}
+
+		cut := maxChunkBytes
+		if cut > len(text) {
+			cut = len(text)
+		}
+
+		if idx := strings.LastIndex(text[:cut], "\n"); idx > 0 && idx >= cut-600 {
+			cut = idx
+		} else if idx := strings.LastIndex(text[:cut], " "); idx > 0 && idx >= cut-300 {
+			cut = idx
+		}
+
+		for cut > 0 && !utf8.ValidString(text[:cut]) {
+			cut--
+		}
+		if cut == 0 {
+			cut = maxChunkBytes
+			for cut > 0 && !utf8.RuneStart(text[cut-1]) {
+				cut--
+			}
+			if cut == 0 {
+				cut = len(text)
+			}
+		}
+
+		chunk := strings.TrimSpace(text[:cut])
+		text = strings.TrimSpace(text[cut:])
+
+		if chunk == "" {
+			continue
+		}
+		msg := tgbotapi.NewMessage(chatID, chunk)
+		msg.ParseMode = tgbotapi.ModeHTML
+		msg.DisableWebPagePreview = true
+		if _, err := b.api.Send(msg); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func convertBroadcastMarkupToHTML(text string) string {
+	text = html.EscapeString(text)
+
+	codeBlockRe := regexp.MustCompile("(?s)```(.*?)```")
+	text = codeBlockRe.ReplaceAllString(text, "<pre>$1</pre>")
+
+	inlineCodeRe := regexp.MustCompile("`([^`\n]+)`")
+	text = inlineCodeRe.ReplaceAllString(text, "<code>$1</code>")
+
+	boldRe := regexp.MustCompile("\\*\\*(.+?)\\*\\*")
+	text = boldRe.ReplaceAllString(text, "<b>$1</b>")
+
+	return text
 }
 
 func (b *Bot) sendStartTrialMenu(chatID int64) {
@@ -952,6 +1022,12 @@ func (b *Bot) handlePhoto(msg *tgbotapi.Message) {
 	chatID := msg.Chat.ID
 	loc := b.getLocalization(userID)
 
+	caption := strings.TrimSpace(msg.Caption)
+	if strings.HasPrefix(caption, "/admin") {
+		b.handleAdminCommand(msg)
+		return
+	}
+
 	// Альбом до 4 фото для Nano Banana / Nano Banana Pro
 	if msg.MediaGroupID != "" {
 		b.handleAlbumPhoto(msg)
@@ -966,7 +1042,6 @@ func (b *Bot) handlePhoto(msg *tgbotapi.Message) {
 	}
 
 	// Проверяем, есть ли подпись к фото (caption) — только для фото-моделей
-	caption := strings.TrimSpace(msg.Caption)
 	if caption == "" && modelOpt.Category == ModelCategoryPhoto {
 		// Для фото без описания просим добавить подпись
 		examples := []string{loc.PhotoExample1, loc.PhotoExample3, loc.PhotoExample4}
@@ -1007,6 +1082,12 @@ func (b *Bot) handleDocument(msg *tgbotapi.Message) {
 	userID := msg.From.ID
 	chatID := msg.Chat.ID
 
+	caption := strings.TrimSpace(msg.Caption)
+	if strings.HasPrefix(caption, "/admin") {
+		b.handleAdminCommand(msg)
+		return
+	}
+
 	// Поддерживаем только изображения
 	if msg.Document == nil || msg.Document.MimeType == "" || !strings.HasPrefix(msg.Document.MimeType, "image/") {
 		b.sendErrorMessage(chatID, "Отправьте изображение или фото")
@@ -1027,7 +1108,6 @@ func (b *Bot) handleDocument(msg *tgbotapi.Message) {
 	}
 
 	// Подпись
-	caption := strings.TrimSpace(msg.Caption)
 	if caption == "" && modelOpt.Category == ModelCategoryPhoto {
 		text := `📷 Фото получено!
 
@@ -1883,6 +1963,63 @@ func (b *Bot) processAudioMessage(msg *tgbotapi.Message, modelOpt ModelOption) {
 				log.Printf("ResetRequestTokensUsed(music empty result) error: %v", resetErr)
 			}
 		}
+	})
+}
+
+func (b *Bot) handleAdminBroadcastPhoto(chatID int64, fileID tgbotapi.FileID, text string) {
+	const (
+		batchSize    = 200
+		captionLimit = 900
+	)
+
+	caption := strings.TrimSpace(text)
+	remaining := ""
+	if len(caption) > captionLimit {
+		caption = strings.TrimSpace(caption[:captionLimit])
+		remaining = strings.TrimSpace(text[len(caption):])
+	}
+
+	b.sendText(chatID, "📣 Запускаю рассылку с фото...")
+	b.goLimited(func() {
+		total := 0
+		sent := 0
+		failed := 0
+
+		for offset := 0; ; offset += batchSize {
+			users, err := b.userService.GetAllUsers(batchSize, offset)
+			if err != nil {
+				b.sendErrorMessage(chatID, fmt.Sprintf("Ошибка при получении пользователей: %v", err))
+				return
+			}
+			if len(users) == 0 {
+				break
+			}
+			for _, user := range users {
+				if user == nil || user.TelegramID == 0 {
+					continue
+				}
+				total++
+				photoMsg := tgbotapi.NewPhoto(user.TelegramID, fileID)
+				if caption != "" {
+					photoMsg.Caption = convertBroadcastMarkupToHTML(caption)
+					photoMsg.ParseMode = tgbotapi.ModeHTML
+				}
+				if _, err := b.api.Send(photoMsg); err != nil {
+					failed++
+					log.Printf("broadcast photo to %d failed: %v", user.TelegramID, err)
+				} else {
+					sent++
+					if remaining != "" {
+						if err := b.sendMarkdownLong(user.TelegramID, remaining); err != nil {
+							log.Printf("broadcast photo extra text to %d failed: %v", user.TelegramID, err)
+						}
+					}
+				}
+				time.Sleep(35 * time.Millisecond)
+			}
+		}
+
+		b.sendText(chatID, fmt.Sprintf("✅ Рассылка завершена\nПолучателей: %d\nУспешно: %d\nОшибки: %d", total, sent, failed))
 	})
 }
 
@@ -4284,13 +4421,32 @@ func (b *Bot) handleAdminCommand(msg *tgbotapi.Message) {
 	}
 
 	// Базовые команды администратора
-	args := strings.Fields(msg.Text)
-	if len(args) < 2 {
+	cmdText := strings.TrimSpace(msg.Text)
+	if cmdText == "" {
+		cmdText = strings.TrimSpace(msg.Caption)
+	}
+	cmdName := strings.TrimSpace(msg.Command())
+	if cmdName != "" {
+		cmdPrefix := "/" + cmdName
+		if strings.HasPrefix(cmdText, cmdPrefix) {
+			cmdText = strings.TrimSpace(strings.TrimPrefix(cmdText, cmdPrefix))
+		}
+	}
+	if strings.HasPrefix(cmdText, "/admin") {
+		cmdText = strings.TrimSpace(strings.TrimPrefix(cmdText, "/admin"))
+	}
+	if cmdText == "" {
 		b.sendAdminMenu(msg.Chat.ID)
 		return
 	}
 
-	command := args[1]
+	parts := strings.Fields(cmdText)
+	if len(parts) == 0 {
+		b.sendAdminMenu(msg.Chat.ID)
+		return
+	}
+
+	command := parts[0]
 	switch command {
 	case "stats":
 		b.handleAdminStats(msg.Chat.ID)
@@ -4302,18 +4458,34 @@ func (b *Bot) handleAdminCommand(msg *tgbotapi.Message) {
 		b.sendPaymentsStatus(msg.Chat.ID)
 	case "nano":
 		b.sendNanoBananaAPIStatus(msg.Chat.ID)
+	case "broadcast":
+		messageText := strings.TrimSpace(strings.TrimPrefix(cmdText, command))
+		if messageText == "" {
+			b.sendErrorMessage(msg.Chat.ID, "Использование: /admin broadcast <текст>")
+			return
+		}
+		if msg.Photo != nil {
+			photo := msg.Photo[len(msg.Photo)-1]
+			b.handleAdminBroadcastPhoto(msg.Chat.ID, tgbotapi.FileID(photo.FileID), messageText)
+			return
+		}
+		if msg.Document != nil && strings.HasPrefix(strings.ToLower(msg.Document.MimeType), "image/") {
+			b.handleAdminBroadcastPhoto(msg.Chat.ID, tgbotapi.FileID(msg.Document.FileID), messageText)
+			return
+		}
+		b.handleAdminBroadcast(msg.Chat.ID, messageText)
 	case "sub_set":
-		if len(args) < 5 {
+		if len(parts) < 4 {
 			b.sendErrorMessage(msg.Chat.ID, "Использование: /admin sub_set <user_id> <mini|start|pro> <days>")
 			return
 		}
-		userID, err := strconv.ParseInt(args[2], 10, 64)
+		userID, err := strconv.ParseInt(parts[1], 10, 64)
 		if err != nil {
 			b.sendErrorMessage(msg.Chat.ID, "Некорректный user_id")
 			return
 		}
-		plan := strings.ToLower(strings.TrimSpace(args[3]))
-		days, err := strconv.Atoi(args[4])
+		plan := strings.ToLower(strings.TrimSpace(parts[2]))
+		days, err := strconv.Atoi(parts[3])
 		if err != nil || days <= 0 {
 			b.sendErrorMessage(msg.Chat.ID, "Некорректные days")
 			return
@@ -4328,11 +4500,11 @@ func (b *Bot) handleAdminCommand(msg *tgbotapi.Message) {
 		}
 		b.sendText(msg.Chat.ID, fmt.Sprintf("✅ Подписка %s выдана пользователю %d на %d дней", strings.Title(plan), userID, days))
 	case "sub_remove":
-		if len(args) < 3 {
+		if len(parts) < 2 {
 			b.sendErrorMessage(msg.Chat.ID, "Использование: /admin sub_remove <user_id>")
 			return
 		}
-		userID, err := strconv.ParseInt(args[2], 10, 64)
+		userID, err := strconv.ParseInt(parts[1], 10, 64)
 		if err != nil {
 			b.sendErrorMessage(msg.Chat.ID, "Некорректный user_id")
 			return
@@ -4347,6 +4519,43 @@ func (b *Bot) handleAdminCommand(msg *tgbotapi.Message) {
 	default:
 		b.sendErrorMessage(msg.Chat.ID, "Неизвестная админ-команда. Используйте /admin help")
 	}
+}
+
+func (b *Bot) handleAdminBroadcast(chatID int64, text string) {
+	const batchSize = 200
+
+	b.sendText(chatID, "📣 Запускаю рассылку...")
+	b.goLimited(func() {
+		total := 0
+		sent := 0
+		failed := 0
+
+		for offset := 0; ; offset += batchSize {
+			users, err := b.userService.GetAllUsers(batchSize, offset)
+			if err != nil {
+				b.sendErrorMessage(chatID, fmt.Sprintf("Ошибка при получении пользователей: %v", err))
+				return
+			}
+			if len(users) == 0 {
+				break
+			}
+			for _, user := range users {
+				if user == nil || user.TelegramID == 0 {
+					continue
+				}
+				total++
+				if err := b.sendMarkdownLong(user.TelegramID, text); err != nil {
+					failed++
+					log.Printf("broadcast send to %d failed: %v", user.TelegramID, err)
+				} else {
+					sent++
+				}
+				time.Sleep(35 * time.Millisecond)
+			}
+		}
+
+		b.sendText(chatID, fmt.Sprintf("✅ Рассылка завершена\nПолучателей: %d\nУспешно: %d\nОшибки: %d", total, sent, failed))
+	})
 }
 
 func (b *Bot) handleAdminStats(chatID int64) {
@@ -4495,6 +4704,7 @@ func (b *Bot) handleAdminHelp(chatID int64) {
 /admin categories - Управление доступностью категорий
 /admin payments - Управление платежами
 /admin nano - Переключение Nano Banana API
+/admin broadcast <текст> - Рассылка сообщения всем пользователям
 /admin sub_set <user_id> <mini|start|pro> <days> - Выдать подписку
 /admin sub_remove <user_id> - Убрать подписку
 /admin help - Эта справка
