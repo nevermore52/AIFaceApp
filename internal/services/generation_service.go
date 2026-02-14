@@ -505,7 +505,7 @@ func (s *GenerationService) createKieAPIVideoTask(requestID int64, opts Generati
 		"seeds":             12345,
 		"enableFallback":    false,
 		"enableTranslation": true,
-		"generationType":    "FIRST_AND_LAST_FRAMES_2_VIDEO",
+		"generationType":    "REFERENCE_2_VIDEO",
 	}
 	// aspect_ratio: отправляем только если явно выбран (16:9, 9:16). "auto" = не отправляем.
 	if opts.AspectRatio != "" && opts.AspectRatio != "auto" {
