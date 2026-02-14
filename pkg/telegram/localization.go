@@ -147,13 +147,13 @@ type Localization struct {
 	InstrNanoBanana   string
 	InstrTextModels   string
 	InstrSunoMusic    string
-	InstrHugVideo     string
+	InstrVeo3Video    string
 
 	// Photo models
 	ModelNanoBanana    string
 	ModelNanoBananaPro string
 	ModelSeedream      string
-	ModelHugVideo      string
+	ModelVeo3Fast      string
 	ModelSunoMusic     string
 	ModelGeminiFlash   string
 	ModelGPT5Mini      string
@@ -163,11 +163,6 @@ type Localization struct {
 	// Photo instructions
 	PhotoReceived   string
 	PhotoAddCaption string
-	PhotoExamples   string
-	PhotoExample1   string
-	PhotoExample2   string
-	PhotoExample3   string
-	PhotoExample4   string
 
 	// Generation
 	GenStarted     string
@@ -276,6 +271,7 @@ type Localization struct {
 	AspectLandscape string
 	AspectPortrait  string
 	AspectSquare    string
+	AspectAuto      string
 
 	// Common
 	WelcomeText         string
@@ -371,8 +367,8 @@ var locRU = Localization{
 	AccountValidUntil:   "📅 Действует до: %s",
 	AccountTextDaily:    "📝 Текстовые генерации (24 ч): %d",
 	AccountImagesWeekly: "🖼️ Фото осталось: %d",
-	AccountMusicWeekly:  "🎵 Музыка: %d",
-	AccountVideoWeekly:  "🎬 Видео: %d",
+	AccountMusicWeekly:  "🎵 Аудио генерации: %d",
+	AccountVideoWeekly:  "🎬 Видео генерации: %d",
 	AccountExtraText:    "📝 Доп. текстовые генерации: %d",
 	AccountExtraImages:  "🖼️ Доп. изображения: %d",
 	AccountExtraMusic:   "🎵 Доп. музыка: %d",
@@ -423,12 +419,12 @@ var locRU = Localization{
 	ExtrasSelectCat:   "Выберите категорию.",
 	ExtrasText:        "📝 Текст",
 	ExtrasImages:      "🖼️ Изображения",
-	ExtrasMusic:       "🎵 Музыка",
+	ExtrasMusic:       "🎵 Аудио",
 	ExtrasVideo:       "🎬 Видео",
 	ExtrasTexts:       "📝 Текстовые запросы",
 	ExtrasImage:       "🖼️ Генерации изображений",
 	ExtrasMusico:      "🎵 Генерации музыки",
-	ExtrasVideos:      "🎬 Доп. видео",
+	ExtrasVideos:      "🎬 Генерации видео",
 	ExtrasAllDisabled: "Все категории отключены администратором",
 
 	// Invite
@@ -480,24 +476,25 @@ var locRU = Localization{
 	ModelsDescription: "",
 	ModelsCatPhoto:    "📸 Фото",
 	ModelsCatVideo:    "🎬 Видео",
-	ModelsCatMusic:    "🎵 Музыка",
+	ModelsCatMusic:    "🎵 Аудио",
 	ModelsCatChat:     "💬 Текст",
 	InstrNanoBanana:   "В 1 сообщении отправьте 1 или более фото, в подписи укажите что хотите изменить (промпт).",
 	InstrTextModels:   "Отправьте любое сообщение в чат.",
 	InstrSunoMusic:    "Отправьте в чат описание музыки, которую хотите создать.",
-	InstrHugVideo:     "Отправьте 1 фото с двумя или более людьми и ожидайте.",
+	InstrVeo3Video:    "Отправьте 1 фото с подписью — опишите, какое видео хотите получить.",
 
 	// Aspect ratio
 	AspectTitle:     "🔲 Формат",
 	AspectLandscape: "Альбомный 16:9",
 	AspectPortrait:  "Портретный 9:16",
 	AspectSquare:    "Квадрат 1:1",
+	AspectAuto:      "Auto",
 
 	// Photo models descriptions
 	ModelNanoBanana:    "Cреднее качество, быстрая генерация, плохо работает с текстом на фото. Среднее время ожидания 10-30 сек.",
 	ModelNanoBananaPro: "Новейшая модель, лучшая проработка. Среднее время ожидания 30сек-2 минуты.",
 	ModelSeedream:      "Высокое качество редактирования фото, не подходит для большинства промптов! Среднее время ожидания 1мин-4 минуты.",
-	ModelHugVideo:      "Видео: оживление фото с обнимашками.",
+	ModelVeo3Fast:      "Видео из фото. Отправьте 1 фото с подписью. Среднее время ожидания 2-5 минут.",
 	ModelSunoMusic:     "Генерация песни. Ожидание 2-10 минут.",
 	ModelGeminiFlash:   "Текст: быстрые ответы. Доступно с подпиской Start+.",
 	ModelGPT5Mini:      "Текст: быстрые ответы. Доступно с подпиской Mini+.",
@@ -506,12 +503,7 @@ var locRU = Localization{
 
 	// Photo instructions
 	PhotoReceived:   "📷 Фото получено!",
-	PhotoAddCaption: "Пожалуйста, отправьте фото ещё раз, но с подписью — опишите, что хотите изменить.",
-	PhotoExamples:   "Примеры:",
-	PhotoExample1:   "\"Сделай короткую стрижку полубокс\"",
-	PhotoExample2:   "\"Примерь красное платье\"",
-	PhotoExample3:   "\"Измени цвет волос на блонд\"",
-	PhotoExample4:   "\"Удали 'определенный' объект с фото\"",
+	PhotoAddCaption: "Пожалуйста, отправьте фото ещё раз, но в подписи укажите промпт.",
 
 	// Generation
 	GenStarted:     "🔄 Генерация запущена",
@@ -533,7 +525,7 @@ var locRU = Localization{
 	MusicReady:       "🔊 Аудио готово",
 	MusicVariants:    "Вот 2 разных варианта песни:",
 	MusicFailed:      "Не удалось сгенерировать песню",
-	MusicSelectModel: "Выберите музыкальную модель:",
+	MusicSelectModel: "Выберите аудио модель:",
 
 	ErrPrefix:                   "❌ Ошибка: %s",
 	ErrAccessDenied:             "Доступ только для админов.",
@@ -803,23 +795,18 @@ var locEN = Localization{
 	InstrNanoBanana:             "In one message, send 1 or more photos. In the caption, describe what you want to change.",
 	InstrTextModels:             "Send any message to the chat.",
 	InstrSunoMusic:              "Send a description of the music you want to create.",
-	InstrHugVideo:               "Send 1 photo with two or more people and wait.",
+	InstrVeo3Video:              "Send 1 photo with a caption — describe the video you want.",
 	ModelNanoBanana:             "Medium quality. Works poorly with two photos. Average wait time ~1 minute.",
 	ModelNanoBananaPro:          "Newest model, best quality. Average wait time 1–2 minutes.",
 	ModelSeedream:               "High quality photo editing. Average wait time 1–2 minutes.",
-	ModelHugVideo:               "Video: animate photo with hugging.",
+	ModelVeo3Fast:               "Video from photo. Send 1 photo with a caption. Average wait time 2–5 minutes.",
 	ModelSunoMusic:              "Music generation. Wait time 5–10 minutes.",
 	ModelGeminiFlash:            "Text: fast replies. Available with Start+ subscription.",
 	ModelGPT5Mini:               "Text: fast replies. Available with Mini+ subscription.",
 	ModelGPT5Nano:               "Text: slower replies. Available with Mini+ subscription.",
 	ModelGPT41Mini:              "Text: fast replies for text requests.",
 	PhotoReceived:               "📷 Photo received!",
-	PhotoAddCaption:             "Please resend the photo with a caption — describe what you want to change.",
-	PhotoExamples:               "Examples:",
-	PhotoExample1:               "\"Make a short haircut\"",
-	PhotoExample2:               "\"Try on a red dress\"",
-	PhotoExample3:               "\"Change hair color to blonde\"",
-	PhotoExample4:               "\"Remove a certain object from the photo\"",
+	PhotoAddCaption:             "Please resend the photo with a caption — describe what you want.",
 	GenStarted:                  "🔄 Generation started",
 	GenModel:                    "Model: %s",
 	GenDeducted:                 "Deducted: %d request(s)",
@@ -923,6 +910,7 @@ var locEN = Localization{
 	AspectLandscape: "Landscape 16:9",
 	AspectPortrait:  "Portrait 9:16",
 	AspectSquare:    "Square 1:1",
+	AspectAuto:      "Auto",
 
 	// Common
 	BackBtn:     "◀️ Back",

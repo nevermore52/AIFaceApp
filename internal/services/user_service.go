@@ -985,14 +985,14 @@ func (s *UserService) setSubscriptionQuotas(telegramID int64, subType string) er
 	textDaily := 10
 	switch subType {
 	case "mini":
-		image, music, video = 30, 5, 0
+		image, music, video = 30, 5, 1
 		textDaily = 50
 	case "start":
-		image, music, video = 70, 10, 0
+		image, music, video = 70, 10, 3
 		textDaily = 100
 	case "pro":
-		image, music, video = 150, 15, 0
-		textDaily = 300
+		image, music, video = 130, 15, 5
+		textDaily = 200
 	default:
 		return nil
 	}
@@ -1008,17 +1008,29 @@ func (s *UserService) setSubscriptionQuotas(telegramID int64, subType string) er
 	return err
 }
 
+// subscriptionQuotaValues возвращает (image, music, video) для типа подписки.
+func subscriptionQuotaValues(subType string) (image, music, video int) {
+	switch strings.ToLower(strings.TrimSpace(subType)) {
+	case "mini":
+		return 30, 5, 1
+	case "start":
+		return 70, 10, 3
+	case "pro":
+		return 130, 15, 5
+	default:
+		return 0, 0, 0
+	}
+}
+
+// SubscriptionQuotas возвращает (image, music, video) квоты для типа подписки.
+func (s *UserService) SubscriptionQuotas(subType string) (image, music, video int) {
+	return subscriptionQuotaValues(subType)
+}
+
 func (s *UserService) setSubscriptionWeekly(telegramID int64, subType string) error {
 	subType = strings.ToLower(strings.TrimSpace(subType))
-	image, music, video := 0, 0, 0
-	switch subType {
-	case "mini":
-		image, music, video = 30, 5, 0
-	case "start":
-		image, music, video = 70, 10, 0
-	case "pro":
-		image, music, video = 130, 15, 0
-	default:
+	image, music, video := subscriptionQuotaValues(subType)
+	if image == 0 && music == 0 && video == 0 {
 		return nil
 	}
 	_, err := s.db.Exec(`

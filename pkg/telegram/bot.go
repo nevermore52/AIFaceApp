@@ -226,16 +226,36 @@ func (b *Bot) getUserAspectRatio(userID int64) string {
 		return "1:1"
 	}
 	switch ratio {
-	case "16:9", "9:16", "1:1":
+	case "16:9", "9:16", "1:1", "auto":
 		return ratio
 	default:
 		return "1:1"
 	}
 }
 
+// getAspectRatioForModel возвращает формат, допустимый для категории модели.
+// Фото: 16:9, 9:16, 1:1 (auto → 1:1). Видео: 16:9, 9:16, auto (1:1 → auto).
+func (b *Bot) getAspectRatioForModel(userID int64, modelID string) string {
+	ratio := b.getUserAspectRatio(userID)
+	opt, ok := findModelOption(modelID)
+	if !ok {
+		return ratio
+	}
+	if opt.Category == ModelCategoryVideo {
+		if ratio == "1:1" {
+			return "auto"
+		}
+	} else {
+		if ratio == "auto" {
+			return "1:1"
+		}
+	}
+	return ratio
+}
+
 func (b *Bot) setUserAspectRatio(userID int64, ratio string) {
 	switch ratio {
-	case "16:9", "9:16", "1:1":
+	case "16:9", "9:16", "1:1", "auto":
 		// valid
 	default:
 		ratio = "1:1"
@@ -707,7 +727,7 @@ var modelOptions = []ModelOption{
 	{ID: "google/nano-banana", Label: "🚀 Nano Banana", Desc: locRU.ModelNanoBanana, Category: ModelCategoryPhoto, RequestCost: 1},
 	{ID: "google/nano-banana-pro", Label: "🌟 Nano Banana Pro", Desc: locRU.ModelNanoBananaPro, Category: ModelCategoryPhoto, RequestCost: 4},
 	{ID: "seedream/4.5-edit", Label: "✨ Seedream 4.5", Desc: locRU.ModelSeedream, Category: ModelCategoryPhoto, RequestCost: 3},
-	{ID: "hug-video", ApiModel: "Qubico/hug-video", Label: "🤗 Обнимашки", Desc: locRU.ModelHugVideo, Category: ModelCategoryVideo, RequestCost: 1, TaskType: "image_to_video"},
+	{ID: "veo3_fast", ApiModel: "veo3_fast", Label: "🎬 Veo 3.1 Fast", Desc: locRU.ModelVeo3Fast, Category: ModelCategoryVideo, RequestCost: 1},
 	{ID: "music-suno", ApiModel: "suno", Label: "🎵 Suno Music", Desc: locRU.ModelSunoMusic, Category: ModelCategoryMusic, RequestCost: 1, TaskType: "music"},
 	{ID: "google/gemini-3-flash", Label: "💬 Gemini 3 Flash", Desc: "", Category: ModelCategoryChat, RequestCost: 1},
 	{ID: "openai/gpt-5-mini", Label: "💬 GPT-5 mini", Desc: locRU.ModelGPT5Mini, Category: ModelCategoryChat, RequestCost: 1},
@@ -1035,11 +1055,9 @@ func (b *Bot) handlePhoto(msg *tgbotapi.Message) {
 		modelOpt = ModelOption{ID: modelID, Category: ModelCategoryPhoto, RequestCost: 1}
 	}
 
-	// Проверяем, есть ли подпись к фото (caption) — только для фото-моделей
-	if caption == "" && modelOpt.Category == ModelCategoryPhoto {
-		// Для фото без описания просим добавить подпись
-		examples := []string{loc.PhotoExample1, loc.PhotoExample3, loc.PhotoExample4}
-		text := loc.PhotoReceived + "\n\n" + loc.PhotoAddCaption + "\n\n" + loc.PhotoExamples + "\n• " + strings.Join(examples, "\n• ")
+	// Проверяем, есть ли подпись к фото (caption) — только для фото-моделей и видео-моделей
+	if caption == "" && (modelOpt.Category == ModelCategoryPhoto || modelOpt.Category == ModelCategoryVideo) {
+		text := loc.PhotoReceived + "\n\n" + loc.PhotoAddCaption
 		reply := tgbotapi.NewMessage(chatID, text)
 		_, _ = b.api.Send(reply)
 		return
@@ -1058,9 +1076,9 @@ func (b *Bot) handlePhoto(msg *tgbotapi.Message) {
 
 	fileURL := file.Link(b.cfg.TelegramToken)
 
-	// Если выбрана видео-модель — запускаем видео-генерацию без описания
+	// Если выбрана видео-модель — запускаем видео-генерацию с промптом
 	if modelOpt.Category == ModelCategoryVideo {
-		b.processVideoGeneration(chatID, userID, fileURL, modelOpt)
+		b.processVideoGeneration(chatID, userID, fileURL, caption, modelOpt)
 		return
 	}
 
@@ -1102,16 +1120,10 @@ func (b *Bot) handleDocument(msg *tgbotapi.Message) {
 	}
 
 	// Подпись
-	if caption == "" && modelOpt.Category == ModelCategoryPhoto {
+	if caption == "" && (modelOpt.Category == ModelCategoryPhoto || modelOpt.Category == ModelCategoryVideo) {
 		text := `📷 Фото получено!
 
-Пожалуйста, отправьте фото ещё раз, но с подписью — опишите, что хотите изменить.
-
-Примеры:
-• "Сделай короткую стрижку"
-• "Примерь красное платье"
-• "Измени цвет волос на блонд"
-• "Удали 'определенный' объект с фото`
+Пожалуйста, отправьте фото ещё раз, но в подписи укажите промпт.`
 		reply := tgbotapi.NewMessage(chatID, text)
 		_, _ = b.api.Send(reply)
 		return
@@ -1126,9 +1138,9 @@ func (b *Bot) handleDocument(msg *tgbotapi.Message) {
 	}
 	fileURL := file.Link(b.cfg.TelegramToken)
 
-	// Если выбрана видео-модель — запускаем видео-генерацию без описания
+	// Если выбрана видео-модель — запускаем видео-генерацию с промптом
 	if modelOpt.Category == ModelCategoryVideo {
-		b.processVideoGeneration(chatID, userID, fileURL, modelOpt)
+		b.processVideoGeneration(chatID, userID, fileURL, caption, modelOpt)
 		return
 	}
 
@@ -1268,8 +1280,7 @@ func (b *Bot) flushAlbum(mediaGroupID string) {
 	caption := strings.TrimSpace(buf.caption)
 	if caption == "" {
 		loc := b.getLocalization(buf.userID)
-		examples := []string{loc.PhotoExample1, loc.PhotoExample3, loc.PhotoExample4}
-		text := loc.PhotoReceived + "\n\n" + loc.PhotoAddCaption + "\n\n" + loc.PhotoExamples + "\n• " + strings.Join(examples, "\n• ")
+		text := loc.PhotoReceived + "\n\n" + loc.PhotoAddCaption
 		reply := tgbotapi.NewMessage(buf.chatID, text)
 		_, _ = b.api.Send(reply)
 		return
@@ -1631,12 +1642,13 @@ func instructionForModel(m ModelOption) string {
 2) В подписи опишите, что нужно изменить или улучшить.
 
 Используйте /menu для выбора другой модели.`
-	case "hug-video":
-		return base + `Принимает фото (без подписи) и оживляет его в видео с эффектом обнимашек.
+	case "veo3_fast":
+		return base + `Принимает 1 фото с подписью и генерирует видео.
 
 Как отправить:
-1) Пришлите фото (без подписи).
-2) Дождитесь готового видео.
+1) Пришлите 1 фото.
+2) В подписи опишите, какое видео хотите получить.
+3) Дождитесь готового видео (2-5 минут).
 
 Используйте /menu для выбора другой модели.`
 	case "music-suno":
@@ -1670,11 +1682,12 @@ func instructionForModel(m ModelOption) string {
 
 Используйте /menu для выбора другой модели.`
 		case ModelCategoryVideo:
-			return base + `Эта модель принимает фото (подпись не обязательна) и вернёт короткое видео.
+			return base + `Эта модель принимает 1 фото с подписью и вернёт короткое видео.
 
 Как отправить:
-1) Пришлите фото (подпись не обязательна).
-2) Дождитесь готового видео.
+1) Пришлите 1 фото.
+2) В подписи опишите, какое видео хотите получить.
+3) Дождитесь готового видео.
 
 Используйте /menu для выбора другой модели.`
 		case ModelCategoryMusic:
@@ -2634,8 +2647,8 @@ func (b *Bot) modelDescriptionLoc(id string, loc *Localization) string {
 		return loc.ModelNanoBananaPro
 	case "seedream/4.5-edit":
 		return loc.ModelSeedream
-	case "hug-video":
-		return loc.ModelHugVideo
+	case "veo3_fast":
+		return loc.ModelVeo3Fast
 	case "music-suno":
 		return loc.ModelSunoMusic
 	case "google/gemini-3-flash":
@@ -2656,8 +2669,8 @@ func (b *Bot) modelInstructionLoc(id string, loc *Localization) string {
 		switch opt.ID {
 		case "google/nano-banana", "google/nano-banana-pro", "seedream/4.5-edit":
 			return loc.InstrNanoBanana
-		case "hug-video":
-			return loc.InstrHugVideo
+		case "veo3_fast":
+			return loc.InstrVeo3Video
 		case "music-suno":
 			return loc.InstrSunoMusic
 		}
@@ -2767,7 +2780,7 @@ func (b *Bot) sendLanguageMenu(chatID int64, userID int64) {
 }
 
 // processVideoGeneration обрабатывает видео-генерацию из фото (image_to_video)
-func (b *Bot) processVideoGeneration(chatID int64, userID int64, photoURL string, modelOpt ModelOption) {
+func (b *Bot) processVideoGeneration(chatID int64, userID int64, photoURL string, prompt string, modelOpt ModelOption) {
 	if !b.ensureCategoryEnabled(chatID, ModelCategoryVideo) {
 		return
 	}
@@ -2779,7 +2792,7 @@ func (b *Bot) processVideoGeneration(chatID int64, userID int64, photoURL string
 
 	requestCost := modelOpt.RequestCost
 	if requestCost < 1 {
-		requestCost = 15
+		requestCost = 1
 	}
 
 	if err := b.userService.ConsumeQuota(userID, models.QuotaCategoryVideo, requestCost); err != nil {
@@ -2787,6 +2800,35 @@ func (b *Bot) processVideoGeneration(chatID int64, userID int64, photoURL string
 		return
 	}
 
+	// veo3_fast — через KieAPI async (StartGeneration + callback)
+	if modelOpt.ID == "veo3_fast" {
+		userRec, _ := b.userService.GetUserByTelegramID(userID)
+		username := ""
+		if userRec != nil {
+			username = userRec.Username
+		}
+		opts := services.GenerationOptions{
+			InputImages: []string{photoURL},
+			InputImage:  photoURL,
+			Prompt:      prompt,
+			TokensCost:  requestCost,
+			ChatID:      chatID,
+			Model:       modelOpt.ID,
+			ModelType:   string(modelOpt.Category),
+			Username:    username,
+			AspectRatio: b.getAspectRatioForModel(userID, modelOpt.ID),
+		}
+		req, err := b.generationService.StartGeneration(userID, opts)
+		if err != nil {
+			_ = b.userService.AddExtraQuota(userID, models.QuotaCategoryVideo, requestCost)
+			b.sendErrorMessage(chatID, fmt.Sprintf("Ошибка запуска видео генерации: %v", err))
+			return
+		}
+		b.sendText(chatID, fmt.Sprintf("🔄 Запустили видео генерацию! ID: %d\nМодель: %s\nСписано: %d видео-запрос(ов)\n\nОжидайте результат...", req.ID, modelOpt.Label, requestCost))
+		return
+	}
+
+	// Фолбек для других видео-моделей (синхронный путь)
 	b.sendText(chatID, fmt.Sprintf("🔄 Запустили видео генерацию\nМодель: %s\nСписано: %d видео-запрос(ов)", modelOpt.Label, requestCost))
 
 	apiModel := modelOpt.ApiModel
@@ -3135,7 +3177,7 @@ func (b *Bot) handleCallback(callback *tgbotapi.CallbackQuery) {
 		b.sendLanguageMenu(chatID, userID)
 		b.sendMainMenu(chatID, userID)
 	case "aspect_menu":
-		b.sendAspectRatioMenu(chatID, userID, callback.Message.MessageID)
+		b.sendAspectRatioMenu(chatID, userID, 0)
 	case "set_style":
 		if !b.ensureChatStyleAllowed(chatID, userID) {
 			return
@@ -3378,7 +3420,7 @@ func (b *Bot) processGeneration(chatID int64, userID int64, photoURLs []string, 
 		Username:          username,
 	}
 	if modelOpt.ID == "google/nano-banana" || modelOpt.ID == "google/nano-banana-pro" || modelOpt.ID == "seedream/4.5-edit" {
-		opts.AspectRatio = b.getUserAspectRatio(userID)
+		opts.AspectRatio = b.getAspectRatioForModel(userID, modelOpt.ID)
 	}
 	if modelOpt.ID == "google/nano-banana" || modelOpt.ID == "google/nano-banana-pro" || modelOpt.ID == "seedream/4.5-edit" {
 		if provider, err := b.userService.GetNanoBananaProvider(); err == nil {
@@ -3912,12 +3954,16 @@ func (b *Bot) sendBuySubscription(chatID int64, userID int64) {
 	startPrice := b.subscriptionPrice("start")
 	proPrice := b.subscriptionPrice("pro")
 
-	text := fmt.Sprintf("%s\n%s \n\n✨ Mini — %d ₽ %s\n• 50 %s\n• 30 %s\n• 5 %s\n• %s\n• %s\n• %s\n\n🚀 Start — %d ₽ %s\n• 100 %s\n• 70 %s\n• 10 %s\n• %s\n• %s \n• %s\n• %s\n\n👑 Pro — %d ₽ %s\n• 300 %s\n• 150 %s\n• 15 %s\n• %s\n• %s, %s, %s\n• %s\n• %s",
+	miniImg, miniMus, miniVid := b.userService.SubscriptionQuotas("mini")
+	startImg, startMus, startVid := b.userService.SubscriptionQuotas("start")
+	proImg, proMus, proVid := b.userService.SubscriptionQuotas("pro")
+
+	text := fmt.Sprintf("%s\n%s \n\n✨ Mini — %d ₽ %s\n• 50 %s\n• %d %s\n• %d %s\n• %d %s\n• %s\n• %s\n\n🚀 Start — %d ₽ %s\n• 100 %s\n• %d %s\n• %d %s\n• %d %s\n• %s\n• %s\n• %s\n\n👑 Pro — %d ₽ %s\n• 200 %s\n• %d %s\n• %d %s\n• %d %s\n• %s\n• %s, %s, %s\n• %s",
 		loc.SubsTitle,
 		loc.BuyConsentNote,
-		miniPrice, loc.SubsPerWeek, loc.SubsTextDaily, loc.SubsImages, loc.SubsSongs, loc.SubsTextModelsMini, fmt.Sprintf(loc.SubsDiscount, 10), loc.SubsNoChannel,
-		startPrice, loc.SubsPerWeek, loc.SubsTextDaily, loc.SubsImages, loc.SubsSongs, fmt.Sprintf(loc.SubsContext, 2), loc.SubsTextModelsHi, fmt.Sprintf(loc.SubsDiscount, 15), loc.SubsNoChannel,
-		proPrice, loc.SubsPerWeek, loc.SubsTextDaily, loc.SubsImages, loc.SubsSongs, loc.SubsTextModelsHi, fmt.Sprintf(loc.SubsChatStyles, 6), fmt.Sprintf(loc.SubsContext, 3), loc.SubsNoAds, fmt.Sprintf(loc.SubsDiscount, 20), loc.SubsNoChannel,
+		miniPrice, loc.SubsPerWeek, loc.SubsTextDaily, miniImg, loc.SubsImages, miniVid, loc.SubsVideos, miniMus, loc.SubsSongs, loc.SubsTextModelsMini, fmt.Sprintf(loc.SubsDiscount, 10),
+		startPrice, loc.SubsPerWeek, loc.SubsTextDaily, startImg, loc.SubsImages, startVid, loc.SubsVideos, startMus, loc.SubsSongs, fmt.Sprintf(loc.SubsContext, 2), loc.SubsTextModelsHi, fmt.Sprintf(loc.SubsDiscount, 15),
+		proPrice, loc.SubsPerWeek, loc.SubsTextDaily, proImg, loc.SubsImages, proVid, loc.SubsVideos, proMus, loc.SubsSongs, loc.SubsTextModelsHi, fmt.Sprintf(loc.SubsChatStyles, 6), fmt.Sprintf(loc.SubsContext, 3), loc.SubsNoAds, fmt.Sprintf(loc.SubsDiscount, 20),
 	)
 
 	keyboard := tgbotapi.NewInlineKeyboardMarkup(
@@ -4151,8 +4197,8 @@ func (b *Bot) sendModelMenu(chatID int64, userID int64, category ModelCategory, 
 			}
 		}
 	}
-	if category == ModelCategoryPhoto && (current == "google/nano-banana" || current == "google/nano-banana-pro" || current == "kie/nano-banana-edit" || current == "kie/nano-banana-pro" || current == "seedream/4.5-edit") {
-		ratio := b.getUserAspectRatio(userID)
+	if (category == ModelCategoryPhoto && (current == "google/nano-banana" || current == "google/nano-banana-pro" || current == "kie/nano-banana-edit" || current == "kie/nano-banana-pro" || current == "seedream/4.5-edit")) || (category == ModelCategoryVideo && current == "veo3_fast") {
+		ratio := b.getAspectRatioForModel(userID, current)
 		label := loc.AspectTitle + ": " + ratio
 		rows = append(rows, tgbotapi.NewInlineKeyboardRow(
 			tgbotapi.NewInlineKeyboardButtonData(label, "aspect_menu"),
@@ -4190,19 +4236,32 @@ func (b *Bot) sendHelpMessage(chatID int64) {
 
 func (b *Bot) sendAspectRatioMenu(chatID int64, userID int64, messageID int) {
 	loc := b.getLocalization(userID)
-	current := b.getUserAspectRatio(userID)
-	rows := [][]tgbotapi.InlineKeyboardButton{
-		{
-			aspectOptionButton(loc.AspectLandscape, "16:9", current),
-			aspectOptionButton(loc.AspectPortrait, "9:16", current),
-		},
-		{
+	modelID := b.getUserModel(userID)
+	modelOpt, _ := findModelOption(modelID)
+	isVideo := modelOpt.Category == ModelCategoryVideo
+	current := b.getAspectRatioForModel(userID, modelID)
+
+	var rows [][]tgbotapi.InlineKeyboardButton
+	rows = append(rows, []tgbotapi.InlineKeyboardButton{
+		aspectOptionButton(loc.AspectLandscape, "16:9", current),
+		aspectOptionButton(loc.AspectPortrait, "9:16", current),
+	})
+	if isVideo {
+		// Видео: 16:9, 9:16, Auto
+		rows = append(rows, []tgbotapi.InlineKeyboardButton{
+			aspectOptionButton(loc.AspectAuto, "auto", current),
+		})
+	} else {
+		// Фото: 16:9, 9:16, 1:1
+		rows = append(rows, []tgbotapi.InlineKeyboardButton{
 			aspectOptionButton(loc.AspectSquare, "1:1", current),
-		},
-		{
-			tgbotapi.NewInlineKeyboardButtonData(loc.BackBtn, "models_menu"),
-		},
+		})
 	}
+	// Кнопка назад ведёт в меню моделей нужной категории
+	backCallback := "models_menu:" + string(modelOpt.Category)
+	rows = append(rows, []tgbotapi.InlineKeyboardButton{
+		tgbotapi.NewInlineKeyboardButtonData(loc.BackBtn, backCallback),
+	})
 	text := loc.AspectTitle + ": " + current
 	markup := tgbotapi.NewInlineKeyboardMarkup(rows...)
 
@@ -4233,9 +4292,22 @@ func (b *Bot) sendAspectRatioMenu(chatID int64, userID int64, messageID int) {
 	if messageID > 0 {
 		edited := tgbotapi.NewEditMessageTextAndMarkup(chatID, messageID, text, markup)
 		if _, err := b.api.Send(edited); err != nil {
-			if !strings.Contains(err.Error(), "message is not modified") {
-				log.Printf("Failed to edit aspect ratio menu: %v", err)
+			errStr := err.Error()
+			if strings.Contains(errStr, "message is not modified") {
+				return
 			}
+			// Если старое сообщение — фото, удаляем и отправляем новое текстовое
+			if strings.Contains(errStr, "there is no text in the message") {
+				del := tgbotapi.NewDeleteMessage(chatID, messageID)
+				_, _ = b.api.Send(del)
+				newMsg := tgbotapi.NewMessage(chatID, text)
+				newMsg.ReplyMarkup = markup
+				if _, err2 := b.api.Send(newMsg); err2 != nil {
+					log.Printf("Failed to send aspect ratio menu after delete: %v", err2)
+				}
+				return
+			}
+			log.Printf("Failed to edit aspect ratio menu: %v", err)
 		}
 		return
 	}
@@ -4768,8 +4840,7 @@ func (b *Bot) sendGenerationStatus(chatID int64, req *models.GenerationRequest) 
 		msg := strings.TrimSpace(*req.ErrorMsg)
 		if strings.Contains(msg, "prompt is required") {
 			loc := b.getLocalization(req.UserID)
-			examples := []string{loc.PhotoExample1, loc.PhotoExample3, loc.PhotoExample4}
-			text := loc.PhotoReceived + "\n\n" + loc.PhotoAddCaption + "\n\n" + loc.PhotoExamples + "\n• " + strings.Join(examples, "\n• ")
+			text := loc.PhotoReceived + "\n\n" + loc.PhotoAddCaption
 			b.sendText(chatID, text)
 			return
 		}
