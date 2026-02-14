@@ -4466,8 +4466,12 @@ func friendlyGenerationError(err error) string {
 		strings.Contains(msg, "status code: 52") ||
 		strings.Contains(msg, "status 52") ||
 		strings.Contains(msg, "timeout") ||
-		strings.Contains(msg, "gateway") {
-		return "Сервис вернул ошибку. Прочитайте правила нашего бота /rules и попробуйте переформулировать ваш запрос и отправьте его снова."
+		strings.Contains(msg, "gateway") ||
+		strings.Contains(msg, "safety filter") ||
+		strings.Contains(msg, "request blocked") ||
+		strings.Contains(msg, "potentially dangerous") ||
+		strings.Contains(msg, "content was flagged") {
+		return "Нейросеть вернула ошибку. Прочитайте правила нашего бота /rules и попробуйте переформулировать ваш запрос и отправьте его снова."
 	}
 	return err.Error()
 }
