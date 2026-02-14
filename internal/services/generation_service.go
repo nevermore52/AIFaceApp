@@ -496,7 +496,7 @@ func (s *GenerationService) createKieAPIVideoTask(requestID int64, opts Generati
 		return "", fmt.Errorf("KIEAPI_CALLBACK_URL is not set")
 	}
 
-	input := map[string]any{
+	payload := map[string]any{
 		"prompt":            opts.Prompt,
 		"imageUrls":         images,
 		"model":             "veo3_fast",
@@ -508,13 +508,8 @@ func (s *GenerationService) createKieAPIVideoTask(requestID int64, opts Generati
 		"enableTranslation": true,
 		"generationType":    "FIRST_AND_LAST_FRAMES_2_VIDEO",
 	}
-	payload := kieapi.CreateTaskRequest{
-		Model:       "veo3_fast",
-		CallBackURL: callbackURL,
-		Input:       input,
-	}
 
-	taskID, err := s.kieAPI.CreateTask(payload)
+	taskID, err := s.kieAPI.CreateVeoTask(payload)
 	if err != nil {
 		return "", err
 	}

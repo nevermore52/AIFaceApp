@@ -175,6 +175,79 @@ func (c *Client) CreateTask(req CreateTaskRequest) (string, error) {
 	return parsed.Data.TaskID, nil
 }
 
+// CreateVeoTask отправляет запрос на /api/v1/veo/generate с плоским payload.
+func (c *Client) CreateVeoTask(payload map[string]any) (string, error) {
+	if c == nil {
+		return "", fmt.Errorf("kieapi client is nil")
+	}
+	if c.apiKey == "" {
+		return "", fmt.Errorf("KIEAPI_API_KEY is not set")
+	}
+	if c.baseURL == "" {
+		return "", fmt.Errorf("KIEAPI_BASE_URL is not set")
+	}
+
+	body, err := json.Marshal(payload)
+	if err != nil {
+		return "", fmt.Errorf("marshal veo payload: %w", err)
+	}
+
+	url := c.baseURL + "/api/v1/veo/generate"
+	httpReq, err := http.NewRequest(http.MethodPost, url, bytes.NewReader(body))
+	if err != nil {
+		return "", fmt.Errorf("create veo request: %w", err)
+	}
+	httpReq.Header.Set("Authorization", "Bearer "+c.apiKey)
+	httpReq.Header.Set("Content-Type", "application/json")
+
+	resp, err := c.client.Do(httpReq)
+	if err != nil {
+		return "", fmt.Errorf("veo request failed: %w", err)
+	}
+	defer resp.Body.Close()
+
+	raw, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return "", fmt.Errorf("read veo response: %w", err)
+	}
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		limited := raw
+		if len(limited) > 2048 {
+			limited = limited[:2048]
+		}
+		return "", fmt.Errorf("veo status %d: %s", resp.StatusCode, string(limited))
+	}
+
+	var parsed CreateTaskResponse
+	if err := json.Unmarshal(raw, &parsed); err != nil {
+		return "", fmt.Errorf("parse veo response: %w", err)
+	}
+	parsed.RawBody = string(raw)
+
+	msg := strings.TrimSpace(parsed.Message)
+	if msg == "" {
+		msg = strings.TrimSpace(parsed.Msg)
+	}
+	if parsed.Code != 0 && parsed.Code != 200 {
+		limited := parsed.RawBody
+		if len(limited) > 2048 {
+			limited = limited[:2048]
+		}
+		return "", fmt.Errorf("veo error: code=%d message=%s raw=%s", parsed.Code, msg, limited)
+	}
+	if strings.TrimSpace(parsed.Data.TaskID) == "" {
+		parsed.Data.TaskID = strings.TrimSpace(parsed.Data.TaskIDAlt)
+	}
+	if strings.TrimSpace(parsed.Data.TaskID) == "" {
+		limited := parsed.RawBody
+		if len(limited) > 2048 {
+			limited = limited[:2048]
+		}
+		return "", fmt.Errorf("veo response missing taskId: raw=%s", limited)
+	}
+	return parsed.Data.TaskID, nil
+}
+
 func findFirstHTTP(v any) string {
 	switch val := v.(type) {
 	case map[string]any:
