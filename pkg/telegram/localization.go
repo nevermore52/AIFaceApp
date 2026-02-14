@@ -152,6 +152,7 @@ type Localization struct {
 	// Photo models
 	ModelNanoBanana    string
 	ModelNanoBananaPro string
+	ModelSeedream      string
 	ModelHugVideo      string
 	ModelSunoMusic     string
 	ModelGeminiFlash   string
@@ -495,6 +496,7 @@ var locRU = Localization{
 	// Photo models descriptions
 	ModelNanoBanana:    "Cреднее качество, быстрая генерация, плохо работает с текстом на фото. Среднее время ожидания 10-30 сек.",
 	ModelNanoBananaPro: "Новейшая модель, лучшая проработка. Среднее время ожидания 30сек-2 минуты.",
+	ModelSeedream:      "Высокое качество редактирования фото, не подходит для большинства промптов! Среднее время ожидания 1мин-4 минуты.",
 	ModelHugVideo:      "Видео: оживление фото с обнимашками.",
 	ModelSunoMusic:     "Генерация песни. Ожидание 2-10 минут.",
 	ModelGeminiFlash:   "Текст: быстрые ответы. Доступно с подпиской Start+.",
@@ -804,6 +806,7 @@ var locEN = Localization{
 	InstrHugVideo:               "Send 1 photo with two or more people and wait.",
 	ModelNanoBanana:             "Medium quality. Works poorly with two photos. Average wait time ~1 minute.",
 	ModelNanoBananaPro:          "Newest model, best quality. Average wait time 1–2 minutes.",
+	ModelSeedream:               "High quality photo editing. Average wait time 1–2 minutes.",
 	ModelHugVideo:               "Video: animate photo with hugging.",
 	ModelSunoMusic:              "Music generation. Wait time 5–10 minutes.",
 	ModelGeminiFlash:            "Text: fast replies. Available with Start+ subscription.",

@@ -48,9 +48,9 @@ type Bot struct {
 	sunoMu            sync.Mutex
 	sunoTasks         map[string]sunoTask
 	sunoInstrMu       sync.Mutex
-	sunoInstrumental  map[int64]bool // userID -> true (instrumental), false (with vocal)
+	sunoInstrumental  map[int64]bool
 	sunoVoiceMu       sync.Mutex
-	sunoVoice         map[int64]string // userID -> m/f
+	sunoVoice         map[int64]string
 }
 
 func (b *Bot) isChatModelAllowed(userID int64, model ModelOption) bool {
@@ -75,8 +75,6 @@ func (b *Bot) isChatModelAllowed(userID int64, model ModelOption) bool {
 	}
 }
 
-// sendMarkdownLong отправляет сообщение с разметкой (markdown-подобной) с учетом лимита Telegram.
-// Для рассылок используем HTML, чтобы избежать конфликтов экранирования.
 func (b *Bot) sendMarkdownLong(chatID int64, text string) error {
 	const maxChunkBytes = 3800
 	text = strings.TrimSpace(convertBroadcastMarkupToHTML(text))
@@ -195,7 +193,6 @@ func formatExtrasPriceMarkdownV2(category string, currentPrice int) string {
 }
 
 func escapeMarkdownV2(s string) string {
-	// Telegram MarkdownV2 reserved characters: _ * [ ] ( ) ~ ` > # + - = | { } . !
 	replacer := strings.NewReplacer(
 		"\\", "\\\\",
 		"_", "\\_",
@@ -251,7 +248,7 @@ func (b *Bot) setUserAspectRatio(userID int64, ratio string) {
 func (b *Bot) sendNanoBananaAPIStatus(chatID int64) {
 	provider, err := b.userService.GetNanoBananaProvider()
 	if err != nil {
-		b.sendErrorMessage(chatID, "Не удалось получить состояние Nano Banana API")
+		b.sendErrorMessage(chatID, "Не удалось получить состояние Фото API")
 		return
 	}
 	state := "KieAPI"
@@ -260,7 +257,7 @@ func (b *Bot) sendNanoBananaAPIStatus(chatID int64) {
 		state = "DefAPI"
 		toggleLabel = "Переключить на KieAPI"
 	}
-	text := fmt.Sprintf("🍌 Nano Banana API: %s", state)
+	text := fmt.Sprintf("📸 Фото API: %s", state)
 	kb := tgbotapi.NewInlineKeyboardMarkup(
 		tgbotapi.NewInlineKeyboardRow(
 			tgbotapi.NewInlineKeyboardButtonData(toggleLabel, "admin:nano_api_toggle"),
@@ -270,14 +267,14 @@ func (b *Bot) sendNanoBananaAPIStatus(chatID int64) {
 	msg := tgbotapi.NewMessage(chatID, text)
 	msg.ReplyMarkup = kb
 	if _, err := b.api.Send(msg); err != nil {
-		log.Printf("Failed to send nano banana api status: %v", err)
+		log.Printf("Failed to send photo api status: %v", err)
 	}
 }
 
 func (b *Bot) toggleNanoBananaAPI(chatID int64) {
 	provider, err := b.userService.GetNanoBananaProvider()
 	if err != nil {
-		b.sendErrorMessage(chatID, "Не удалось проверить Nano Banana API")
+		b.sendErrorMessage(chatID, "Не удалось проверить Фото API")
 		return
 	}
 	next := "defapi"
@@ -285,7 +282,7 @@ func (b *Bot) toggleNanoBananaAPI(chatID int64) {
 		next = "kieapi"
 	}
 	if err := b.userService.SetNanoBananaProvider(next); err != nil {
-		b.sendErrorMessage(chatID, "Не удалось переключить Nano Banana API")
+		b.sendErrorMessage(chatID, "Не удалось переключить Фото API")
 		return
 	}
 	b.sendNanoBananaAPIStatus(chatID)
@@ -611,7 +608,7 @@ func (b *Bot) sendAdminMenu(chatID int64) {
 		),
 		tgbotapi.NewInlineKeyboardRow(
 			tgbotapi.NewInlineKeyboardButtonData("💰 Баланс API", "admin:suno_balance"),
-			tgbotapi.NewInlineKeyboardButtonData("🍌 Nano Banana API", "admin:nano_api"),
+			tgbotapi.NewInlineKeyboardButtonData("📸 Фото API", "admin:nano_api"),
 		),
 		tgbotapi.NewInlineKeyboardRow(
 			tgbotapi.NewInlineKeyboardButtonData("🔒 Подписки", "admin:subs"),
@@ -709,6 +706,7 @@ func (b *Bot) isUserAllowed(userID int64) bool {
 var modelOptions = []ModelOption{
 	{ID: "google/nano-banana", Label: "🚀 Nano Banana", Desc: locRU.ModelNanoBanana, Category: ModelCategoryPhoto, RequestCost: 1},
 	{ID: "google/nano-banana-pro", Label: "🌟 Nano Banana Pro", Desc: locRU.ModelNanoBananaPro, Category: ModelCategoryPhoto, RequestCost: 4},
+	{ID: "seedream/4.5-edit", Label: "✨ Seedream 4.5", Desc: locRU.ModelSeedream, Category: ModelCategoryPhoto, RequestCost: 3},
 	{ID: "hug-video", ApiModel: "Qubico/hug-video", Label: "🤗 Обнимашки", Desc: locRU.ModelHugVideo, Category: ModelCategoryVideo, RequestCost: 1, TaskType: "image_to_video"},
 	{ID: "music-suno", ApiModel: "suno", Label: "🎵 Suno Music", Desc: locRU.ModelSunoMusic, Category: ModelCategoryMusic, RequestCost: 1, TaskType: "music"},
 	{ID: "google/gemini-3-flash", Label: "💬 Gemini 3 Flash", Desc: "", Category: ModelCategoryChat, RequestCost: 1},
@@ -749,7 +747,6 @@ func NewBot(token string, userService *services.UserService, generationService *
 func (b *Bot) Start() error {
 	log.Printf("Authorized on account %s", b.api.Self.UserName)
 
-	// Убираем вебхук, чтобы гарантировать работу long polling (иначе callback'и могут не приходить)
 	if _, err := b.api.Request(tgbotapi.DeleteWebhookConfig{DropPendingUpdates: false}); err != nil {
 		log.Printf("failed to delete webhook: %v", err)
 	}
@@ -763,9 +760,7 @@ func (b *Bot) Start() error {
 	b.updates = b.api.GetUpdatesChan(u)
 
 	for update := range b.updates {
-		// Копируем update в новую переменную, чтобы горутины не делили одну ссылку
 		upd := update
-		// Обрабатываем каждое событие асинхронно, чтобы не блокировать очередь
 		b.goLimited(func() {
 			b.safeHandleUpdate(upd)
 		})
@@ -774,10 +769,6 @@ func (b *Bot) Start() error {
 	return nil
 }
 
-// Stop включает режим graceful shutdown:
-// - помечает бота как "перезагружается" (новые запросы отклоняются)
-// - останавливает long-polling
-// - ждёт завершения всех уже запущенных обработчиков
 func (b *Bot) Stop() {
 	b.shutdownOnce.Do(func() {
 		b.shuttingDown.Store(true)
@@ -1267,7 +1258,7 @@ func (b *Bot) flushAlbum(mediaGroupID string) {
 	maxPhotos := 1
 	if modelOpt.ID == "google/nano-banana" {
 		maxPhotos = 2
-	} else if modelOpt.ID == "google/nano-banana-pro" {
+	} else if modelOpt.ID == "google/nano-banana-pro" || modelOpt.ID == "seedream/4.5-edit" {
 		maxPhotos = 4
 	}
 	if len(imageURLs) > maxPhotos {
@@ -2641,6 +2632,8 @@ func (b *Bot) modelDescriptionLoc(id string, loc *Localization) string {
 		return loc.ModelNanoBanana
 	case "google/nano-banana-pro":
 		return loc.ModelNanoBananaPro
+	case "seedream/4.5-edit":
+		return loc.ModelSeedream
 	case "hug-video":
 		return loc.ModelHugVideo
 	case "music-suno":
@@ -2661,7 +2654,7 @@ func (b *Bot) modelDescriptionLoc(id string, loc *Localization) string {
 func (b *Bot) modelInstructionLoc(id string, loc *Localization) string {
 	if opt, ok := findModelOption(id); ok {
 		switch opt.ID {
-		case "google/nano-banana", "google/nano-banana-pro":
+		case "google/nano-banana", "google/nano-banana-pro", "seedream/4.5-edit":
 			return loc.InstrNanoBanana
 		case "hug-video":
 			return loc.InstrHugVideo
@@ -3240,6 +3233,12 @@ func (b *Bot) handleCallback(callback *tgbotapi.CallbackQuery) {
 				b.sendErrorMessage(chatID, b.chatModelAccessMessage(opt.ID))
 				return
 			}
+			if opt.ID == "seedream/4.5-edit" {
+				if provider, err := b.userService.GetNanoBananaProvider(); err == nil && strings.EqualFold(provider, "defapi") {
+					b.sendErrorMessage(chatID, "⚠️ Модель Seedream временно недоступна. Попробуйте позже.")
+					return
+				}
+			}
 			b.setUserModel(userID, model)
 
 			// Обновляем меню моделей в том же сообщении
@@ -3378,10 +3377,10 @@ func (b *Bot) processGeneration(chatID int64, userID int64, photoURLs []string, 
 		ModelType:         string(modelOpt.Category),
 		Username:          username,
 	}
-	if modelOpt.ID == "google/nano-banana" || modelOpt.ID == "google/nano-banana-pro" {
+	if modelOpt.ID == "google/nano-banana" || modelOpt.ID == "google/nano-banana-pro" || modelOpt.ID == "seedream/4.5-edit" {
 		opts.AspectRatio = b.getUserAspectRatio(userID)
 	}
-	if modelOpt.ID == "google/nano-banana" || modelOpt.ID == "google/nano-banana-pro" {
+	if modelOpt.ID == "google/nano-banana" || modelOpt.ID == "google/nano-banana-pro" || modelOpt.ID == "seedream/4.5-edit" {
 		if provider, err := b.userService.GetNanoBananaProvider(); err == nil {
 			opts.NanoBananaProvider = provider
 		}
@@ -4123,7 +4122,7 @@ func (b *Bot) sendModelMenu(chatID int64, userID int64, category ModelCategory, 
 		}
 		if current == "google/nano-banana" {
 			text += "\n" + fmt.Sprintf(loc.ModelsMaxPhotos, 2) + "\n"
-		} else if current == "google/nano-banana-pro" {
+		} else if current == "google/nano-banana-pro" || current == "seedream/4.5-edit" {
 			text += "\n" + fmt.Sprintf(loc.ModelsMaxPhotos, 4) + "\n"
 		}
 		if instr := b.modelInstructionLoc(current, loc); instr != "" {
@@ -4152,7 +4151,7 @@ func (b *Bot) sendModelMenu(chatID int64, userID int64, category ModelCategory, 
 			}
 		}
 	}
-	if category == ModelCategoryPhoto && (current == "google/nano-banana" || current == "google/nano-banana-pro" || current == "kie/nano-banana-edit" || current == "kie/nano-banana-pro") {
+	if category == ModelCategoryPhoto && (current == "google/nano-banana" || current == "google/nano-banana-pro" || current == "kie/nano-banana-edit" || current == "kie/nano-banana-pro" || current == "seedream/4.5-edit") {
 		ratio := b.getUserAspectRatio(userID)
 		label := loc.AspectTitle + ": " + ratio
 		rows = append(rows, tgbotapi.NewInlineKeyboardRow(
@@ -4267,7 +4266,6 @@ func aspectPreviewURL(ratio string) string {
 	}
 }
 
-// editMessageTextOrCaption пытается отредактировать текстовое сообщение, если не удалось — подпись медиа.
 func (b *Bot) editMessageTextOrCaption(chatID int64, messageID int, text string, markup tgbotapi.InlineKeyboardMarkup) error {
 	editText := tgbotapi.NewEditMessageTextAndMarkup(chatID, messageID, text, markup)
 	if _, err := b.api.Send(editText); err == nil {
@@ -4277,7 +4275,6 @@ func (b *Bot) editMessageTextOrCaption(chatID int64, messageID int, text string,
 		if strings.Contains(errText, "message is not modified") {
 			return nil
 		}
-		// Падаем на edit caption только если это действительно медиа-сообщение.
 		if strings.Contains(errText, "there is no text in the message to edit") || strings.Contains(errText, "message to edit not found") {
 			editCaption := tgbotapi.NewEditMessageCaption(chatID, messageID, text)
 			editCaption.ReplyMarkup = &markup
@@ -4294,7 +4291,6 @@ func (b *Bot) editMessageTextOrCaption(chatID int64, messageID int, text string,
 	}
 }
 
-// sendPrivacyMessage отправляет ссылку на политику конфиденциальности
 func (b *Bot) sendPrivacyMessage(chatID int64, userID int64) {
 	loc := b.getLocalization(userID)
 	text := loc.PrivacyPolicy + " https://telegra.ph/Politika-Konfidencialnosti-01-14-87\n\n" + loc.PrivacyTerms + " https://telegra.ph/Polzovatelskoe-soglashenie-Usloviya-EHkspluatacii-i-Obsluzhivaniya-01-14"
@@ -4344,7 +4340,7 @@ func (b *Bot) sendUserStats(chatID int64, userID int64) {
 	if err != nil {
 		log.Printf("Failed to send user stats: %v", err)
 	}
-	_ = user // suppress unused warning
+	_ = user
 }
 
 func (b *Bot) sendInsufficientQuotaMessage(chatID int64, category models.QuotaCategory, need int, cause error) {
@@ -4395,7 +4391,7 @@ func friendlyGenerationError(err error) string {
 		strings.Contains(msg, "status code: 500") ||
 		strings.Contains(msg, "status 500") ||
 		strings.Contains(msg, "task failed") ||
-		strings.Contains(msg, "status code: 52") || // 520/521/522/524 от Cloudflare/серверов
+		strings.Contains(msg, "status code: 52") ||
 		strings.Contains(msg, "status 52") ||
 		strings.Contains(msg, "timeout") ||
 		strings.Contains(msg, "gateway") {
@@ -4416,7 +4412,6 @@ func (b *Bot) sendUnknownCommand(chatID int64) {
 func (b *Bot) handleAdminCommand(msg *tgbotapi.Message) {
 	userID := msg.From.ID
 
-	// Проверяем, является ли пользователь админом
 	isAdmin, err := b.userService.IsUserAdmin(userID)
 	if err != nil {
 		b.sendErrorMessage(msg.Chat.ID, "Ошибка при проверке прав администратора")
@@ -4428,7 +4423,6 @@ func (b *Bot) handleAdminCommand(msg *tgbotapi.Message) {
 		return
 	}
 
-	// Базовые команды администратора
 	cmdText := strings.TrimSpace(msg.Text)
 	if cmdText == "" {
 		cmdText = strings.TrimSpace(msg.Caption)
@@ -4567,7 +4561,6 @@ func (b *Bot) handleAdminBroadcast(chatID int64, text string) {
 }
 
 func (b *Bot) handleAdminStats(chatID int64) {
-	// Получаем статистику генераций
 	stats, err := b.generationService.GetGenerationStats()
 	if err != nil {
 		b.sendErrorMessage(chatID, "Ошибка при получении статистики")
@@ -4847,7 +4840,6 @@ func (b *Bot) sendGenerationStatus(chatID int64, req *models.GenerationRequest) 
 			msg.Caption = caption
 			if _, err := b.api.Send(msg); err != nil {
 				log.Printf("Failed to send generation photo by URL: %v", err)
-				// запасной вариант — скачиваем и отправляем байтами
 				if photoBytes, fileName, dlErr := downloadFileToBytes(output, "png"); dlErr == nil {
 					photoMsg := tgbotapi.NewPhoto(chatID, tgbotapi.FileBytes{
 						Name:  fileName,
@@ -4916,25 +4908,21 @@ func (b *Bot) sendLongText(chatID int64, text string) {
 			cut = len(text)
 		}
 
-		// Prefer splitting on a natural boundary near the end of the chunk.
 		if idx := strings.LastIndex(text[:cut], "\n"); idx > 0 && idx >= cut-600 {
 			cut = idx
 		} else if idx := strings.LastIndex(text[:cut], " "); idx > 0 && idx >= cut-300 {
 			cut = idx
 		}
 
-		// Ensure we don't cut in the middle of a UTF-8 encoded rune.
 		for cut > 0 && !utf8.ValidString(text[:cut]) {
 			cut--
 		}
 		if cut == 0 {
-			// Fallback: find a safe rune boundary.
 			cut = maxChunkBytes
 			for cut > 0 && !utf8.RuneStart(text[cut-1]) {
 				cut--
 			}
 			if cut == 0 {
-				// Give up and send what we can (should not normally happen).
 				cut = len(text)
 			}
 		}
@@ -4952,7 +4940,6 @@ func (b *Bot) sendLongText(chatID int64, text string) {
 	}
 }
 
-// notifyPaymentSuccess отправляет уведомление о зачислении запросов
 func (b *Bot) notifyPaymentSuccess(userID int64, category string, qty int, amount float64, paymentID string) {
 	if strings.HasPrefix(category, "subscription:") {
 		plan := strings.TrimPrefix(category, "subscription:")
@@ -5047,7 +5034,6 @@ func (b *Bot) statusInfo(status string) (string, string) {
 	}
 }
 
-// decodeDataURL декодирует data:image/...;base64,.... возвращает байты и имя файла
 func decodeDataURL(dataURL string) ([]byte, string, error) {
 	decoded, fileName, _, err := decodeDataURLGeneric(dataURL, "jpg")
 	return decoded, fileName, err
@@ -5097,7 +5083,6 @@ func truncate(s string, maxLen int) string {
 	return s[:maxLen] + "..."
 }
 
-// NotifyGenerationStatus используется сервисом генерации для отправки результата пользователю
 func (b *Bot) NotifyGenerationStatus(chatID int64, req *models.GenerationRequest) {
 	b.sendGenerationStatus(chatID, req)
 }

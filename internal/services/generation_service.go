@@ -230,7 +230,7 @@ func (s *GenerationService) processGeneration(req *models.GenerationRequest, opt
 	}
 
 	// Nano Banana must never go to OpenRouter/PiAPI. Only DefAPI or KieAPI.
-	if strings.EqualFold(strings.TrimSpace(opts.Model), "google/nano-banana") || strings.EqualFold(strings.TrimSpace(opts.Model), "google/nano-banana-pro") {
+	if strings.EqualFold(strings.TrimSpace(opts.Model), "google/nano-banana") || strings.EqualFold(strings.TrimSpace(opts.Model), "google/nano-banana-pro") || strings.EqualFold(strings.TrimSpace(opts.Model), "seedream/4.5-edit") {
 		provider := strings.ToLower(strings.TrimSpace(opts.NanoBananaProvider))
 		if provider == "defapi" {
 			taskID, err := s.createDefAPITask(req.ID, opts, images)
@@ -396,7 +396,7 @@ func (s *GenerationService) HandleDefAPICallback(payload defapi.CallbackPayload)
 
 func useKieAPIModel(model string) bool {
 	model = strings.ToLower(strings.TrimSpace(model))
-	return model == "kie/nano-banana-edit" || model == "kie/nano-banana-pro" || model == "nano-banana-pro"
+	return model == "kie/nano-banana-edit" || model == "kie/nano-banana-pro" || model == "nano-banana-pro" || model == "seedream/4.5-edit"
 }
 
 func mapKieAPIModel(model string) string {
@@ -412,6 +412,8 @@ func mapKieAPIModel(model string) string {
 		return "nano-banana-pro"
 	case "nano-banana-pro":
 		return "nano-banana-pro"
+	case "seedream/4.5-edit":
+		return "seedream/4.5-edit"
 	default:
 		return model
 	}
@@ -443,6 +445,9 @@ func (s *GenerationService) createKieAPITask(requestID int64, opts GenerationOpt
 		}
 	} else {
 		input["image_urls"] = images
+	}
+	if modelID == "seedream/4.5-edit" {
+		input["quality"] = "basic"
 	}
 	payload := kieapi.CreateTaskRequest{
 		Model:       apiModel,
@@ -642,7 +647,7 @@ func (s *GenerationService) HealthCheckPiAPI() error {
 
 func useDefAPIModel(model string) bool {
 	model = strings.ToLower(strings.TrimSpace(model))
-	return model == "google/nano-banana" || model == "google/nano-banana-pro"
+	return model == "google/nano-banana" || model == "google/nano-banana-pro" || model == "seedream/4.5-edit"
 }
 
 func useDefAPIChatModel(model string) bool {
