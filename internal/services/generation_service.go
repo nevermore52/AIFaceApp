@@ -502,11 +502,14 @@ func (s *GenerationService) createKieAPIVideoTask(requestID int64, opts Generati
 		"model":             "veo3_fast",
 		"watermark":         "",
 		"callBackUrl":       callbackURL,
-		"aspect_ratio":      opts.AspectRatio,
 		"seeds":             12345,
 		"enableFallback":    false,
 		"enableTranslation": true,
 		"generationType":    "FIRST_AND_LAST_FRAMES_2_VIDEO",
+	}
+	// aspect_ratio: отправляем только если явно выбран (16:9, 9:16). "auto" = не отправляем.
+	if opts.AspectRatio != "" && opts.AspectRatio != "auto" {
+		payload["aspect_ratio"] = opts.AspectRatio
 	}
 
 	taskID, err := s.kieAPI.CreateVeoTask(payload)
