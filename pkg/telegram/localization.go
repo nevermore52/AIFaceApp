@@ -403,7 +403,7 @@ var locRU = Localization{
 	SubsImages:         "изображений",
 	SubsSongs:          "песен",
 	SubsVideos:         "видео",
-	SubsDiscount:       "Скидка %d%% на доп. запросы",
+	SubsDiscount:       "Скидка %d%% на все генерации",
 	SubsContext:        "x%d контекст",
 	SubsNoAds:          "без рекламы",
 	SubsNoChannel:      "Без обязательной подписки на канал",
@@ -429,7 +429,7 @@ var locRU = Localization{
 
 	// Invite
 	InviteTitle:    "🎁 Вы будете получать 20% от покупок ваших рефералов!",
-	InviteExample:  "Например, пользователь купил 10 доп. запросов, вы получите 2 доп. запроса бесплатно! Не действует на подписки.",
+	InviteExample:  "Например, пользователь купил 10 генераций, вы получите 2 генерации бесплатно! Не действует на подписки.",
 	InviteLink:     "**Ваша личная реферальная ссылка**:",
 	InviteCopyHint: "*Нажмите, чтобы скопировать*",
 	InviteCount:    "👥 Приглашено пользователей:",
@@ -562,7 +562,7 @@ var locRU = Localization{
 	PrivacyTerms:  "📜 Пользовательское соглашение:",
 
 	HelpTitle:    "📋 Доступные команды:",
-	HelpCommands: "/start - Начать\n/menu - Главное меню\n/buy - Купить доп. запросы\n/rules - Правила использования\n/invite - Пригласить друзей",
+	HelpCommands: "/start - Начать\n/menu - Главное меню\n/buy - Купить подписку\n/rules - Правила использования\n/invite - Пригласить друзей",
 	HelpUsage:    "📸 Как пользоваться:\n1. Отправьте фото\n2. Опишите желаемые изменения\n3. Дождитесь результата",
 	HelpCost:     "💰 Стоимость: 1 запрос",
 
@@ -646,7 +646,7 @@ var locRU = Localization{
 	QuotaMusicRequests:           "генерации музыки",
 	QuotaVideoRequests:           "видео-запросы",
 	QuotaRequests:                "запросы",
-	BuyExtraQuota:                "💰 Купить доп. запросы",
+	BuyExtraQuota:                "💰 Купить генерации",
 	BackToSubscriptions:          "◀️ Назад к подпискам",
 	SubscriptionSelected:         "✅ Вы выбрали подписку %s.\nПерейдите по ссылке для оплаты:\n%s",
 	PaymentLink:                  "Перейдите по ссылке для оплаты:\n%s",

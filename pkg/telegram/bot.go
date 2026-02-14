@@ -886,7 +886,7 @@ func (b *Bot) setCommands() {
 		{Command: "start", Description: "Начать"},
 		{Command: "menu", Description: "Главное меню"},
 		{Command: "account", Description: "Аккаунт и лимиты"},
-		{Command: "buy", Description: "Купить (подписку,доп.запросы)"},
+		{Command: "buy", Description: "Купить (подписку,генерации)"},
 		{Command: "invite", Description: "Пригласить друзей"},
 		{Command: "rules", Description: "Правила использования"},
 		{Command: "help", Description: "Помощь"},
@@ -907,7 +907,7 @@ func (b *Bot) setChatCommands(chatID int64, isAdmin bool) {
 		{Command: "start", Description: "Начать"},
 		{Command: "menu", Description: "Главное меню"},
 		{Command: "account", Description: "Аккаунт и лимиты"},
-		{Command: "buy", Description: "Купить (подписку,доп.запросы)"},
+		{Command: "buy", Description: "Купить (подписку,генерации)"},
 		{Command: "invite", Description: "Пригласить друзей"},
 		{Command: "rules", Description: "Правила использования"},
 		{Command: "help", Description: "Помощь"},
@@ -4434,7 +4434,7 @@ func (b *Bot) sendInsufficientQuotaMessage(chatID int64, category models.QuotaCa
 
 	keyboard := tgbotapi.NewInlineKeyboardMarkup(
 		tgbotapi.NewInlineKeyboardRow(
-			tgbotapi.NewInlineKeyboardButtonData("💰 Купить доп. запросы", "buy"),
+			tgbotapi.NewInlineKeyboardButtonData("💰 Купить генерации", "buy"),
 		),
 	)
 
