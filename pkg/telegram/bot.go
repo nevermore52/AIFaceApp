@@ -4907,6 +4907,36 @@ func (b *Bot) sendGenerationStatus(chatID int64, req *models.GenerationRequest) 
 		}
 
 		if strings.HasPrefix(output, "http") {
+			// Видео (.mp4) — отправляем как видео
+			isVideo := strings.HasSuffix(strings.ToLower(strings.SplitN(output, "?", 2)[0]), ".mp4")
+			if !isVideo {
+				if opt, ok := findModelOption(req.Model); ok && opt.Category == ModelCategoryVideo {
+					isVideo = true
+				}
+			}
+			if isVideo {
+				vidMsg := tgbotapi.NewVideo(chatID, tgbotapi.FileURL(output))
+				vidMsg.Caption = caption
+				if _, err := b.api.Send(vidMsg); err != nil {
+					log.Printf("Failed to send generation video by URL: %v", err)
+					if videoBytes, fileName, dlErr := downloadFileToBytes(output, "mp4"); dlErr == nil {
+						docMsg := tgbotapi.NewDocument(chatID, tgbotapi.FileBytes{
+							Name:  fileName,
+							Bytes: videoBytes,
+						})
+						docMsg.Caption = caption
+						if _, sendErr := b.api.Send(docMsg); sendErr != nil {
+							log.Printf("Failed to send generation video bytes: %v", sendErr)
+							b.sendText(chatID, truncate(baseText+"\n\n🎬 Видео: "+output, 3800))
+						}
+					} else {
+						log.Printf("Failed to download generation video url: %v", dlErr)
+						b.sendText(chatID, truncate(baseText+"\n\n🎬 Видео: "+output, 3800))
+					}
+				}
+				return
+			}
+
 			msg := tgbotapi.NewPhoto(chatID, tgbotapi.FileURL(output))
 			msg.Caption = caption
 			if _, err := b.api.Send(msg); err != nil {
