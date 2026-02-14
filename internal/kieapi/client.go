@@ -51,6 +51,10 @@ type CallbackPayload struct {
 		Status     string `json:"status"`
 		Result     any    `json:"result"`
 		ResultJson string `json:"resultJson"`
+		Info       struct {
+			ResultUrls []string `json:"resultUrls"`
+			ResultURLs []string `json:"result_urls"`
+		} `json:"info"`
 	} `json:"data"`
 }
 
@@ -67,12 +71,23 @@ func (p CallbackPayload) StatusValue() string {
 	if st == "" {
 		st = strings.TrimSpace(p.Data.Status)
 	}
+	// Veo callbacks: no state/status field, but code=200 means success
+	if st == "" && p.Code == 200 {
+		return "success"
+	}
 	return st
 }
 
 func (p CallbackPayload) ResultURL() string {
 	if u := findFirstHTTP(p.Data.Result); u != "" {
 		return u
+	}
+	// Veo callbacks: resultUrls inside data.info
+	if len(p.Data.Info.ResultUrls) > 0 {
+		return strings.TrimSpace(p.Data.Info.ResultUrls[0])
+	}
+	if len(p.Data.Info.ResultURLs) > 0 {
+		return strings.TrimSpace(p.Data.Info.ResultURLs[0])
 	}
 	raw := strings.TrimSpace(p.Data.ResultJson)
 	if raw == "" {
