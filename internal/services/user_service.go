@@ -626,6 +626,8 @@ func (s *UserService) ensureDailyTextQuota(telegramID int64) error {
 			newDaily = 50
 		case "start":
 			newDaily = 100
+		case "pro":
+			newDaily = 200
 		}
 	}
 
