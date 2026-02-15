@@ -4459,6 +4459,9 @@ func friendlyGenerationError(err error) string {
 		return ""
 	}
 	msg := strings.ToLower(err.Error())
+	if strings.Contains(msg, "public figure") {
+		return "На фото обнаружена известная личность. К сожалению, генерация видео с публичными персонами недоступна. Попробуйте другое фото."
+	}
 	if strings.Contains(msg, "internal server error") ||
 		strings.Contains(msg, "status code: 500") ||
 		strings.Contains(msg, "status 500") ||
