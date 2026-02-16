@@ -2779,6 +2779,32 @@ func (b *Bot) sendLanguageMenu(chatID int64, userID int64) {
 	}
 }
 
+// handleAnimatePhoto обрабатывает нажатие кнопки "Оживить фото" — берёт фото из сообщения и запускает veo3_fast
+func (b *Bot) handleAnimatePhoto(chatID int64, userID int64, callback *tgbotapi.CallbackQuery) {
+	if callback.Message == nil || callback.Message.Photo == nil || len(callback.Message.Photo) == 0 {
+		b.sendErrorMessage(chatID, "Не удалось найти фото в сообщении.")
+		return
+	}
+
+	// Берём самое большое фото из сообщения
+	photo := callback.Message.Photo[len(callback.Message.Photo)-1]
+	file, err := b.api.GetFile(tgbotapi.FileConfig{FileID: photo.FileID})
+	if err != nil {
+		log.Printf("animate_photo: failed to get file: %v", err)
+		b.sendErrorMessage(chatID, "Не удалось получить фото для оживления.")
+		return
+	}
+	photoURL := file.Link(b.cfg.TelegramToken)
+
+	veoOpt, ok := findModelOption("veo3_fast")
+	if !ok {
+		b.sendErrorMessage(chatID, "Модель Veo 3.1 Fast не найдена.")
+		return
+	}
+
+	b.processVideoGeneration(chatID, userID, photoURL, "оживи фото", veoOpt)
+}
+
 // processVideoGeneration обрабатывает видео-генерацию из фото (image_to_video)
 func (b *Bot) processVideoGeneration(chatID int64, userID int64, photoURL string, prompt string, modelOpt ModelOption) {
 	if !b.ensureCategoryEnabled(chatID, ModelCategoryVideo) {
@@ -3227,6 +3253,8 @@ func (b *Bot) handleCallback(callback *tgbotapi.CallbackQuery) {
 		}
 		b.setUserChatStyle(userID, "empathetic")
 		b.sendChatStyleMenu(chatID, userID)
+	case "animate_photo":
+		b.handleAnimatePhoto(chatID, userID, callback)
 	case "invite":
 		b.sendInviteInfo(chatID, userID)
 	case "models_menu":
@@ -4893,6 +4921,18 @@ func (b *Bot) sendGenerationStatus(chatID int64, req *models.GenerationRequest) 
 		output := *req.Output
 		caption := truncate(baseText, 900) // подпись к фото
 
+		// Кнопка "Оживить фото" для nano-banana и nano-banana-pro
+		var animateMarkup *tgbotapi.InlineKeyboardMarkup
+		if req.Model == "google/nano-banana" || req.Model == "google/nano-banana-pro" ||
+			req.Model == "nano-banana" || req.Model == "kie/nano-banana-edit" || req.Model == "kie/nano-banana-pro" {
+			kb := tgbotapi.NewInlineKeyboardMarkup(
+				tgbotapi.NewInlineKeyboardRow(
+					tgbotapi.NewInlineKeyboardButtonData("🎬 Оживить фото", "animate_photo"),
+				),
+			)
+			animateMarkup = &kb
+		}
+
 		// Пытаемся отправить картинку
 		if strings.HasPrefix(output, "data:image") {
 			photoBytes, fileName, err := decodeDataURL(output)
@@ -4906,6 +4946,9 @@ func (b *Bot) sendGenerationStatus(chatID int64, req *models.GenerationRequest) 
 				Bytes: photoBytes,
 			})
 			msg.Caption = caption
+			if animateMarkup != nil {
+				msg.ReplyMarkup = *animateMarkup
+			}
 			if _, err := b.api.Send(msg); err != nil {
 				log.Printf("Failed to send generation photo: %v", err)
 				b.sendText(chatID, truncate(baseText+"\n\n🖼️ Результат недоступен", 3800))
@@ -4946,6 +4989,9 @@ func (b *Bot) sendGenerationStatus(chatID int64, req *models.GenerationRequest) 
 
 			msg := tgbotapi.NewPhoto(chatID, tgbotapi.FileURL(output))
 			msg.Caption = caption
+			if animateMarkup != nil {
+				msg.ReplyMarkup = *animateMarkup
+			}
 			if _, err := b.api.Send(msg); err != nil {
 				log.Printf("Failed to send generation photo by URL: %v", err)
 				if photoBytes, fileName, dlErr := downloadFileToBytes(output, "png"); dlErr == nil {
@@ -4954,6 +5000,9 @@ func (b *Bot) sendGenerationStatus(chatID int64, req *models.GenerationRequest) 
 						Bytes: photoBytes,
 					})
 					photoMsg.Caption = caption
+					if animateMarkup != nil {
+						photoMsg.ReplyMarkup = *animateMarkup
+					}
 					if _, sendErr := b.api.Send(photoMsg); sendErr != nil {
 						log.Printf("Failed to send generation photo bytes: %v", sendErr)
 						b.sendText(chatID, truncate(baseText+"\n\n🖼️ Результат недоступен", 3800))
