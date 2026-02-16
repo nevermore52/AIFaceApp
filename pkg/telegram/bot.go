@@ -4430,7 +4430,7 @@ func (b *Bot) sendInsufficientQuotaMessage(chatID int64, category models.QuotaCa
 		label = "запросов"
 	}
 
-	text := fmt.Sprintf("❌ Недостаточно %s. Нужно %d.\n%s\n\nИспользуйте /buy чтобы докупить доп. запросы.", label, need, friendlyGenerationError(cause))
+	text := fmt.Sprintf("❌ Недостаточно %s. Нужно %d.\n%s\n\nИспользуйте /buy чтобы докупить генерации.", label, need, friendlyGenerationError(cause))
 
 	keyboard := tgbotapi.NewInlineKeyboardMarkup(
 		tgbotapi.NewInlineKeyboardRow(

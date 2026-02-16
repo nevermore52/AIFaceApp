@@ -415,7 +415,7 @@ var locRU = Localization{
 	SubsBackToSubs:     "◀️ Назад к подпискам",
 
 	// Extras
-	ExtrasTitle:       "💰 Купить доп. запросы",
+	ExtrasTitle:       "💰 Купить генерации",
 	ExtrasSelectCat:   "Выберите категорию.",
 	ExtrasText:        "📝 Текст",
 	ExtrasImages:      "🖼️ Изображения",
