@@ -3435,7 +3435,7 @@ func (b *Bot) sendTrialReminders() {
 			continue
 		}
 
-		text := `**Ты так и не попробовал первую бесплатную генерацию** 🎁
+		text := `<b>Ты так и не попробовал первую бесплатную генерацию</b> 🎁
 
 Самое крутое — тебе нужно всего 1 фото, а результат будет как после настоящей фотосессии 📸✨
 
@@ -3453,6 +3453,7 @@ https://t.me/aifaceapps`
 		msg := tgbotapi.NewMessage(user.TelegramID, text)
 		msg.ReplyMarkup = kb
 		msg.DisableWebPagePreview = true
+		msg.ParseMode = tgbotapi.ModeHTML
 
 		if _, err := b.api.Send(msg); err != nil {
 			log.Printf("Failed to send trial reminder to %d: %v", user.TelegramID, err)
