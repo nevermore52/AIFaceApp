@@ -147,7 +147,7 @@ func (b *Bot) sendStartTrialMenu(chatID int64) {
 	kb := tgbotapi.NewInlineKeyboardMarkup(
 		tgbotapi.NewInlineKeyboardRow(btn),
 	)
-	text := fmt.Sprintf("Чтобы получить 1 пробную генерацию фото — подпишитесь на канал %s\n%s и нажмите «Проверить подписку»", requiredChannelUsername, requiredChannelLink)
+	text := fmt.Sprintf("Чтобы получить 1 пробную генерацию фото — подпишитесь на канал %s\nи нажмите «Проверить подписку»\n%s", requiredChannelUsername, requiredChannelLink)
 	msg := tgbotapi.NewMessage(chatID, text)
 	msg.ReplyMarkup = kb
 	if _, err := b.api.Send(msg); err != nil {
@@ -774,6 +774,9 @@ func (b *Bot) Start() error {
 	// Устанавливаем команды меню
 	b.setCommands()
 
+	// Запускаем планировщик напоминаний о пробной генерации
+	go b.startTrialReminderScheduler()
+
 	u := tgbotapi.NewUpdate(0)
 	u.Timeout = 60
 
@@ -970,6 +973,9 @@ func (b *Bot) handleMessage(msg *tgbotapi.Message) {
 			return
 		}
 	}
+
+	// Middleware: проверка и выдача пробного запроса при подписке на канал
+	b.checkAndGrantChannelTrial(user.ID)
 
 	// Обрабатываем команды
 	if msg.IsCommand() {
@@ -2981,6 +2987,12 @@ func (b *Bot) handleCallback(callback *tgbotapi.CallbackQuery) {
 		}
 	}
 
+	// Middleware: проверка и выдача пробного запроса при подписке на канал
+	// Исключаем trial:check, чтобы не было дублирования логики
+	if data != "trial:check" {
+		b.checkAndGrantChannelTrial(userID)
+	}
+
 	switch data {
 	case "menu":
 		b.sendMainMenu(chatID, userID)
@@ -3347,6 +3359,114 @@ func (b *Bot) sendChannelTrialMenu(chatID int64) {
 	msg.ReplyMarkup = kb
 	if _, err := b.api.Send(msg); err != nil {
 		log.Printf("sendChannelTrialMenu send message error: %v", err)
+	}
+}
+
+// checkAndGrantChannelTrial проверяет подписку на канал и выдаёт пробный запрос
+// если пользователь ещё не получал его (channel_trial_claimed = false)
+func (b *Bot) checkAndGrantChannelTrial(userID int64) {
+	// Проверяем, получал ли пользователь уже пробный запрос
+	claimed, err := b.userService.HasClaimedChannelTrial(userID)
+	if err != nil {
+		log.Printf("checkAndGrantChannelTrial HasClaimedChannelTrial error: %v", err)
+		return
+	}
+	if claimed {
+		return
+	}
+
+	// Проверяем подписку на канал
+	member, err := b.isChannelMember(userID)
+	if err != nil {
+		log.Printf("checkAndGrantChannelTrial isChannelMember error: %v", err)
+		return
+	}
+	if !member {
+		return
+	}
+
+	// Выдаём пробный запрос
+	if err := b.userService.AddExtraQuota(userID, models.QuotaCategoryImage, 1); err != nil {
+		log.Printf("checkAndGrantChannelTrial AddExtraQuota error: %v", err)
+		return
+	}
+
+	// Помечаем, что пробный запрос выдан
+	if err := b.userService.MarkChannelTrialClaimed(userID); err != nil {
+		log.Printf("checkAndGrantChannelTrial MarkChannelTrialClaimed error: %v", err)
+	}
+
+	log.Printf("Granted channel trial to user %d", userID)
+}
+
+// startTrialReminderScheduler запускает планировщик для отправки напоминаний
+// пользователям, которые не получили бесплатную генерацию через час после регистрации
+func (b *Bot) startTrialReminderScheduler() {
+	ticker := time.NewTicker(5 * time.Minute)
+	defer ticker.Stop()
+
+	for {
+		select {
+		case <-ticker.C:
+			if b.shuttingDown.Load() {
+				return
+			}
+			b.sendTrialReminders()
+		}
+	}
+}
+
+// sendTrialReminders отправляет напоминания пользователям о бесплатной генерации
+func (b *Bot) sendTrialReminders() {
+	users, err := b.userService.GetUsersForTrialReminder()
+	if err != nil {
+		log.Printf("GetUsersForTrialReminder error: %v", err)
+		return
+	}
+
+	if len(users) == 0 {
+		return
+	}
+
+	log.Printf("Sending trial reminders to %d users", len(users))
+
+	for _, user := range users {
+		if user == nil || user.TelegramID == 0 {
+			continue
+		}
+
+		text := `**Ты так и не попробовал первую бесплатную генерацию** 🎁
+
+Самое крутое — тебе нужно всего 1 фото, а результат будет как после настоящей фотосессии 📸✨
+
+Попробуй прямо сейчас и посмотри, каким классным может быть твой снимок!
+
+Подписывайся на канал, выбирай образ, выбирай модель Nano Banana и загрузи фото — это бесплатно 👇
+https://t.me/aifaceapps`
+
+		kb := tgbotapi.NewInlineKeyboardMarkup(
+			tgbotapi.NewInlineKeyboardRow(
+				tgbotapi.NewInlineKeyboardButtonURL("Выбрать образ", "https://t.me/aifaceapps"),
+			),
+		)
+
+		msg := tgbotapi.NewMessage(user.TelegramID, text)
+		msg.ReplyMarkup = kb
+		msg.DisableWebPagePreview = true
+
+		if _, err := b.api.Send(msg); err != nil {
+			log.Printf("Failed to send trial reminder to %d: %v", user.TelegramID, err)
+		} else {
+			log.Printf("Sent trial reminder to user %d", user.TelegramID)
+		}
+
+		// Помечаем, что напоминание отправлено
+		if err := b.userService.MarkTrialReminderSent(user.TelegramID); err != nil {
+			log.Printf("MarkTrialReminderSent error for %d: %v", user.TelegramID, err)
+		}
+
+		// Небольшая задержка между отправками
+		time.Sleep(50 * time.Millisecond)
 	}
 }
 

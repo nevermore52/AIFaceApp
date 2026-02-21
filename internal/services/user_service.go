@@ -1102,6 +1102,71 @@ func (s *UserService) CountUsers() (int, error) {
 	return total, err
 }
 
+// GetUsersForTrialReminder возвращает пользователей, которые:
+// - зарегистрировались более часа назад
+// - не получили пробную генерацию (channel_trial_claimed = false)
+// - ещё не получали напоминание (trial_reminder_sent = false)
+func (s *UserService) GetUsersForTrialReminder() ([]*models.User, error) {
+	if err := s.ensureChannelTrialColumn(); err != nil {
+		return nil, err
+	}
+	if err := s.ensureTrialReminderColumn(); err != nil {
+		return nil, err
+	}
+
+	query := `
+		SELECT id, telegram_id, username, first_name, last_name, language_code,
+			   is_premium, is_admin, COALESCE(referrer_id, 0), COALESCE(referral_code, ''),
+			   COALESCE(referrals_count, 0), created_at, updated_at, is_blocked
+		FROM users
+		WHERE channel_trial_claimed = FALSE
+		  AND trial_reminder_sent = FALSE
+		  AND created_at < NOW() - INTERVAL '2 hours'
+		ORDER BY created_at ASC
+		LIMIT 100`
+
+	rows, err := s.db.Query(query)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var users []*models.User
+	for rows.Next() {
+		user := &models.User{}
+		var referrerID int64
+		err := rows.Scan(
+			&user.ID, &user.TelegramID, &user.Username, &user.FirstName, &user.LastName,
+			&user.LanguageCode, &user.IsPremium, &user.IsAdmin,
+			&referrerID, &user.ReferralCode, &user.ReferralsCount,
+			&user.CreatedAt, &user.UpdatedAt, &user.IsBlocked,
+		)
+		if err != nil {
+			return nil, err
+		}
+		if referrerID != 0 {
+			user.ReferrerID = &referrerID
+		}
+		users = append(users, user)
+	}
+
+	return users, rows.Err()
+}
+
+// MarkTrialReminderSent помечает, что напоминание о пробной генерации было отправлено
+func (s *UserService) MarkTrialReminderSent(telegramID int64) error {
+	if err := s.ensureTrialReminderColumn(); err != nil {
+		return err
+	}
+	_, err := s.db.Exec(`UPDATE users SET trial_reminder_sent = TRUE, updated_at = CURRENT_TIMESTAMP WHERE telegram_id = $1`, telegramID)
+	return err
+}
+
+func (s *UserService) ensureTrialReminderColumn() error {
+	_, err := s.db.Exec(`ALTER TABLE users ADD COLUMN IF NOT EXISTS trial_reminder_sent BOOLEAN NOT NULL DEFAULT FALSE`)
+	return err
+}
+
 func (s *UserService) GetUserStats(telegramID int64) (map[string]any, error) {
 	query := `
 		SELECT
