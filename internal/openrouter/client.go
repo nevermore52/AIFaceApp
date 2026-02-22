@@ -126,7 +126,7 @@ func (c *Client) ChangeImage(model string, inputImageURLs []string, hairDescript
 	c.debugLog("ChangeImage input URLs: %s", truncate(joinedURLs, 200))
 
 	input := map[string]any{
-		"prompt": hairDescription,
+		"prompt":        hairDescription,
 		"image_urls":    inputImageURLs,
 		"output_format": "png",
 	}
@@ -629,9 +629,7 @@ func waitParamsForModel(model, taskType string) (attempts int, delay time.Durati
 
 func (c *Client) chatCompletionURL() string {
 	base := strings.TrimRight(c.baseURL, "/")
-	if strings.Contains(base, "/api/") {
-		base = strings.Replace(base, "/api/", "/", 1)
-	}
+	base = strings.Replace(base, "/api/", "/", 1)
 	return base + "/chat/completions"
 }
 

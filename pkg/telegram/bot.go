@@ -136,7 +136,7 @@ func convertBroadcastMarkupToHTML(text string) string {
 	inlineCodeRe := regexp.MustCompile("`([^`\n]+)`")
 	text = inlineCodeRe.ReplaceAllString(text, "<code>$1</code>")
 
-	boldRe := regexp.MustCompile("\\*\\*(.+?)\\*\\*")
+	boldRe := regexp.MustCompile(`\*\*(.+?)\*\*`)
 	text = boldRe.ReplaceAllString(text, "<b>$1</b>")
 
 	return text
@@ -2808,7 +2808,7 @@ func (b *Bot) handleAnimatePhoto(chatID int64, userID int64, callback *tgbotapi.
 		return
 	}
 
-	b.processVideoGeneration(chatID, userID, photoURL, "оживи фото", veoOpt)
+	b.processVideoGeneration(chatID, userID, photoURL, "оживи фото, звук придумай сам(желательно чтобы звук был в стиле фото)", veoOpt)
 }
 
 // processVideoGeneration обрабатывает видео-генерацию из фото (image_to_video)
