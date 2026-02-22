@@ -549,6 +549,13 @@ func (b *Bot) sendPaymentsStatus(chatID int64) {
 	kb := tgbotapi.NewInlineKeyboardMarkup(
 		tgbotapi.NewInlineKeyboardRow(
 			tgbotapi.NewInlineKeyboardButtonData(toggleLabel, "admin:payments_toggle"),
+		),
+		tgbotapi.NewInlineKeyboardRow(
+			tgbotapi.NewInlineKeyboardButtonData("📊 Статистика платежей", "admin:pay_stats"),
+			tgbotapi.NewInlineKeyboardButtonData("📋 Последние платежи", "admin:pay_list"),
+		),
+		tgbotapi.NewInlineKeyboardRow(
+			tgbotapi.NewInlineKeyboardButtonData("◀️ Назад", "admin:menu"),
 			tgbotapi.NewInlineKeyboardButtonData("🏠 Меню", "menu"),
 		),
 	)
@@ -556,6 +563,108 @@ func (b *Bot) sendPaymentsStatus(chatID int64) {
 	msg.ReplyMarkup = kb
 	if _, err := b.api.Send(msg); err != nil {
 		log.Printf("Failed to send payments status: %v", err)
+	}
+}
+
+func (b *Bot) sendPaymentStats(chatID int64) {
+	now := time.Now().UTC()
+
+	dayStats, errDay := b.userService.GetPaymentStats(now.Add(-24 * time.Hour))
+	weekStats, errWeek := b.userService.GetPaymentStats(now.Add(-7 * 24 * time.Hour))
+	allStats, errAll := b.userService.GetPaymentStatsAll()
+
+	if errDay != nil || errWeek != nil || errAll != nil {
+		b.sendErrorMessage(chatID, "Ошибка при получении статистики платежей")
+		return
+	}
+
+	text := fmt.Sprintf(`📊 <b>Статистика платежей</b>
+
+📅 <b>За день</b> (24ч):
+  Платежей: %d
+  Сумма: %.2f ₽
+
+📆 <b>За неделю</b> (7д):
+  Платежей: %d
+  Сумма: %.2f ₽
+
+♾️ <b>За всё время</b>:
+  Платежей: %d
+  Сумма: %.2f ₽`,
+		dayStats.Count, dayStats.TotalAmount,
+		weekStats.Count, weekStats.TotalAmount,
+		allStats.Count, allStats.TotalAmount,
+	)
+
+	kb := tgbotapi.NewInlineKeyboardMarkup(
+		tgbotapi.NewInlineKeyboardRow(
+			tgbotapi.NewInlineKeyboardButtonData("📋 Последние платежи", "admin:pay_list"),
+		),
+		tgbotapi.NewInlineKeyboardRow(
+			tgbotapi.NewInlineKeyboardButtonData("◀️ Назад", "admin:payments"),
+			tgbotapi.NewInlineKeyboardButtonData("🏠 Меню", "menu"),
+		),
+	)
+	msg := tgbotapi.NewMessage(chatID, text)
+	msg.ParseMode = tgbotapi.ModeHTML
+	msg.ReplyMarkup = kb
+	if _, err := b.api.Send(msg); err != nil {
+		log.Printf("Failed to send payment stats: %v", err)
+	}
+}
+
+func (b *Bot) sendRecentPayments(chatID int64) {
+	payments, err := b.userService.GetRecentPayments(20)
+	if err != nil {
+		b.sendErrorMessage(chatID, "Ошибка при получении списка платежей")
+		return
+	}
+
+	if len(payments) == 0 {
+		text := "📋 <b>Платежи</b>\n\nПлатежей пока нет."
+		kb := tgbotapi.NewInlineKeyboardMarkup(
+			tgbotapi.NewInlineKeyboardRow(
+				tgbotapi.NewInlineKeyboardButtonData("◀️ Назад", "admin:payments"),
+				tgbotapi.NewInlineKeyboardButtonData("🏠 Меню", "menu"),
+			),
+		)
+		msg := tgbotapi.NewMessage(chatID, text)
+		msg.ParseMode = tgbotapi.ModeHTML
+		msg.ReplyMarkup = kb
+		b.api.Send(msg)
+		return
+	}
+
+	text := "📋 <b>Последние платежи</b>\n\n"
+	for _, p := range payments {
+		username := p.Username
+		if username == "" {
+			username = "—"
+		}
+		text += fmt.Sprintf("• <b>%.2f ₽</b> | @%s | ID: %d\n  %s × %d | %s\n",
+			p.Amount,
+			html.EscapeString(username),
+			p.TelegramID,
+			html.EscapeString(p.Category),
+			p.Qty,
+			p.CreatedAt.In(time.FixedZone("MSK", 3*60*60)).Format("02.01.2006 15:04"),
+		)
+	}
+
+	kb := tgbotapi.NewInlineKeyboardMarkup(
+		tgbotapi.NewInlineKeyboardRow(
+			tgbotapi.NewInlineKeyboardButtonData("📊 Статистика", "admin:pay_stats"),
+		),
+		tgbotapi.NewInlineKeyboardRow(
+			tgbotapi.NewInlineKeyboardButtonData("◀️ Назад", "admin:payments"),
+			tgbotapi.NewInlineKeyboardButtonData("🏠 Меню", "menu"),
+		),
+	)
+	msg := tgbotapi.NewMessage(chatID, text)
+	msg.ParseMode = tgbotapi.ModeHTML
+	msg.ReplyMarkup = kb
+	if _, err := b.api.Send(msg); err != nil {
+		log.Printf("Failed to send recent payments: %v", err)
 	}
 }
 
@@ -3151,6 +3260,16 @@ func (b *Bot) handleCallback(callback *tgbotapi.CallbackQuery) {
 			return
 		}
 		b.togglePayments(chatID)
+	case "admin:pay_stats":
+		if !b.ensureAdmin(chatID, userID) {
+			return
+		}
+		b.sendPaymentStats(chatID)
+	case "admin:pay_list":
+		if !b.ensureAdmin(chatID, userID) {
+			return
+		}
+		b.sendRecentPayments(chatID)
 	case "admin:nano_api_toggle":
 		if !b.ensureAdmin(chatID, userID) {
 			return
@@ -3405,14 +3524,11 @@ func (b *Bot) startTrialReminderScheduler() {
 	ticker := time.NewTicker(5 * time.Minute)
 	defer ticker.Stop()
 
-	for {
-		select {
-		case <-ticker.C:
-			if b.shuttingDown.Load() {
-				return
-			}
-			b.sendTrialReminders()
+	for range ticker.C {
+		if b.shuttingDown.Load() {
+			return
 		}
+		b.sendTrialReminders()
 	}
 }
 

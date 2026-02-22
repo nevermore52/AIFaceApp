@@ -1167,6 +1167,56 @@ func (s *UserService) ensureTrialReminderColumn() error {
 	return err
 }
 
+func (s *UserService) RecordPayment(telegramID int64, username, paymentID, category string, qty int, amount float64) error {
+	_, err := s.db.Exec(`
+		INSERT INTO completed_payments (telegram_id, username, payment_id, category, qty, amount)
+		VALUES ($1, $2, $3, $4, $5, $6)`,
+		telegramID, username, paymentID, category, qty, amount)
+	return err
+}
+
+func (s *UserService) GetRecentPayments(limit int) ([]*models.Payment, error) {
+	if limit <= 0 {
+		limit = 20
+	}
+	rows, err := s.db.Query(`
+		SELECT id, telegram_id, username, payment_id, category, qty, amount, created_at
+		FROM completed_payments
+		ORDER BY created_at DESC
+		LIMIT $1`, limit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var payments []*models.Payment
+	for rows.Next() {
+		p := &models.Payment{}
+		if err := rows.Scan(&p.ID, &p.TelegramID, &p.Username, &p.PaymentID, &p.Category, &p.Qty, &p.Amount, &p.CreatedAt); err != nil {
+			return nil, err
+		}
+		payments = append(payments, p)
+	}
+	return payments, rows.Err()
+}
+
+func (s *UserService) GetPaymentStats(since time.Time) (*models.PaymentStats, error) {
+	stats := &models.PaymentStats{}
+	err := s.db.QueryRow(`
+		SELECT COUNT(*), COALESCE(SUM(amount), 0)
+		FROM completed_payments
+		WHERE created_at >= $1`, since).Scan(&stats.Count, &stats.TotalAmount)
+	return stats, err
+}
+
+func (s *UserService) GetPaymentStatsAll() (*models.PaymentStats, error) {
+	stats := &models.PaymentStats{}
+	err := s.db.QueryRow(`
+		SELECT COUNT(*), COALESCE(SUM(amount), 0)
+		FROM completed_payments`).Scan(&stats.Count, &stats.TotalAmount)
+	return stats, err
+}
+
 func (s *UserService) GetUserStats(telegramID int64) (map[string]any, error) {
 	query := `
 		SELECT

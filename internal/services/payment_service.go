@@ -145,6 +145,16 @@ func (s *PaymentService) ProcessSuccessfulPayment(userID int64, category string,
 	if _, err := s.userService.GetOrCreateUser(userID, "", "", "", ""); err != nil {
 		return fmt.Errorf("ensure user: %w", err)
 	}
+
+	// Записываем оплаченный платёж в таблицу completed_payments
+	username := ""
+	if buyer, err := s.userService.GetUserByTelegramID(userID); err == nil {
+		username = buyer.Username
+	}
+	if err := s.userService.RecordPayment(userID, username, paymentID, category, qty, amount); err != nil {
+		log.Printf("RecordPayment error: user=%d payment=%s err=%v", userID, paymentID, err)
+	}
+
 	if strings.HasPrefix(category, "subscription:") {
 		plan := strings.TrimPrefix(category, "subscription:")
 		if err := s.userService.SetSubscription(userID, plan, qty); err != nil {

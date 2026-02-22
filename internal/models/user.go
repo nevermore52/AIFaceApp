@@ -79,3 +79,19 @@ type CategorySetting struct {
 	Category string `json:"category" db:"category"`
 	Enabled  bool   `json:"enabled" db:"enabled"`
 }
+
+type Payment struct {
+	ID         int64     `json:"id" db:"id"`
+	TelegramID int64     `json:"telegram_id" db:"telegram_id"`
+	Username   string    `json:"username" db:"username"`
+	PaymentID  string    `json:"payment_id" db:"payment_id"`
+	Category   string    `json:"category" db:"category"`
+	Qty        int       `json:"qty" db:"qty"`
+	Amount     float64   `json:"amount" db:"amount"`
+	CreatedAt  time.Time `json:"created_at" db:"created_at"`
+}
+
+type PaymentStats struct {
+	Count       int     `json:"count"`
+	TotalAmount float64 `json:"total_amount"`
+}

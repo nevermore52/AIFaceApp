@@ -149,6 +149,18 @@ func RunMigrations(db *sql.DB) error {
 	ALTER TABLE users ADD COLUMN IF NOT EXISTS subscription_started_at TIMESTAMP WITH TIME ZONE;
 	ALTER TABLE users ADD COLUMN IF NOT EXISTS subscription_end TIMESTAMP WITH TIME ZONE;`
 
+	completedPaymentsSQL := `
+	CREATE TABLE IF NOT EXISTS completed_payments (
+		id SERIAL PRIMARY KEY,
+		telegram_id BIGINT NOT NULL,
+		username VARCHAR(255) DEFAULT '',
+		payment_id TEXT NOT NULL,
+		category VARCHAR(100) NOT NULL,
+		qty INTEGER NOT NULL DEFAULT 0,
+		amount NUMERIC(12,2) NOT NULL DEFAULT 0,
+		created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+	);`
+
 	indexesSQL := `
 	CREATE INDEX IF NOT EXISTS idx_users_telegram_id ON users(telegram_id);
 	CREATE INDEX IF NOT EXISTS idx_users_is_admin ON users(is_admin);
@@ -156,7 +168,9 @@ func RunMigrations(db *sql.DB) error {
 	CREATE INDEX IF NOT EXISTS idx_generation_requests_user_id ON generation_requests(user_id);
 	CREATE INDEX IF NOT EXISTS idx_generation_requests_status ON generation_requests(status);
 	CREATE INDEX IF NOT EXISTS idx_generation_requests_external_task_id ON generation_requests(external_task_id);
-	CREATE INDEX IF NOT EXISTS idx_user_quotas_telegram_id ON user_quotas(telegram_id);`
+	CREATE INDEX IF NOT EXISTS idx_user_quotas_telegram_id ON user_quotas(telegram_id);
+	CREATE INDEX IF NOT EXISTS idx_completed_payments_telegram_id ON completed_payments(telegram_id);
+	CREATE INDEX IF NOT EXISTS idx_completed_payments_created_at ON completed_payments(created_at);`
 
 	tables := []string{
 		userTableSQL,
@@ -173,6 +187,7 @@ func RunMigrations(db *sql.DB) error {
 		dropGenerationRequestsTypeSQL,
 		defapiMigrationSQL,
 		subscriptionSQL,
+		completedPaymentsSQL,
 		indexesSQL,
 	}
 
