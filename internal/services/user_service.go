@@ -1167,11 +1167,11 @@ func (s *UserService) ensureTrialReminderColumn() error {
 	return err
 }
 
-func (s *UserService) RecordPayment(telegramID int64, username, paymentID, category string, qty int, amount float64) error {
+func (s *UserService) RecordPayment(telegramID int64, username, firstName, lastName, paymentID, category string, qty int, amount float64) error {
 	_, err := s.db.Exec(`
-		INSERT INTO completed_payments (telegram_id, username, payment_id, category, qty, amount)
-		VALUES ($1, $2, $3, $4, $5, $6)`,
-		telegramID, username, paymentID, category, qty, amount)
+		INSERT INTO completed_payments (telegram_id, username, first_name, last_name, payment_id, category, qty, amount)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
+		telegramID, username, firstName, lastName, paymentID, category, qty, amount)
 	return err
 }
 
@@ -1180,7 +1180,7 @@ func (s *UserService) GetRecentPayments(limit int) ([]*models.Payment, error) {
 		limit = 20
 	}
 	rows, err := s.db.Query(`
-		SELECT id, telegram_id, username, payment_id, category, qty, amount, created_at
+		SELECT id, telegram_id, username, first_name, last_name, payment_id, category, qty, amount, created_at
 		FROM completed_payments
 		ORDER BY created_at DESC
 		LIMIT $1`, limit)
@@ -1192,7 +1192,7 @@ func (s *UserService) GetRecentPayments(limit int) ([]*models.Payment, error) {
 	var payments []*models.Payment
 	for rows.Next() {
 		p := &models.Payment{}
-		if err := rows.Scan(&p.ID, &p.TelegramID, &p.Username, &p.PaymentID, &p.Category, &p.Qty, &p.Amount, &p.CreatedAt); err != nil {
+		if err := rows.Scan(&p.ID, &p.TelegramID, &p.Username, &p.FirstName, &p.LastName, &p.PaymentID, &p.Category, &p.Qty, &p.Amount, &p.CreatedAt); err != nil {
 			return nil, err
 		}
 		payments = append(payments, p)

@@ -84,6 +84,8 @@ type Payment struct {
 	ID         int64     `json:"id" db:"id"`
 	TelegramID int64     `json:"telegram_id" db:"telegram_id"`
 	Username   string    `json:"username" db:"username"`
+	FirstName  string    `json:"first_name" db:"first_name"`
+	LastName   string    `json:"last_name" db:"last_name"`
 	PaymentID  string    `json:"payment_id" db:"payment_id"`
 	Category   string    `json:"category" db:"category"`
 	Qty        int       `json:"qty" db:"qty"`

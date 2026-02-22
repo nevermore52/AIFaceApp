@@ -1,6 +1,7 @@
 package services
 
 import (
+	"database/sql"
 	"fmt"
 	"log"
 	"strconv"
@@ -142,16 +143,28 @@ func (s *PaymentService) SubscriptionPrice(plan string) (int, bool) {
 }
 
 func (s *PaymentService) ProcessSuccessfulPayment(userID int64, category string, qty int, amount float64, paymentID string) error {
-	if _, err := s.userService.GetOrCreateUser(userID, "", "", "", ""); err != nil {
-		return fmt.Errorf("ensure user: %w", err)
+	buyer, err := s.userService.GetUserByTelegramID(userID)
+	if err != nil {
+		if err == sql.ErrNoRows {
+			if _, err := s.userService.CreateUser(userID, "", "", "", "", nil); err != nil {
+				return fmt.Errorf("ensure user: %w", err)
+			}
+			buyer, _ = s.userService.GetUserByTelegramID(userID)
+		} else {
+			return fmt.Errorf("get user: %w", err)
+		}
 	}
 
 	// Записываем оплаченный платёж в таблицу completed_payments
 	username := ""
-	if buyer, err := s.userService.GetUserByTelegramID(userID); err == nil {
+	firstName := ""
+	lastName := ""
+	if buyer != nil {
 		username = buyer.Username
+		firstName = buyer.FirstName
+		lastName = buyer.LastName
 	}
-	if err := s.userService.RecordPayment(userID, username, paymentID, category, qty, amount); err != nil {
+	if err := s.userService.RecordPayment(userID, username, firstName, lastName, paymentID, category, qty, amount); err != nil {
 		log.Printf("RecordPayment error: user=%d payment=%s err=%v", userID, paymentID, err)
 	}
 
@@ -181,7 +194,7 @@ func (s *PaymentService) ProcessSuccessfulPayment(userID int64, category string,
 	if err := s.userService.AddExtraQuota(userID, qCat, qty); err != nil {
 		return err
 	}
-	buyer, err := s.userService.GetUserByTelegramID(userID)
+	buyer, err = s.userService.GetUserByTelegramID(userID)
 	if err == nil && buyer.ReferrerID != nil {
 		if err := s.userService.AddReferralPurchaseBonus(*buyer.ReferrerID, qCat, qty); err != nil {
 			log.Printf("failed to add referral purchase bonus: buyer=%d referrer=%d category=%s qty=%d err=%v", userID, *buyer.ReferrerID, category, qty, err)

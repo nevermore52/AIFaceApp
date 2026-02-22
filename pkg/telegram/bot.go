@@ -641,10 +641,15 @@ func (b *Bot) sendRecentPayments(chatID int64) {
 		if username == "" {
 			username = "—"
 		}
-		text += fmt.Sprintf("• <b>%.2f ₽</b> | @%s | ID: %d\n  %s × %d | %s\n",
+		nameParts := strings.TrimSpace(strings.Join([]string{p.FirstName, p.LastName}, " "))
+		if nameParts == "" {
+			nameParts = "—"
+		}
+		text += fmt.Sprintf("• <b>%.2f ₽</b> | @%s | ID: %d\n  Имя: %s | %s × %d | %s\n",
 			p.Amount,
 			html.EscapeString(username),
 			p.TelegramID,
+			html.EscapeString(nameParts),
 			html.EscapeString(p.Category),
 			p.Qty,
 			p.CreatedAt.In(time.FixedZone("MSK", 3*60*60)).Format("02.01.2006 15:04"),
@@ -5374,7 +5379,7 @@ func (b *Bot) notifyAdminsAboutPurchase(userID int64, label string, qty int, amo
 		userLabel += fmt.Sprintf(" (@%s)", username)
 	}
 
-	text := fmt.Sprintf("💳 Новая покупка\nСумма: %.2f ₽\nТариф: %s\nКоличество: %d\nПлатёж: %s\nПокупатель: %s\nИмя: %s", amount, label, qty, paymentID, userLabel, username)
+	text := fmt.Sprintf("💳 Новая покупка\nСумма: %.2f ₽\nТариф: %s\nКоличество: %d\nПлатёж: %s\nПокупатель: %s\nИмя: %s", amount, label, qty, paymentID, userLabel, nameParts)
 	admins, err := b.userService.GetAdminUsers()
 	if err != nil {
 		log.Printf("notifyAdminsAboutPurchase get admins error: %v", err)

@@ -154,12 +154,18 @@ func RunMigrations(db *sql.DB) error {
 		id SERIAL PRIMARY KEY,
 		telegram_id BIGINT NOT NULL,
 		username VARCHAR(255) DEFAULT '',
+		first_name VARCHAR(255) DEFAULT '',
+		last_name VARCHAR(255) DEFAULT '',
 		payment_id TEXT NOT NULL,
 		category VARCHAR(100) NOT NULL,
 		qty INTEGER NOT NULL DEFAULT 0,
 		amount NUMERIC(12,2) NOT NULL DEFAULT 0,
 		created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 	);`
+
+	completedPaymentsColumnsSQL := `
+	ALTER TABLE completed_payments ADD COLUMN IF NOT EXISTS first_name VARCHAR(255) DEFAULT '';
+	ALTER TABLE completed_payments ADD COLUMN IF NOT EXISTS last_name VARCHAR(255) DEFAULT '';`
 
 	indexesSQL := `
 	CREATE INDEX IF NOT EXISTS idx_users_telegram_id ON users(telegram_id);
@@ -188,6 +194,7 @@ func RunMigrations(db *sql.DB) error {
 		defapiMigrationSQL,
 		subscriptionSQL,
 		completedPaymentsSQL,
+		completedPaymentsColumnsSQL,
 		indexesSQL,
 	}
 
