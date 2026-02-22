@@ -72,14 +72,26 @@ func (s *PaymentService) CreateExtrasPayment(userID int64, category string, qty 
 		price = int(float64(price) * discount)
 	}
 
+	username := ""
+	firstName := ""
+	lastName := ""
+	if buyer, err := s.userService.GetUserByTelegramID(userID); err == nil && buyer != nil {
+		username = buyer.Username
+		firstName = buyer.FirstName
+		lastName = buyer.LastName
+	}
+
 	req := payments.PaymentRequest{
 		UserID:   userID,
 		Amount:   float64(price),
 		Currency: "RUB",
 		Metadata: map[string]any{
-			"user_id":  userID,
-			"category": category,
-			"qty":      qty,
+			"user_id":    userID,
+			"category":   category,
+			"qty":        qty,
+			"username":   username,
+			"first_name": firstName,
+			"last_name":  lastName,
 		},
 	}
 
@@ -95,14 +107,26 @@ func (s *PaymentService) CreateSubscriptionPayment(userID int64, plan string, da
 	if days < 1 {
 		days = 7
 	}
+
+	username := ""
+	firstName := ""
+	lastName := ""
+	if buyer, err := s.userService.GetUserByTelegramID(userID); err == nil && buyer != nil {
+		username = buyer.Username
+		firstName = buyer.FirstName
+		lastName = buyer.LastName
+	}
 	req := payments.PaymentRequest{
 		UserID:   userID,
 		Amount:   float64(price),
 		Currency: "RUB",
 		Metadata: map[string]any{
-			"user_id":  userID,
-			"category": "subscription:" + plan,
-			"qty":      days,
+			"user_id":    userID,
+			"category":   "subscription:" + plan,
+			"qty":        days,
+			"username":   username,
+			"first_name": firstName,
+			"last_name":  lastName,
 		},
 	}
 	return s.provider.CreatePayment(req)
@@ -142,7 +166,7 @@ func (s *PaymentService) SubscriptionPrice(plan string) (int, bool) {
 	return price, ok
 }
 
-func (s *PaymentService) ProcessSuccessfulPayment(userID int64, category string, qty int, amount float64, paymentID string) error {
+func (s *PaymentService) ProcessSuccessfulPayment(userID int64, category string, qty int, amount float64, paymentID string, username string, firstName string, lastName string) error {
 	buyer, err := s.userService.GetUserByTelegramID(userID)
 	if err != nil {
 		if err == sql.ErrNoRows {
@@ -156,15 +180,31 @@ func (s *PaymentService) ProcessSuccessfulPayment(userID int64, category string,
 	}
 
 	// Записываем оплаченный платёж в таблицу completed_payments
-	username := ""
-	firstName := ""
-	lastName := ""
+	storedUsername := ""
+	storedFirstName := ""
+	storedLastName := ""
 	if buyer != nil {
-		username = buyer.Username
-		firstName = buyer.FirstName
-		lastName = buyer.LastName
+		storedUsername = buyer.Username
+		storedFirstName = buyer.FirstName
+		storedLastName = buyer.LastName
 	}
-	if err := s.userService.RecordPayment(userID, username, firstName, lastName, paymentID, category, qty, amount); err != nil {
+	if storedUsername == "" {
+		storedUsername = username
+	}
+	if storedFirstName == "" {
+		storedFirstName = firstName
+	}
+	if storedLastName == "" {
+		storedLastName = lastName
+	}
+
+	if buyer != nil && (storedUsername != buyer.Username || storedFirstName != buyer.FirstName || storedLastName != buyer.LastName) {
+		if _, err := s.userService.UpdateUserInfo(userID, storedUsername, storedFirstName, storedLastName, buyer.LanguageCode); err != nil {
+			log.Printf("UpdateUserInfo error: user=%d err=%v", userID, err)
+		}
+	}
+
+	if err := s.userService.RecordPayment(userID, storedUsername, storedFirstName, storedLastName, paymentID, category, qty, amount); err != nil {
 		log.Printf("RecordPayment error: user=%d payment=%s err=%v", userID, paymentID, err)
 	}
 
@@ -215,7 +255,7 @@ func (s *PaymentService) HandleYooKassaWebhook(body []byte, authHeader string) e
 		return err
 	}
 	log.Printf("yookassa webhook ok: payment_id=%s user=%d category=%s qty=%d amount=%.2f", data.PaymentID, data.UserID, data.Category, data.Qty, data.Amount)
-	return s.ProcessSuccessfulPayment(data.UserID, data.Category, data.Qty, data.Amount, data.PaymentID)
+	return s.ProcessSuccessfulPayment(data.UserID, data.Category, data.Qty, data.Amount, data.PaymentID, data.Username, data.FirstName, data.LastName)
 }
 
 func (s *PaymentService) SetNotifier(fn func(userID int64, category string, qty int, amount float64, paymentID string)) {

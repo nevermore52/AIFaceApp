@@ -148,6 +148,9 @@ type YooWebhookData struct {
 	Category  string
 	Qty       int
 	Amount    float64
+	Username  string
+	FirstName string
+	LastName  string
 }
 
 func (p *PaymentProvider) ParseYooKassaWebhook(body []byte, authHeader string) (*YooWebhookData, error) {
@@ -213,6 +216,10 @@ func (p *PaymentProvider) ParseYooKassaWebhook(body []byte, authHeader string) (
 		return nil, fmt.Errorf("category missing")
 	}
 
+	username, _ := md["username"].(string)
+	firstName, _ := md["first_name"].(string)
+	lastName, _ := md["last_name"].(string)
+
 	amountValue := strings.TrimSpace(payload.Object.Amount.Value)
 	amount := 0.0
 	if amountValue != "" {
@@ -229,6 +236,9 @@ func (p *PaymentProvider) ParseYooKassaWebhook(body []byte, authHeader string) (
 		Category:  cat,
 		Qty:       int(qty),
 		Amount:    amount,
+		Username:  username,
+		FirstName: firstName,
+		LastName:  lastName,
 	}, nil
 }
 
