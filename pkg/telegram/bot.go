@@ -139,6 +139,12 @@ func convertBroadcastMarkupToHTML(text string) string {
 	boldRe := regexp.MustCompile(`\*\*(.+?)\*\*`)
 	text = boldRe.ReplaceAllString(text, "<b>$1</b>")
 
+	italicRe := regexp.MustCompile(`__(.+?)__`)
+	text = italicRe.ReplaceAllString(text, "<i>$1</i>")
+
+	strikeRe := regexp.MustCompile(`~~(.+?)~~`)
+	text = strikeRe.ReplaceAllString(text, "<s>$1</s>")
+
 	return text
 }
 
@@ -4811,8 +4817,12 @@ func (b *Bot) handleAdminCommand(msg *tgbotapi.Message) {
 		b.sendNanoBananaAPIStatus(msg.Chat.ID)
 	case "broadcast":
 		messageText := strings.TrimSpace(strings.TrimPrefix(cmdText, command))
-		if messageText == "" {
-			b.sendErrorMessage(msg.Chat.ID, "Использование: /admin broadcast <текст>")
+		if messageText == "" && msg.Photo == nil && msg.MediaGroupID == "" {
+			b.sendErrorMessage(msg.Chat.ID, "Использование: /admin broadcast <текст> или отправьте с фото/альбомом")
+			return
+		}
+		if msg.MediaGroupID != "" {
+			b.handleAdminBroadcastAlbum(msg)
 			return
 		}
 		if msg.Photo != nil {
