@@ -366,8 +366,10 @@ func (b *Bot) sendBuyExtrasCategory(chatID int64, userID int64, category string,
 		}
 	}
 
-	if category == "music" || category == "video" {
+	if category == "music" {
 		packs = []int{1, 5, 10, 50, 100}
+	} else if category == "video" {
+		packs = []int{1, 5, 10, 25, 50, 100}
 	}
 
 	var header, unit string
@@ -848,6 +850,7 @@ var modelOptions = []ModelOption{
 	{ID: "google/nano-banana-pro", Label: "🌟 Nano Banana Pro", Desc: locRU.ModelNanoBananaPro, Category: ModelCategoryPhoto, RequestCost: 4},
 	{ID: "seedream/4.5-edit", Label: "✨ Seedream 4.5", Desc: locRU.ModelSeedream, Category: ModelCategoryPhoto, RequestCost: 3},
 	{ID: "veo3_fast", ApiModel: "veo3_fast", Label: "🎬 Veo 3.1 Fast", Desc: locRU.ModelVeo3Fast, Category: ModelCategoryVideo, RequestCost: 1},
+	{ID: "wan/2-6-image-to-video", ApiModel: "wan/2-6-image-to-video", Label: "🎥 Wan 2.6", Desc: locRU.ModelWan26, Category: ModelCategoryVideo, RequestCost: 2},
 	{ID: "music-suno", ApiModel: "suno", Label: "🎵 Suno Music", Desc: locRU.ModelSunoMusic, Category: ModelCategoryMusic, RequestCost: 1, TaskType: "music"},
 	{ID: "google/gemini-3-flash", Label: "💬 Gemini 3 Flash", Desc: "", Category: ModelCategoryChat, RequestCost: 1},
 	{ID: "openai/gpt-5-mini", Label: "💬 GPT-5 mini", Desc: locRU.ModelGPT5Mini, Category: ModelCategoryChat, RequestCost: 1},
@@ -1358,9 +1361,9 @@ func (b *Bot) flushAlbum(mediaGroupID string) {
 		modelOpt = ModelOption{ID: modelID, Category: ModelCategoryPhoto, RequestCost: 1}
 	}
 
-	// Альбом поддерживаем только для фото-моделей
-	if modelOpt.Category != ModelCategoryPhoto {
-		b.sendErrorMessage(buf.chatID, "Для альбомов выберите фото-модель в /menu")
+	// Альбом поддерживаем для фото-моделей и wan/2-6-image-to-video
+	if modelOpt.Category != ModelCategoryPhoto && modelOpt.ID != "wan/2-6-image-to-video" {
+		b.sendErrorMessage(buf.chatID, "Для альбомов выберите фото-модель или Wan 2.6 в /menu")
 		return
 	}
 
@@ -1398,6 +1401,8 @@ func (b *Bot) flushAlbum(mediaGroupID string) {
 		maxPhotos = 2
 	} else if modelOpt.ID == "google/nano-banana-pro" || modelOpt.ID == "seedream/4.5-edit" {
 		maxPhotos = 4
+	} else if modelOpt.ID == "wan/2-6-image-to-video" {
+		maxPhotos = 4 // wan 2.6 supports up to 4 photos
 	}
 	if len(imageURLs) > maxPhotos {
 		imageURLs = imageURLs[:maxPhotos]
@@ -1409,6 +1414,12 @@ func (b *Bot) flushAlbum(mediaGroupID string) {
 		text := loc.PhotoReceived + "\n\n" + loc.PhotoAddCaption
 		reply := tgbotapi.NewMessage(buf.chatID, text)
 		_, _ = b.api.Send(reply)
+		return
+	}
+
+	// Если это wan/2-6-image-to-video, запускаем видео-генерацию с несколькими фото
+	if modelOpt.ID == "wan/2-6-image-to-video" {
+		b.processVideoGenerationMultiPhoto(buf.chatID, buf.userID, imageURLs, caption, modelOpt)
 		return
 	}
 
@@ -2775,6 +2786,8 @@ func (b *Bot) modelDescriptionLoc(id string, loc *Localization) string {
 		return loc.ModelSeedream
 	case "veo3_fast":
 		return loc.ModelVeo3Fast
+	case "wan/2-6-image-to-video":
+		return loc.ModelWan26
 	case "music-suno":
 		return loc.ModelSunoMusic
 	case "google/gemini-3-flash":
@@ -2931,6 +2944,66 @@ func (b *Bot) handleAnimatePhoto(chatID int64, userID int64, callback *tgbotapi.
 	b.processVideoGeneration(chatID, userID, photoURL, "оживи фото, звук придумай сам(желательно чтобы звук был в стиле фото)", veoOpt)
 }
 
+// processVideoGenerationMultiPhoto обрабатывает видео-генерацию из нескольких фото
+func (b *Bot) processVideoGenerationMultiPhoto(chatID int64, userID int64, photoURLs []string, prompt string, modelOpt ModelOption) {
+	if !b.ensureCategoryEnabled(chatID, ModelCategoryVideo) {
+		return
+	}
+
+	if modelOpt.Category != ModelCategoryVideo {
+		b.sendErrorMessage(chatID, "Выберите видео-модель в меню моделей.")
+		return
+	}
+
+	if len(photoURLs) == 0 {
+		b.sendErrorMessage(chatID, "Не удалось получить фото для видео-генерации")
+		return
+	}
+
+	requestCost := modelOpt.RequestCost
+	if requestCost < 1 {
+		requestCost = 1
+	}
+
+	// For wan/2-6-image-to-video, calculate cost based on duration
+	duration := "5"
+	if modelOpt.ID == "wan/2-6-image-to-video" {
+		requestCost = b.getVideoDurationCost(userID)
+		duration = b.getUserVideoDuration(userID)
+	}
+
+	if err := b.userService.ConsumeQuota(userID, models.QuotaCategoryVideo, requestCost); err != nil {
+		b.sendInsufficientQuotaMessage(chatID, models.QuotaCategoryVideo, requestCost, err)
+		return
+	}
+
+	userRec, _ := b.userService.GetUserByTelegramID(userID)
+	username := ""
+	if userRec != nil {
+		username = userRec.Username
+	}
+	resolution := b.getUserVideoResolution(userID)
+	opts := services.GenerationOptions{
+		InputImages:        photoURLs,
+		InputImage:         photoURLs[0],
+		Prompt:             prompt,
+		TokensCost:         requestCost,
+		ChatID:             chatID,
+		Model:              modelOpt.ID,
+		ModelType:          string(modelOpt.Category),
+		Username:           username,
+		AspectRatio:        duration,   // Pass duration via AspectRatio field
+		NanoBananaProvider: resolution, // Pass resolution via NanoBananaProvider field
+	}
+	req, err := b.generationService.StartGeneration(userID, opts)
+	if err != nil {
+		_ = b.userService.AddExtraQuota(userID, models.QuotaCategoryVideo, requestCost)
+		b.sendErrorMessage(chatID, fmt.Sprintf("Ошибка запуска видео генерации: %v", err))
+		return
+	}
+	b.sendText(chatID, fmt.Sprintf("🔄 Запустили видео генерацию! ID: %d\nМодель: %s\nФото: %d\nДлительность: %s сек\nРазрешение: %s\nСписано: %d видео-запрос(ов)\n\nОжидайте результат...", req.ID, modelOpt.Label, len(photoURLs), duration, resolution, requestCost))
+}
+
 // processVideoGeneration обрабатывает видео-генерацию из фото (image_to_video)
 func (b *Bot) processVideoGeneration(chatID int64, userID int64, photoURL string, prompt string, modelOpt ModelOption) {
 	if !b.ensureCategoryEnabled(chatID, ModelCategoryVideo) {
@@ -2947,8 +3020,45 @@ func (b *Bot) processVideoGeneration(chatID int64, userID int64, photoURL string
 		requestCost = 1
 	}
 
+	// For wan/2-6-image-to-video, calculate cost based on duration
+	duration := "5"
+	if modelOpt.ID == "wan/2-6-image-to-video" {
+		requestCost = b.getVideoDurationCost(userID)
+		duration = b.getUserVideoDuration(userID)
+	}
+
 	if err := b.userService.ConsumeQuota(userID, models.QuotaCategoryVideo, requestCost); err != nil {
 		b.sendInsufficientQuotaMessage(chatID, models.QuotaCategoryVideo, requestCost, err)
+		return
+	}
+
+	// wan/2-6-image-to-video — через KieAPI async с duration
+	if modelOpt.ID == "wan/2-6-image-to-video" {
+		userRec, _ := b.userService.GetUserByTelegramID(userID)
+		username := ""
+		if userRec != nil {
+			username = userRec.Username
+		}
+		resolution := b.getUserVideoResolution(userID)
+		opts := services.GenerationOptions{
+			InputImages:        []string{photoURL},
+			InputImage:         photoURL,
+			Prompt:             prompt,
+			TokensCost:         requestCost,
+			ChatID:             chatID,
+			Model:              modelOpt.ID,
+			ModelType:          string(modelOpt.Category),
+			Username:           username,
+			AspectRatio:        duration,   // Pass duration via AspectRatio field
+			NanoBananaProvider: resolution, // Pass resolution via NanoBananaProvider field
+		}
+		req, err := b.generationService.StartGeneration(userID, opts)
+		if err != nil {
+			_ = b.userService.AddExtraQuota(userID, models.QuotaCategoryVideo, requestCost)
+			b.sendErrorMessage(chatID, fmt.Sprintf("Ошибка запуска видео генерации: %v", err))
+			return
+		}
+		b.sendText(chatID, fmt.Sprintf("🔄 Запустили видео генерацию! ID: %d\nМодель: %s\nДлительность: %s сек\nРазрешение: %s\nСписано: %d видео-запрос(ов)\n\nОжидайте результат...", req.ID, modelOpt.Label, duration, resolution, requestCost))
 		return
 	}
 
@@ -3346,6 +3456,10 @@ func (b *Bot) handleCallback(callback *tgbotapi.CallbackQuery) {
 		b.sendMainMenu(chatID, userID)
 	case "aspect_menu":
 		b.sendAspectRatioMenu(chatID, userID, 0)
+	case "duration_menu":
+		b.sendVideoDurationMenu(chatID, userID, 0)
+	case "resolution_menu":
+		b.sendVideoResolutionMenu(chatID, userID, 0)
 	case "set_style":
 		if !b.ensureChatStyleAllowed(chatID, userID) {
 			return
@@ -3420,6 +3534,20 @@ func (b *Bot) handleCallback(callback *tgbotapi.CallbackQuery) {
 			}
 			b.setUserAspectRatio(userID, ratio)
 			b.sendAspectRatioMenu(chatID, userID, callback.Message.MessageID)
+		} else if strings.HasPrefix(data, "duration_set:") {
+			duration := strings.TrimPrefix(data, "duration_set:")
+			if b.getUserVideoDuration(userID) == duration {
+				return
+			}
+			b.setUserVideoDuration(userID, duration)
+			b.sendVideoDurationMenu(chatID, userID, callback.Message.MessageID)
+		} else if strings.HasPrefix(data, "resolution_set:") {
+			resolution := strings.TrimPrefix(data, "resolution_set:")
+			if b.getUserVideoResolution(userID) == resolution {
+				return
+			}
+			b.setUserVideoResolution(userID, resolution)
+			b.sendVideoResolutionMenu(chatID, userID, callback.Message.MessageID)
 		} else if strings.HasPrefix(data, "models_menu:") {
 			cat := ModelCategory(strings.TrimPrefix(data, "models_menu:"))
 			b.sendModelMenu(chatID, userID, cat, callback.Message.MessageID)
@@ -3773,6 +3901,13 @@ func (b *Bot) handleTextMessage(msg *tgbotapi.Message) {
 		b.setUserModel(msg.From.ID, "music-suno")
 		b.sendModelMenu(msg.Chat.ID, msg.From.ID, ModelCategoryMusic, 0)
 		return
+	case loc.MenuGenVideoBtn, ruLoc.MenuGenVideoBtn, enLoc.MenuGenVideoBtn:
+		if !b.ensureCategoryEnabled(msg.Chat.ID, ModelCategoryVideo) {
+			return
+		}
+		b.setUserModel(msg.From.ID, "wan/2-6-image-to-video")
+		b.sendModelMenu(msg.Chat.ID, msg.From.ID, ModelCategoryVideo, 0)
+		return
 	case loc.MenuInviteFriendBtn, ruLoc.MenuInviteFriendBtn, enLoc.MenuInviteFriendBtn, "👥 Пригласить друга":
 		b.sendInviteInfo(msg.Chat.ID, msg.From.ID)
 		return
@@ -4040,8 +4175,11 @@ func (b *Bot) sendMainMenu(chatID int64, userID int64) {
 			tgbotapi.NewKeyboardButton(loc.MenuGenMusicBtn),
 		),
 		tgbotapi.NewKeyboardButtonRow(
-			tgbotapi.NewKeyboardButton(loc.MenuInviteFriendBtn),
+			tgbotapi.NewKeyboardButton(loc.MenuGenVideoBtn),
 			tgbotapi.NewKeyboardButton(loc.MenuBuyBtn),
+		),
+		tgbotapi.NewKeyboardButtonRow(
+			tgbotapi.NewKeyboardButton(loc.MenuInviteFriendBtn),
 		),
 		tgbotapi.NewKeyboardButtonRow(
 			tgbotapi.NewKeyboardButton(loc.MenuAccountBtn),
@@ -4478,6 +4616,20 @@ func (b *Bot) sendModelMenu(chatID int64, userID int64, category ModelCategory, 
 		label := loc.AspectTitle + ": " + ratio
 		rows = append(rows, tgbotapi.NewInlineKeyboardRow(
 			tgbotapi.NewInlineKeyboardButtonData(label, "aspect_menu"),
+		))
+	}
+	if category == ModelCategoryVideo && current == "wan/2-6-image-to-video" {
+		duration := b.getUserVideoDuration(userID)
+		costMap := map[string]int{"5": 2, "10": 4, "15": 6}
+		cost := costMap[duration]
+		label := fmt.Sprintf("⏱️ Длительность: %s сек (%d ген.)", duration, cost)
+		rows = append(rows, tgbotapi.NewInlineKeyboardRow(
+			tgbotapi.NewInlineKeyboardButtonData(label, "duration_menu"),
+		))
+		resolution := b.getUserVideoResolution(userID)
+		resLabel := fmt.Sprintf("📺 Разрешение: %s", resolution)
+		rows = append(rows, tgbotapi.NewInlineKeyboardRow(
+			tgbotapi.NewInlineKeyboardButtonData(resLabel, "resolution_menu"),
 		))
 	}
 	if desc := strings.TrimSpace(loc.ModelsDescription); desc != "" {

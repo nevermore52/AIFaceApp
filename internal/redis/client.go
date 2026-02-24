@@ -86,6 +86,40 @@ func (c *Client) GetUserAspectRatio(userID int64) (string, error) {
 	return ratio, nil
 }
 
+func (c *Client) SetUserVideoDuration(userID int64, duration string) error {
+	key := fmt.Sprintf("user:%d:video_duration", userID)
+	return c.rdb.Set(c.ctx, key, duration, 0).Err()
+}
+
+func (c *Client) GetUserVideoDuration(userID int64) (string, error) {
+	key := fmt.Sprintf("user:%d:video_duration", userID)
+	duration, err := c.rdb.Get(c.ctx, key).Result()
+	if err == redis.Nil {
+		return "", nil
+	}
+	if err != nil {
+		return "", err
+	}
+	return duration, nil
+}
+
+func (c *Client) SetUserVideoResolution(userID int64, resolution string) error {
+	key := fmt.Sprintf("user:%d:video_resolution", userID)
+	return c.rdb.Set(c.ctx, key, resolution, 0).Err()
+}
+
+func (c *Client) GetUserVideoResolution(userID int64) (string, error) {
+	key := fmt.Sprintf("user:%d:video_resolution", userID)
+	resolution, err := c.rdb.Get(c.ctx, key).Result()
+	if err == redis.Nil {
+		return "", nil
+	}
+	if err != nil {
+		return "", err
+	}
+	return resolution, nil
+}
+
 func (c *Client) SetUserLanguage(userID int64, lang string) error {
 	key := fmt.Sprintf("user:%d:language", userID)
 	return c.rdb.Set(c.ctx, key, lang, 0).Err()

@@ -31,6 +31,7 @@ type Localization struct {
 	MenuSelectModelBtn  string
 	MenuGenPhotoBtn     string
 	MenuGenMusicBtn     string
+	MenuGenVideoBtn     string
 	MenuInviteFriendBtn string
 	MenuAccountBtn      string
 	MenuSettingsBtn     string
@@ -154,6 +155,7 @@ type Localization struct {
 	ModelNanoBananaPro string
 	ModelSeedream      string
 	ModelVeo3Fast      string
+	ModelWan26         string
 	ModelSunoMusic     string
 	ModelGeminiFlash   string
 	ModelGPT5Mini      string
@@ -356,6 +358,7 @@ var locRU = Localization{
 	MenuSelectModelBtn:  "🧠 Выбрать модель",
 	MenuGenPhotoBtn:     "🖼️ Генерация фото",
 	MenuGenMusicBtn:     "🎸 Генерация песни",
+	MenuGenVideoBtn:     "🎬 Генерация видео",
 	MenuInviteFriendBtn: "👥 Пригласить друга",
 	MenuAccountBtn:      "🪪 Мой аккаунт",
 	MenuSettingsBtn:     "⚙️ Настройки",
@@ -494,11 +497,12 @@ var locRU = Localization{
 	ModelNanoBanana:    "Cреднее качество, быстрая генерация, плохо работает с текстом на фото. Среднее время ожидания 10-30 сек.",
 	ModelNanoBananaPro: "Новейшая модель, лучшая проработка. Среднее время ожидания 30сек-2 минуты.",
 	ModelSeedream:      "Подходит для фото в купальниках, но не подходит для большинства промптов! Среднее время ожидания 1мин-4 минуты.",
-	ModelVeo3Fast:      "Видео из фото. Отправьте 1 фото с подписью. Среднее время ожидания 2-5 минут.",
-	ModelSunoMusic:     "Генерация песни. Ожидание 2-10 минут.",
+	ModelVeo3Fast:      "Видео из фото. Качество только 720p. Отправьте 1 фото с подписью. Среднее время ожидания 2-5 минут.",
+	ModelWan26:         "Новейшая модель. Видео из фото с выбором длительности и разрешения. Поддержка до 4 фото. Стоимость: 2 за 5 секунд. Среднее время ожидания 1-5 минут.",
+	ModelSunoMusic:     "Генерация песни по описанию. Ожидание 2-10 минут.",
 	ModelGeminiFlash:   "Текст: быстрые ответы. Доступно с подпиской Start+.",
 	ModelGPT5Mini:      "Текст: быстрые ответы. Доступно с подпиской Mini+.",
-	ModelGPT5Nano:      "Текст: дольше ответы. Доступно с подпиской Mini+.",
+	ModelGPT5Nano:      "Текст: быстрые ответы. Доступно с подпиской Mini+.",
 	ModelGPT41Mini:     "Текст: быстрые ответы на текстовые запросы.",
 
 	// Photo instructions
@@ -674,6 +678,7 @@ var locEN = Localization{
 	MenuSelectModelBtn:  "🧠 Select model",
 	MenuGenPhotoBtn:     "🖼️ Generate photo",
 	MenuGenMusicBtn:     "🎸 Generate music",
+	MenuGenVideoBtn:     "🎬 Generate video",
 	MenuInviteFriendBtn: "👥 Invite a friend",
 	MenuAccountBtn:      "🪪 My account",
 	MenuSettingsBtn:     "⚙️ Settings",
@@ -800,6 +805,7 @@ var locEN = Localization{
 	ModelNanoBananaPro:          "Newest model, best quality. Average wait time 1–2 minutes.",
 	ModelSeedream:               "High quality photo editing. Average wait time 1–2 minutes.",
 	ModelVeo3Fast:               "Video from photo. Send 1 photo with a caption. Average wait time 2–5 minutes.",
+	ModelWan26:                  "Video from photo with duration (5/10/15 sec) and resolution (720p/1080p) selection. Supports up to 4 photos. Cost: 2 per 5 seconds. Average wait time 3–7 minutes.",
 	ModelSunoMusic:              "Music generation. Wait time 5–10 minutes.",
 	ModelGeminiFlash:            "Text: fast replies. Available with Start+ subscription.",
 	ModelGPT5Mini:               "Text: fast replies. Available with Mini+ subscription.",

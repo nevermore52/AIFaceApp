@@ -34,9 +34,9 @@ func NewPaymentService(provider *payments.PaymentProvider, userService *UserServ
 			"text": {
 				10:  10,
 				50:  45,
-				100: 88,
-				250: 210,
-				500: 385,
+				100: 80,
+				250: 200,
+				500: 345,
 			},
 			"music": {
 				1:   25,
@@ -46,11 +46,12 @@ func NewPaymentService(provider *payments.PaymentProvider, userService *UserServ
 				100: 1599,
 			},
 			"video": {
-				1:   65,
-				5:   319,
-				10:  559,
-				50:  2699,
-				100: 4999,
+				1:	 99,
+				5:   379,
+				10:  699,
+				25:  1550,
+				50:  3000,
+				100: 5800,
 			},
 		},
 		subPrices: map[string]int{

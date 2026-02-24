@@ -1,0 +1,165 @@
+package telegram
+
+import (
+	"fmt"
+	"log"
+	"strconv"
+	"strings"
+
+	tgbotapi "github.com/go-telegram-bot-api/telegram-bot-api/v5"
+)
+
+func (b *Bot) getUserVideoDuration(userID int64) string {
+	duration, err := b.redisClient.GetUserVideoDuration(userID)
+	if err != nil {
+		log.Printf("getUserVideoDuration err: %v", err)
+	}
+	if duration == "" {
+		return "5"
+	}
+	switch duration {
+	case "5", "10", "15":
+		return duration
+	default:
+		return "5"
+	}
+}
+
+func (b *Bot) setUserVideoDuration(userID int64, duration string) {
+	switch duration {
+	case "5", "10", "15":
+		// valid
+	default:
+		duration = "5"
+	}
+	if err := b.redisClient.SetUserVideoDuration(userID, duration); err != nil {
+		log.Printf("setUserVideoDuration err: %v", err)
+	}
+}
+
+func (b *Bot) sendVideoDurationMenu(chatID int64, userID int64, messageID int) {
+	current := b.getUserVideoDuration(userID)
+
+	var rows [][]tgbotapi.InlineKeyboardButton
+	rows = append(rows, []tgbotapi.InlineKeyboardButton{
+		durationOptionButton("⚡ 5 сек (2 ген.)", "5", current),
+		durationOptionButton("🎬 10 сек (4 ген.)", "10", current),
+	})
+	rows = append(rows, []tgbotapi.InlineKeyboardButton{
+		durationOptionButton("🎥 15 сек (6 ген.)", "15", current),
+	})
+
+	backCallback := "models_menu:video"
+	rows = append(rows, []tgbotapi.InlineKeyboardButton{
+		tgbotapi.NewInlineKeyboardButtonData("◀️ Назад", backCallback),
+	})
+
+	costMap := map[string]int{"5": 2, "10": 4, "15": 6}
+	cost := costMap[current]
+	text := fmt.Sprintf("⏱️ Длительность видео: %s сек\n💰 Стоимость: %d генераций", current, cost)
+	markup := tgbotapi.NewInlineKeyboardMarkup(rows...)
+
+	if messageID > 0 {
+		edited := tgbotapi.NewEditMessageTextAndMarkup(chatID, messageID, text, markup)
+		if _, err := b.api.Send(edited); err != nil {
+			errStr := err.Error()
+			if strings.Contains(errStr, "message is not modified") {
+				return
+			}
+			log.Printf("Failed to edit video duration menu: %v", err)
+		}
+		return
+	}
+	msg := tgbotapi.NewMessage(chatID, text)
+	msg.ReplyMarkup = markup
+	if _, err := b.api.Send(msg); err != nil {
+		log.Printf("Failed to send video duration menu: %v", err)
+	}
+}
+
+func durationOptionButton(label, duration, current string) tgbotapi.InlineKeyboardButton {
+	if duration == current {
+		label = "✅ " + label
+	}
+	return tgbotapi.NewInlineKeyboardButtonData(label, "duration_set:"+duration)
+}
+
+func (b *Bot) getVideoDurationCost(userID int64) int {
+	duration := b.getUserVideoDuration(userID)
+	durationInt, err := strconv.Atoi(duration)
+	if err != nil || durationInt <= 0 {
+		durationInt = 5
+	}
+	// 5 сек = 2 генерации, 10 сек = 4 генерации, 15 сек = 6 генераций
+	return (durationInt / 5) * 2
+}
+
+func (b *Bot) getUserVideoResolution(userID int64) string {
+	resolution, err := b.redisClient.GetUserVideoResolution(userID)
+	if err != nil {
+		log.Printf("getUserVideoResolution err: %v", err)
+	}
+	if resolution == "" {
+		return "720p"
+	}
+	switch resolution {
+	case "720p", "1080p":
+		return resolution
+	default:
+		return "720p"
+	}
+}
+
+func (b *Bot) setUserVideoResolution(userID int64, resolution string) {
+	switch resolution {
+	case "720p", "1080p":
+		// valid
+	default:
+		resolution = "720p"
+	}
+	if err := b.redisClient.SetUserVideoResolution(userID, resolution); err != nil {
+		log.Printf("setUserVideoResolution err: %v", err)
+	}
+}
+
+func (b *Bot) sendVideoResolutionMenu(chatID int64, userID int64, messageID int) {
+	current := b.getUserVideoResolution(userID)
+
+	var rows [][]tgbotapi.InlineKeyboardButton
+	rows = append(rows, []tgbotapi.InlineKeyboardButton{
+		resolutionOptionButton("📺 720p", "720p", current),
+		resolutionOptionButton("🎬 1080p", "1080p", current),
+	})
+
+	backCallback := "models_menu:video"
+	rows = append(rows, []tgbotapi.InlineKeyboardButton{
+		tgbotapi.NewInlineKeyboardButtonData("◀️ Назад", backCallback),
+	})
+
+	text := fmt.Sprintf("📺 Разрешение видео: %s", current)
+	markup := tgbotapi.NewInlineKeyboardMarkup(rows...)
+
+	if messageID > 0 {
+		edited := tgbotapi.NewEditMessageTextAndMarkup(chatID, messageID, text, markup)
+		if _, err := b.api.Send(edited); err != nil {
+			errStr := err.Error()
+			if strings.Contains(errStr, "message is not modified") {
+				return
+			}
+			log.Printf("Failed to edit video resolution menu: %v", err)
+		}
+		return
+	}
+	msg := tgbotapi.NewMessage(chatID, text)
+	msg.ReplyMarkup = markup
+	if _, err := b.api.Send(msg); err != nil {
+		log.Printf("Failed to send video resolution menu: %v", err)
+	}
+}
+
+func resolutionOptionButton(label, resolution, current string) tgbotapi.InlineKeyboardButton {
+	if resolution == current {
+		label = "✅ " + label
+	}
+	return tgbotapi.NewInlineKeyboardButtonData(label, "resolution_set:"+resolution)
+}
