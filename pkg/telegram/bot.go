@@ -742,6 +742,7 @@ func (b *Bot) sendAdminMenu(chatID int64) {
 			tgbotapi.NewInlineKeyboardButtonData("👥 Пользователи", "admin:users"),
 		),
 		tgbotapi.NewInlineKeyboardRow(
+			tgbotapi.NewInlineKeyboardButtonData("📈 Топ за день", "admin:top_users"),
 			tgbotapi.NewInlineKeyboardButtonData("👤 Кол-во пользователей", "admin:users_count"),
 		),
 		tgbotapi.NewInlineKeyboardRow(
@@ -3558,6 +3559,15 @@ func (b *Bot) handleCallback(callback *tgbotapi.CallbackQuery) {
 				pack := parts[2]
 				b.sendBuyPackageInfo(chatID, userID, category, pack)
 			}
+		} else if strings.HasPrefix(data, "admin:stats:") {
+			period := strings.TrimPrefix(data, "admin:stats:")
+			if period == "all" {
+				b.handleAdminStats(chatID)
+			} else {
+				b.handleAdminStatsPeriod(chatID, period)
+			}
+		} else if data == "admin:top_users" {
+			b.handleAdminTopUsers(chatID)
 		} else if strings.HasPrefix(data, "model_set:") {
 			model := strings.TrimPrefix(data, "model_set:")
 			opt, ok := findModelOption(model)
@@ -5027,6 +5037,8 @@ func (b *Bot) handleAdminCommand(msg *tgbotapi.Message) {
 			return
 		}
 		b.sendText(msg.Chat.ID, fmt.Sprintf("✅ Подписка удалена у пользователя %d", userID))
+	case "top_users":
+		b.handleAdminTopUsers(msg.Chat.ID)
 	case "help":
 		b.handleAdminHelp(msg.Chat.ID)
 	default:
@@ -5217,10 +5229,63 @@ func (b *Bot) handleAdminUsersCount(chatID int64) {
 	b.sendText(chatID, fmt.Sprintf("👤 Всего пользователей: %d", total))
 }
 
+func (b *Bot) handleAdminTopUsers(chatID int64) {
+	topUsers, err := b.generationService.GetTopUsersByDailyGenerations(20)
+	if err != nil {
+		b.sendErrorMessage(chatID, fmt.Sprintf("Ошибка при получении топа пользователей: %v", err))
+		return
+	}
+
+	if len(topUsers) == 0 {
+		b.sendText(chatID, "📈 Нет генераций за последние 24 часа")
+		return
+	}
+
+	var text strings.Builder
+	text.WriteString("📈 Топ пользователей за 24 часа:\n\n")
+
+	for i, user := range topUsers {
+		username := user.Username
+		if username == "" {
+			username = user.FirstName
+		}
+		if username == "" {
+			username = fmt.Sprintf("ID:%d", user.UserID)
+		}
+
+		text.WriteString(fmt.Sprintf("%d. @%s\n", i+1, username))
+		text.WriteString(fmt.Sprintf("   🎯 Всего: %d | 🖼️ Фото: %d | 🎬 Видео: %d | 🎵 Музыка: %d | 💬 Текст: %d\n",
+			user.TotalGenerations,
+			user.PhotoGenerations,
+			user.VideoGenerations,
+			user.MusicGenerations,
+			user.TextGenerations,
+		))
+		text.WriteString(fmt.Sprintf("   💰 Потрачено запросов: %d\n", user.TokensSpent))
+		if user.PhotoTokensSpent > 0 {
+			text.WriteString(fmt.Sprintf("   💸 Фото запросы: %d (≈ %.2f ₽)\n", user.PhotoTokensSpent, user.PhotoRubles))
+		}
+		text.WriteString("\n")
+	}
+
+	keyboard := tgbotapi.NewInlineKeyboardMarkup(
+		tgbotapi.NewInlineKeyboardRow(
+			tgbotapi.NewInlineKeyboardButtonData("◀️ Назад", "admin:menu"),
+		),
+	)
+
+	msg := tgbotapi.NewMessage(chatID, text.String())
+	msg.ReplyMarkup = keyboard
+	if _, err := b.api.Send(msg); err != nil {
+		log.Printf("Failed to send top users: %v", err)
+	}
+}
+
 func (b *Bot) handleAdminHelp(chatID int64) {
 	text := `👑 Доступные админ-команды:
 
 /admin stats - Статистика генераций
+/admin top_users - Топ пользователей за день
 /admin users - Список последних пользователей
 /admin categories - Управление доступностью категорий
 /admin payments - Управление платежами

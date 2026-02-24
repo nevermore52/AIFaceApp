@@ -1122,3 +1122,73 @@ func (s *GenerationService) GetGenerationStatsSince(from time.Time) (map[string]
 
 	return stats, nil
 }
+
+type TopUserStats struct {
+	UserID           int64
+	Username         string
+	FirstName        string
+	TotalGenerations int
+	PhotoGenerations int
+	VideoGenerations int
+	MusicGenerations int
+	TextGenerations  int
+	TokensSpent      int
+	PhotoTokensSpent int
+	PhotoRubles      float64
+}
+
+func (s *GenerationService) GetTopUsersByDailyGenerations(limit int) ([]TopUserStats, error) {
+	from := time.Now().UTC().Add(-24 * time.Hour)
+
+	query := `
+		SELECT 
+			gr.user_id,
+			COALESCE(gr.username, '') as username,
+			COALESCE(u.first_name, '') as first_name,
+			COUNT(*) as total_generations,
+			COUNT(CASE WHEN gr.model_type = 'photo' THEN 1 END) as photo_generations,
+			COUNT(CASE WHEN gr.model_type = 'video' THEN 1 END) as video_generations,
+			COUNT(CASE WHEN gr.model_type = 'music' THEN 1 END) as music_generations,
+			COUNT(CASE WHEN gr.model_type = 'chat' THEN 1 END) as text_generations,
+			COALESCE(SUM(gr.tokens_used), 0) as tokens_spent,
+			COALESCE(SUM(CASE WHEN gr.model_type = 'photo' THEN gr.tokens_used ELSE 0 END), 0) as photo_tokens_spent
+		FROM generation_requests gr
+		LEFT JOIN users u ON gr.user_id = u.telegram_id
+		WHERE gr.created_at >= $1
+		GROUP BY gr.user_id, gr.username, u.first_name
+		ORDER BY total_generations DESC
+		LIMIT $2`
+
+	rows, err := s.db.Query(query, from, limit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var results []TopUserStats
+	for rows.Next() {
+		var stat TopUserStats
+		err := rows.Scan(
+			&stat.UserID,
+			&stat.Username,
+			&stat.FirstName,
+			&stat.TotalGenerations,
+			&stat.PhotoGenerations,
+			&stat.VideoGenerations,
+			&stat.MusicGenerations,
+			&stat.TextGenerations,
+			&stat.TokensSpent,
+			&stat.PhotoTokensSpent,
+		)
+		if err != nil {
+			return nil, err
+		}
+
+		// Convert photo tokens to rubles (1 token = 1.5 rubles)
+		stat.PhotoRubles = float64(stat.PhotoTokensSpent) * 1.5
+
+		results = append(results, stat)
+	}
+
+	return results, rows.Err()
+}
