@@ -93,8 +93,8 @@ func (b *Bot) sendVideoDurationMenuKling(chatID int64, userID int64, messageID i
 
 	var rows [][]tgbotapi.InlineKeyboardButton
 	rows = append(rows, []tgbotapi.InlineKeyboardButton{
-		durationOptionButtonKling("⚡ 5 сек (2 ген.)", "5", current),
-		durationOptionButtonKling("🎬 10 сек (4 ген.)", "10", current),
+		durationOptionButtonKling("⚡ 5 сек (1 ген.)", "5", current),
+		durationOptionButtonKling("🎬 10 сек (2 ген.)", "10", current),
 	})
 
 	backCallback := "models_menu:video"
@@ -102,12 +102,19 @@ func (b *Bot) sendVideoDurationMenuKling(chatID int64, userID int64, messageID i
 		tgbotapi.NewInlineKeyboardButtonData("◀️ Назад", backCallback),
 	})
 
-	costMap := map[string]int{"5": 2, "10": 4}
+	// Kling: 5s = 1 gen, 10s = 2 gen
+	costMap := map[string]int{"5": 1, "10": 2}
 	cost := costMap[current]
 	if cost == 0 {
-		cost = 2
+		cost = 1
 	}
-	text := fmt.Sprintf("⏱️ Длительность видео: %s сек\n💰 Стоимость: %d генераций", current, cost)
+	sound := b.getUserVideoSound(userID)
+	soundNote := ""
+	if sound == "true" {
+		cost *= 2
+		soundNote = " (со звуком x2)"
+	}
+	text := fmt.Sprintf("⏱️ Длительность видео: %s сек\n💰 Стоимость: %d генераций%s", current, cost, soundNote)
 	markup := tgbotapi.NewInlineKeyboardMarkup(rows...)
 
 	if messageID > 0 {
@@ -143,6 +150,24 @@ func (b *Bot) getVideoDurationCost(userID int64) int {
 	}
 	// 5 сек = 2 генерации, 10 сек = 4 генерации, 15 сек = 6 генераций
 	return (durationInt / 5) * 2
+}
+
+func (b *Bot) getKlingVideoCost(userID int64) int {
+	duration := b.getUserVideoDuration(userID)
+	sound := b.getUserVideoSound(userID)
+
+	// Kling: 5 сек = 1 генерация, 10 сек = 2 генерации
+	baseCost := 1
+	if duration == "10" {
+		baseCost = 2
+	}
+
+	// Со звуком = x2
+	if sound == "true" {
+		baseCost *= 2
+	}
+
+	return baseCost
 }
 
 func (b *Bot) getUserVideoResolution(userID int64) string {

@@ -852,7 +852,7 @@ var modelOptions = []ModelOption{
 	{ID: "seedream/4.5-edit", Label: "✨ Seedream 4.5", Desc: locRU.ModelSeedream, Category: ModelCategoryPhoto, RequestCost: 3},
 	{ID: "veo3_fast", ApiModel: "veo3_fast", Label: "🎬 Veo 3.1 Fast", Desc: locRU.ModelVeo3Fast, Category: ModelCategoryVideo, RequestCost: 1},
 	{ID: "wan/2-6-image-to-video", ApiModel: "wan/2-6-image-to-video", Label: "🎥 Wan 2.6", Desc: locRU.ModelWan26, Category: ModelCategoryVideo, RequestCost: 2},
-	{ID: "kling-2.6/image-to-video", ApiModel: "kling-2.6/image-to-video", Label: "🎬 Kling 2.6", Desc: locRU.ModelKling26, Category: ModelCategoryVideo, RequestCost: 2},
+	{ID: "kling-2.6/image-to-video", ApiModel: "kling-2.6/image-to-video", Label: "🎬 Kling 2.6", Desc: locRU.ModelKling26, Category: ModelCategoryVideo, RequestCost: 1},
 	{ID: "music-suno", ApiModel: "suno", Label: "🎵 Suno Music", Desc: locRU.ModelSunoMusic, Category: ModelCategoryMusic, RequestCost: 1, TaskType: "music"},
 	{ID: "google/gemini-3-flash", Label: "💬 Gemini 3 Flash", Desc: "", Category: ModelCategoryChat, RequestCost: 1},
 	{ID: "openai/gpt-5-mini", Label: "💬 GPT-5 mini", Desc: locRU.ModelGPT5Mini, Category: ModelCategoryChat, RequestCost: 1},
@@ -3024,15 +3024,19 @@ func (b *Bot) processVideoGeneration(chatID int64, userID int64, photoURL string
 		requestCost = 1
 	}
 
-	// For wan/2-6-image-to-video and kling-2.6/image-to-video, calculate cost based on duration
+	// For wan/2-6-image-to-video, calculate cost based on duration
 	duration := "5"
-	if modelOpt.ID == "wan/2-6-image-to-video" || modelOpt.ID == "kling-2.6/image-to-video" {
+	if modelOpt.ID == "wan/2-6-image-to-video" {
 		requestCost = b.getVideoDurationCost(userID)
 		duration = b.getUserVideoDuration(userID)
+	}
+	// For kling-2.6/image-to-video, calculate cost based on duration and sound
+	if modelOpt.ID == "kling-2.6/image-to-video" {
+		requestCost = b.getKlingVideoCost(userID)
+		duration = b.getUserVideoDuration(userID)
 		// Kling only supports 5 and 10 seconds
-		if modelOpt.ID == "kling-2.6/image-to-video" && duration != "5" && duration != "10" {
+		if duration != "5" && duration != "10" {
 			duration = "5"
-			requestCost = 2
 		}
 	}
 
@@ -3602,6 +3606,22 @@ func (b *Bot) handleCallback(callback *tgbotapi.CallbackQuery) {
 			}
 			b.setUserVideoSound(userID, sound)
 			b.sendVideoSoundMenu(chatID, userID, callback.Message.MessageID)
+		} else if strings.HasPrefix(data, "sound_toggle:") {
+			sound := strings.TrimPrefix(data, "sound_toggle:")
+			b.setUserVideoSound(userID, sound)
+			b.sendModelMenu(chatID, userID, ModelCategoryVideo, callback.Message.MessageID)
+		} else if strings.HasPrefix(data, "duration_toggle:") {
+			duration := strings.TrimPrefix(data, "duration_toggle:")
+			b.setUserVideoDuration(userID, duration)
+			b.sendModelMenu(chatID, userID, ModelCategoryVideo, callback.Message.MessageID)
+		} else if strings.HasPrefix(data, "duration_toggle_kling:") {
+			duration := strings.TrimPrefix(data, "duration_toggle_kling:")
+			b.setUserVideoDuration(userID, duration)
+			b.sendModelMenu(chatID, userID, ModelCategoryVideo, callback.Message.MessageID)
+		} else if strings.HasPrefix(data, "resolution_toggle:") {
+			resolution := strings.TrimPrefix(data, "resolution_toggle:")
+			b.setUserVideoResolution(userID, resolution)
+			b.sendModelMenu(chatID, userID, ModelCategoryVideo, callback.Message.MessageID)
 		} else if strings.HasPrefix(data, "models_menu:") {
 			cat := ModelCategory(strings.TrimPrefix(data, "models_menu:"))
 			b.sendModelMenu(chatID, userID, cat, callback.Message.MessageID)
@@ -4685,35 +4705,59 @@ func (b *Bot) sendModelMenu(chatID int64, userID int64, category ModelCategory, 
 		duration := b.getUserVideoDuration(userID)
 		costMap := map[string]int{"5": 2, "10": 4, "15": 6}
 		cost := costMap[duration]
+		// Cycle: 5 -> 10 -> 15 -> 5
+		nextDuration := "10"
+		if duration == "10" {
+			nextDuration = "15"
+		} else if duration == "15" {
+			nextDuration = "5"
+		}
 		label := fmt.Sprintf("⏱️ Длительность: %s сек (%d ген.)", duration, cost)
 		rows = append(rows, tgbotapi.NewInlineKeyboardRow(
-			tgbotapi.NewInlineKeyboardButtonData(label, "duration_menu"),
+			tgbotapi.NewInlineKeyboardButtonData(label, "duration_toggle:"+nextDuration),
 		))
 		resolution := b.getUserVideoResolution(userID)
+		// Toggle: 720p <-> 1080p
+		nextResolution := "1080p"
+		if resolution == "1080p" {
+			nextResolution = "720p"
+		}
 		resLabel := fmt.Sprintf("📺 Разрешение: %s", resolution)
 		rows = append(rows, tgbotapi.NewInlineKeyboardRow(
-			tgbotapi.NewInlineKeyboardButtonData(resLabel, "resolution_menu"),
+			tgbotapi.NewInlineKeyboardButtonData(resLabel, "resolution_toggle:"+nextResolution),
 		))
 	}
 	if category == ModelCategoryVideo && current == "kling-2.6/image-to-video" {
 		duration := b.getUserVideoDuration(userID)
-		costMap := map[string]int{"5": 2, "10": 4}
-		cost := costMap[duration]
-		if cost == 0 {
-			cost = 2
-		}
-		label := fmt.Sprintf("⏱️ Длительность: %s сек (%d ген.)", duration, cost)
-		rows = append(rows, tgbotapi.NewInlineKeyboardRow(
-			tgbotapi.NewInlineKeyboardButtonData(label, "duration_menu_kling"),
-		))
 		sound := b.getUserVideoSound(userID)
-		soundLabel := "Без звука"
-		if sound == "true" {
-			soundLabel = "Со звуком"
+		// Kling only supports 5 and 10 seconds
+		if duration != "5" && duration != "10" {
+			duration = "5"
 		}
-		sndLabel := fmt.Sprintf("🔊 Звук: %s", soundLabel)
+		// Cycle: 5 -> 10 -> 5
+		nextDuration := "10"
+		if duration == "10" {
+			nextDuration = "5"
+		}
+		// Calculate total cost with sound multiplier
+		totalCost := b.getKlingVideoCost(userID)
+		label := fmt.Sprintf("⏱️ Длительность: %s сек", duration)
 		rows = append(rows, tgbotapi.NewInlineKeyboardRow(
-			tgbotapi.NewInlineKeyboardButtonData(sndLabel, "sound_menu"),
+			tgbotapi.NewInlineKeyboardButtonData(label, "duration_toggle_kling:"+nextDuration),
+		))
+		soundLabel := "🔇 Без звука"
+		nextSound := "true"
+		if sound == "true" {
+			soundLabel = "🔊 Со звуком (x2)"
+			nextSound = "false"
+		}
+		rows = append(rows, tgbotapi.NewInlineKeyboardRow(
+			tgbotapi.NewInlineKeyboardButtonData(soundLabel, "sound_toggle:"+nextSound),
+		))
+		// Show total cost
+		costLabel := fmt.Sprintf("💰 Итого: %d ген.", totalCost)
+		rows = append(rows, tgbotapi.NewInlineKeyboardRow(
+			tgbotapi.NewInlineKeyboardButtonData(costLabel, "kling_cost_info"),
 		))
 	}
 	if desc := strings.TrimSpace(loc.ModelsDescription); desc != "" {
