@@ -590,7 +590,7 @@ func (s *GenerationService) createKlingVideoTask(requestID int64, opts Generatio
 		"sound":    sound,
 	}
 	if len(images) > 0 {
-		input["image_urls"] = images[0]
+		input["image_urls"] = images
 	}
 	if opts.Prompt != "" {
 		input["prompt"] = opts.Prompt
