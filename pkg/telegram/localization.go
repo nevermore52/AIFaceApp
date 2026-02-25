@@ -156,6 +156,7 @@ type Localization struct {
 	ModelSeedream      string
 	ModelVeo3Fast      string
 	ModelWan26         string
+	ModelKling26       string
 	ModelSunoMusic     string
 	ModelGeminiFlash   string
 	ModelGPT5Mini      string
@@ -498,7 +499,8 @@ var locRU = Localization{
 	ModelNanoBananaPro: "Новейшая модель, лучшая проработка. Среднее время ожидания 30сек-2 минуты.",
 	ModelSeedream:      "Подходит для фото в купальниках, но не подходит для большинства промптов! Среднее время ожидания 1мин-4 минуты.",
 	ModelVeo3Fast:      "Видео из фото. Качество только 720p. Отправьте 1 фото с подписью. Среднее время ожидания 2-5 минут.",
-	ModelWan26:         "Новейшая модель. Видео из фото с выбором длительности и разрешения. Поддержка до 4 фото. Стоимость: 2 за 5 секунд. Среднее время ожидания 1-5 минут.",
+	ModelWan26:         "Видео из фото с выбором длительности и разрешения. Поддержка до 4 фото. Стоимость: 2 за 5 секунд. Среднее время ожидания 1-5 минут.",
+	ModelKling26:       "Новейшая модель. Видео из фото с выбором длительности (5/10 сек) и звука. Стоимость: 2 за 5 секунд. Среднее время ожидания 2-5 минут.",
 	ModelSunoMusic:     "Генерация песни по описанию. Ожидание 2-10 минут.",
 	ModelGeminiFlash:   "Текст: быстрые ответы. Доступно с подпиской Start+.",
 	ModelGPT5Mini:      "Текст: быстрые ответы. Доступно с подпиской Mini+.",
@@ -806,6 +808,7 @@ var locEN = Localization{
 	ModelSeedream:               "High quality photo editing. Average wait time 1–2 minutes.",
 	ModelVeo3Fast:               "Video from photo. Send 1 photo with a caption. Average wait time 2–5 minutes.",
 	ModelWan26:                  "Video from photo with duration (5/10/15 sec) and resolution (720p/1080p) selection. Supports up to 4 photos. Cost: 2 per 5 seconds. Average wait time 3–7 minutes.",
+	ModelKling26:                "Video from photo with duration (5/10 sec) and sound selection. Cost: 2 per 5 seconds. Average wait time 2–5 minutes.",
 	ModelSunoMusic:              "Music generation. Wait time 5–10 minutes.",
 	ModelGeminiFlash:            "Text: fast replies. Available with Start+ subscription.",
 	ModelGPT5Mini:               "Text: fast replies. Available with Mini+ subscription.",

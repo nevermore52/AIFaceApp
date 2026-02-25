@@ -84,6 +84,57 @@ func durationOptionButton(label, duration, current string) tgbotapi.InlineKeyboa
 	return tgbotapi.NewInlineKeyboardButtonData(label, "duration_set:"+duration)
 }
 
+func (b *Bot) sendVideoDurationMenuKling(chatID int64, userID int64, messageID int) {
+	current := b.getUserVideoDuration(userID)
+	// Kling supports only 5 and 10 seconds
+	if current != "5" && current != "10" {
+		current = "5"
+	}
+
+	var rows [][]tgbotapi.InlineKeyboardButton
+	rows = append(rows, []tgbotapi.InlineKeyboardButton{
+		durationOptionButtonKling("⚡ 5 сек (2 ген.)", "5", current),
+		durationOptionButtonKling("🎬 10 сек (4 ген.)", "10", current),
+	})
+
+	backCallback := "models_menu:video"
+	rows = append(rows, []tgbotapi.InlineKeyboardButton{
+		tgbotapi.NewInlineKeyboardButtonData("◀️ Назад", backCallback),
+	})
+
+	costMap := map[string]int{"5": 2, "10": 4}
+	cost := costMap[current]
+	if cost == 0 {
+		cost = 2
+	}
+	text := fmt.Sprintf("⏱️ Длительность видео: %s сек\n💰 Стоимость: %d генераций", current, cost)
+	markup := tgbotapi.NewInlineKeyboardMarkup(rows...)
+
+	if messageID > 0 {
+		edited := tgbotapi.NewEditMessageTextAndMarkup(chatID, messageID, text, markup)
+		if _, err := b.api.Send(edited); err != nil {
+			errStr := err.Error()
+			if strings.Contains(errStr, "message is not modified") {
+				return
+			}
+			log.Printf("Failed to edit video duration menu kling: %v", err)
+		}
+		return
+	}
+	msg := tgbotapi.NewMessage(chatID, text)
+	msg.ReplyMarkup = markup
+	if _, err := b.api.Send(msg); err != nil {
+		log.Printf("Failed to send video duration menu kling: %v", err)
+	}
+}
+
+func durationOptionButtonKling(label, duration, current string) tgbotapi.InlineKeyboardButton {
+	if duration == current {
+		label = "✅ " + label
+	}
+	return tgbotapi.NewInlineKeyboardButtonData(label, "duration_set:"+duration)
+}
+
 func (b *Bot) getVideoDurationCost(userID int64) int {
 	duration := b.getUserVideoDuration(userID)
 	durationInt, err := strconv.Atoi(duration)
@@ -162,4 +213,78 @@ func resolutionOptionButton(label, resolution, current string) tgbotapi.InlineKe
 		label = "✅ " + label
 	}
 	return tgbotapi.NewInlineKeyboardButtonData(label, "resolution_set:"+resolution)
+}
+
+func (b *Bot) getUserVideoSound(userID int64) string {
+	sound, err := b.redisClient.GetUserVideoSound(userID)
+	if err != nil {
+		log.Printf("getUserVideoSound err: %v", err)
+	}
+	if sound == "" {
+		return "false"
+	}
+	switch sound {
+	case "true", "false":
+		return sound
+	default:
+		return "false"
+	}
+}
+
+func (b *Bot) setUserVideoSound(userID int64, sound string) {
+	switch sound {
+	case "true", "false":
+		// valid
+	default:
+		sound = "false"
+	}
+	if err := b.redisClient.SetUserVideoSound(userID, sound); err != nil {
+		log.Printf("setUserVideoSound err: %v", err)
+	}
+}
+
+func (b *Bot) sendVideoSoundMenu(chatID int64, userID int64, messageID int) {
+	current := b.getUserVideoSound(userID)
+
+	var rows [][]tgbotapi.InlineKeyboardButton
+	rows = append(rows, []tgbotapi.InlineKeyboardButton{
+		soundOptionButton("🔊 Со звуком", "true", current),
+		soundOptionButton("🔇 Без звука", "false", current),
+	})
+
+	backCallback := "models_menu:video"
+	rows = append(rows, []tgbotapi.InlineKeyboardButton{
+		tgbotapi.NewInlineKeyboardButtonData("◀️ Назад", backCallback),
+	})
+
+	soundLabel := "Без звука"
+	if current == "true" {
+		soundLabel = "Со звуком"
+	}
+	text := fmt.Sprintf("🔊 Звук в видео: %s", soundLabel)
+	markup := tgbotapi.NewInlineKeyboardMarkup(rows...)
+
+	if messageID > 0 {
+		edited := tgbotapi.NewEditMessageTextAndMarkup(chatID, messageID, text, markup)
+		if _, err := b.api.Send(edited); err != nil {
+			errStr := err.Error()
+			if strings.Contains(errStr, "message is not modified") {
+				return
+			}
+			log.Printf("Failed to edit video sound menu: %v", err)
+		}
+		return
+	}
+	msg := tgbotapi.NewMessage(chatID, text)
+	msg.ReplyMarkup = markup
+	if _, err := b.api.Send(msg); err != nil {
+		log.Printf("Failed to send video sound menu: %v", err)
+	}
+}
+
+func soundOptionButton(label, sound, current string) tgbotapi.InlineKeyboardButton {
+	if sound == current {
+		label = "✅ " + label
+	}
+	return tgbotapi.NewInlineKeyboardButtonData(label, "sound_set:"+sound)
 }

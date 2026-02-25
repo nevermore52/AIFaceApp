@@ -306,6 +306,25 @@ func (s *GenerationService) processGeneration(req *models.GenerationRequest, opt
 		return
 	}
 
+	// kling-2.6/image-to-video — KieAPI task with duration and sound parameters
+	if strings.EqualFold(strings.TrimSpace(opts.Model), "kling-2.6/image-to-video") {
+		taskID, err := s.createKlingVideoTask(req.ID, opts, images)
+		if err != nil {
+			debugLog("processGeneration Kling Video FAILED: requestID=%d, error=%v", req.ID, err)
+			_ = s.updateRequestStatus(req.ID, "failed", err.Error())
+			req.Status = "failed"
+			errMsg := err.Error()
+			req.ErrorMsg = &errMsg
+			if s.notify != nil {
+				s.notify(opts.ChatID, req)
+			}
+			s.markDone(req.ID)
+			return
+		}
+		debugLog("processGeneration Kling Video task created: requestID=%d taskID=%s", req.ID, taskID)
+		return
+	}
+
 	if useKieAPIModel(opts.Model) {
 		taskID, err := s.createKieAPITask(req.ID, opts, images)
 		if err != nil {
@@ -532,6 +551,58 @@ func (s *GenerationService) createKieAPIVideoTask(requestID int64, opts Generati
 	}
 
 	taskID, err := s.kieAPI.CreateVeoTask(payload)
+	if err != nil {
+		return "", err
+	}
+	if err := s.updateExternalTaskID(requestID, taskID); err != nil {
+		return "", err
+	}
+	return taskID, nil
+}
+
+func (s *GenerationService) createKlingVideoTask(requestID int64, opts GenerationOptions, images []string) (string, error) {
+	if s.kieAPI == nil {
+		return "", fmt.Errorf("kieapi client is not configured")
+	}
+	callbackURL := strings.TrimSpace(os.Getenv("KIEAPI_CALLBACK_URL"))
+	if callbackURL == "" {
+		callbackURL = strings.TrimSpace(os.Getenv("KIE_CALLBACK_URL"))
+	}
+	if callbackURL == "" {
+		return "", fmt.Errorf("KIEAPI_CALLBACK_URL is not set")
+	}
+
+	// Extract duration and sound from opts
+	// Duration is passed via AspectRatio field
+	// Sound is passed via NanoBananaProvider field temporarily
+	duration := "5"
+	sound := false
+
+	if opts.AspectRatio != "" {
+		duration = opts.AspectRatio
+	}
+	if opts.NanoBananaProvider == "true" {
+		sound = true
+	}
+
+	input := map[string]any{
+		"duration": duration,
+		"sound":    sound,
+	}
+	if len(images) > 0 {
+		input["image_url"] = images[0]
+	}
+	if opts.Prompt != "" {
+		input["prompt"] = opts.Prompt
+	}
+
+	payload := kieapi.CreateTaskRequest{
+		Model:       "kling-2.6/image-to-video",
+		CallBackURL: callbackURL,
+		Input:       input,
+	}
+
+	taskID, err := s.kieAPI.CreateTask(payload)
 	if err != nil {
 		return "", err
 	}

@@ -120,6 +120,23 @@ func (c *Client) GetUserVideoResolution(userID int64) (string, error) {
 	return resolution, nil
 }
 
+func (c *Client) SetUserVideoSound(userID int64, sound string) error {
+	key := fmt.Sprintf("user:%d:video_sound", userID)
+	return c.rdb.Set(c.ctx, key, sound, 0).Err()
+}
+
+func (c *Client) GetUserVideoSound(userID int64) (string, error) {
+	key := fmt.Sprintf("user:%d:video_sound", userID)
+	sound, err := c.rdb.Get(c.ctx, key).Result()
+	if err == redis.Nil {
+		return "", nil
+	}
+	if err != nil {
+		return "", err
+	}
+	return sound, nil
+}
+
 func (c *Client) SetUserLanguage(userID int64, lang string) error {
 	key := fmt.Sprintf("user:%d:language", userID)
 	return c.rdb.Set(c.ctx, key, lang, 0).Err()
