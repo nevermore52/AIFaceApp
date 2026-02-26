@@ -263,6 +263,90 @@ func (c *Client) CreateVeoTask(payload map[string]any) (string, error) {
 	return parsed.Data.TaskID, nil
 }
 
+// RecordInfoResponse represents the response from /api/v1/jobs/recordInfo
+type RecordInfoResponse struct {
+	Code int    `json:"code"`
+	Msg  string `json:"msg"`
+	Data struct {
+		TaskID     string `json:"taskId"`
+		TaskIDAlt  string `json:"task_id"`
+		State      string `json:"state"`
+		Status     string `json:"status"`
+		Result     any    `json:"result"`
+		ResultJson string `json:"resultJson"`
+		Info       struct {
+			ResultUrls []string `json:"resultUrls"`
+			ResultURLs []string `json:"result_urls"`
+		} `json:"info"`
+	} `json:"data"`
+}
+
+// ToCallbackPayload converts RecordInfoResponse to CallbackPayload for unified handling
+func (r RecordInfoResponse) ToCallbackPayload() CallbackPayload {
+	return CallbackPayload{
+		Code: r.Code,
+		Msg:  r.Msg,
+		Data: r.Data,
+	}
+}
+
+// GetRecordInfo fetches task status by taskId
+// GET /api/v1/jobs/recordInfo?taskId=<taskId>
+func (c *Client) GetRecordInfo(taskID string) (*RecordInfoResponse, error) {
+	if c == nil {
+		return nil, fmt.Errorf("kieapi client is nil")
+	}
+	if c.apiKey == "" {
+		return nil, fmt.Errorf("KIEAPI_API_KEY is not set")
+	}
+	if c.baseURL == "" {
+		return nil, fmt.Errorf("KIEAPI_BASE_URL is not set")
+	}
+	if strings.TrimSpace(taskID) == "" {
+		return nil, fmt.Errorf("taskId is empty")
+	}
+
+	url := c.baseURL + "/api/v1/jobs/recordInfo?taskId=" + taskID
+	httpReq, err := http.NewRequest(http.MethodGet, url, nil)
+	if err != nil {
+		return nil, fmt.Errorf("create recordInfo request: %w", err)
+	}
+	httpReq.Header.Set("Authorization", "Bearer "+c.apiKey)
+
+	resp, err := c.client.Do(httpReq)
+	if err != nil {
+		return nil, fmt.Errorf("recordInfo request failed: %w", err)
+	}
+	defer resp.Body.Close()
+
+	raw, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, fmt.Errorf("read recordInfo response: %w", err)
+	}
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		limited := raw
+		if len(limited) > 2048 {
+			limited = limited[:2048]
+		}
+		return nil, fmt.Errorf("recordInfo status %d: %s", resp.StatusCode, string(limited))
+	}
+
+	var parsed RecordInfoResponse
+	if err := json.Unmarshal(raw, &parsed); err != nil {
+		return nil, fmt.Errorf("parse recordInfo response: %w", err)
+	}
+
+	if parsed.Code != 0 && parsed.Code != 200 {
+		limited := string(raw)
+		if len(limited) > 2048 {
+			limited = limited[:2048]
+		}
+		return nil, fmt.Errorf("recordInfo error: code=%d msg=%s raw=%s", parsed.Code, parsed.Msg, limited)
+	}
+
+	return &parsed, nil
+}
+
 func findFirstHTTP(v any) string {
 	switch val := v.(type) {
 	case map[string]any:

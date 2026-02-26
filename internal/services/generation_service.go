@@ -265,6 +265,8 @@ func (s *GenerationService) processGeneration(req *models.GenerationRequest, opt
 			return
 		}
 		debugLog("processGeneration KieAPI task created: requestID=%d taskID=%s", req.ID, taskID)
+		// Start timeout checker: 3 minutes for photo models
+		s.startKieAPITimeoutChecker(req.ID, taskID, 3*time.Minute, opts.ChatID)
 		return
 	}
 
@@ -303,6 +305,8 @@ func (s *GenerationService) processGeneration(req *models.GenerationRequest, opt
 			return
 		}
 		debugLog("processGeneration Wan Video task created: requestID=%d taskID=%s", req.ID, taskID)
+		// Start timeout checker: 6 minutes for video models
+		s.startKieAPITimeoutChecker(req.ID, taskID, 6*time.Minute, opts.ChatID)
 		return
 	}
 
@@ -322,6 +326,8 @@ func (s *GenerationService) processGeneration(req *models.GenerationRequest, opt
 			return
 		}
 		debugLog("processGeneration Kling Video task created: requestID=%d taskID=%s", req.ID, taskID)
+		// Start timeout checker: 6 minutes for kling video models
+		s.startKieAPITimeoutChecker(req.ID, taskID, 6*time.Minute, opts.ChatID)
 		return
 	}
 
@@ -340,6 +346,8 @@ func (s *GenerationService) processGeneration(req *models.GenerationRequest, opt
 			return
 		}
 		debugLog("processGeneration KieAPI task created: requestID=%d taskID=%s", req.ID, taskID)
+		// Start timeout checker: 3 minutes for photo models
+		s.startKieAPITimeoutChecker(req.ID, taskID, 3*time.Minute, opts.ChatID)
 		return
 	}
 
@@ -731,6 +739,65 @@ func (s *GenerationService) HandleKieAPICallback(payload kieapi.CallbackPayload)
 	s.markDone(req.ID)
 	return nil
 }
+
+// startKieAPITimeoutChecker starts a goroutine that waits for the specified timeout
+// and then polls the KieAPI for task status if the request is still pending.
+// If task is still processing after first poll, waits another timeout period and retries once.
+// timeout: 3 minutes for photo models, 6 minutes for video models (kling)
+func (s *GenerationService) startKieAPITimeoutChecker(requestID int64, taskID string, timeout time.Duration, chatID int64) {
+	go func() {
+		for attempt := 1; attempt <= 2; attempt++ {
+			time.Sleep(timeout)
+
+			// Check if request is still pending/processing
+			req, err := s.GetGenerationRequest(requestID)
+			if err != nil {
+				debugLog("KieAPI timeout checker [attempt %d]: failed to get request %d: %v", attempt, requestID, err)
+				return
+			}
+
+			// If already completed or failed, do nothing
+			if req.Status == "completed" || req.Status == "failed" {
+				debugLog("KieAPI timeout checker [attempt %d]: request %d already %s, skipping", attempt, requestID, req.Status)
+				return
+			}
+
+			debugLog("KieAPI timeout checker [attempt %d]: request %d still %s after %v, polling recordInfo for task %s", attempt, requestID, req.Status, timeout, taskID)
+
+			// Poll KieAPI for task status
+			if s.kieAPI == nil {
+				debugLog("KieAPI timeout checker [attempt %d]: kieAPI client is nil", attempt)
+				return
+			}
+
+			info, err := s.kieAPI.GetRecordInfo(taskID)
+			if err != nil {
+				debugLog("KieAPI timeout checker [attempt %d]: GetRecordInfo failed for task %s: %v", attempt, taskID, err)
+				// Don't fail the request, callback might still come or we retry
+				continue
+			}
+
+			// Convert to callback payload and check status
+			payload := info.ToCallbackPayload()
+			status := strings.ToLower(strings.TrimSpace(payload.StatusValue()))
+			debugLog("KieAPI timeout checker [attempt %d]: got recordInfo for task %s, status=%s", attempt, taskID, status)
+
+			// If still processing, continue to next attempt (will wait another timeout period)
+			if status == "processing" || status == "pending" || status == "queued" || status == "" {
+				debugLog("KieAPI timeout checker [attempt %d]: task %s still processing, will retry after %v", attempt, taskID, timeout)
+				continue
+			}
+
+			// Process the response using existing callback handler logic
+			if err := s.HandleKieAPICallback(payload); err != nil {
+				debugLog("KieAPI timeout checker [attempt %d]: HandleKieAPICallback failed for task %s: %v", attempt, taskID, err)
+			}
+			return
+		}
+		debugLog("KieAPI timeout checker: exhausted all attempts for request %d, task %s", requestID, taskID)
+	}()
+}
+
 func (s *GenerationService) GenerateAudio(text, model, taskType, stylePrompt string) (string, error) {
 	return s.client.GenerateAudio(model, text, taskType, stylePrompt)
 }
