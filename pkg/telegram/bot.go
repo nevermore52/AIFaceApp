@@ -4451,14 +4451,14 @@ func (b *Bot) sendBuySubscription(chatID int64, userID int64) {
 	startPrice := b.subscriptionPrice("start")
 	proPrice := b.subscriptionPrice("pro")
 
-	miniImg, miniMus, miniVid := b.userService.SubscriptionQuotas("mini")
+	miniImg, miniMus, _ := b.userService.SubscriptionQuotas("mini")
 	startImg, startMus, startVid := b.userService.SubscriptionQuotas("start")
 	proImg, proMus, proVid := b.userService.SubscriptionQuotas("pro")
 
-	text := fmt.Sprintf("%s\n%s \n\n✨ Mini — %d ₽ %s\n• 50 %s\n• %d %s\n• %d %s\n• %d %s\n• %s\n• %s\n\n🚀 Start — %d ₽ %s\n• 100 %s\n• %d %s\n• %d %s\n• %d %s\n• %s\n• %s\n• %s\n\n👑 Pro — %d ₽ %s\n• 200 %s\n• %d %s\n• %d %s\n• %d %s\n• %s\n• %s, %s, %s\n• %s",
+	text := fmt.Sprintf("%s\n%s \n\n✨ Mini — %d ₽ %s\n• 50 %s\n• %d %s\n• %d %s\n• %s\n• %s\n\n🚀 Start — %d ₽ %s\n• 100 %s\n• %d %s\n• %d %s\n• %d %s\n• %s\n• %s\n• %s\n\n👑 Pro — %d ₽ %s\n• 200 %s\n• %d %s\n• %d %s\n• %d %s\n• %s\n• %s, %s, %s\n• %s",
 		loc.SubsTitle,
 		loc.BuyConsentNote,
-		miniPrice, loc.SubsPerWeek, loc.SubsTextDaily, miniImg, loc.SubsImages, miniVid, loc.SubsVideos, miniMus, loc.SubsSongs, loc.SubsTextModelsMini, fmt.Sprintf(loc.SubsDiscount, 10),
+		miniPrice, loc.SubsPerWeek, loc.SubsTextDaily, miniImg, loc.SubsVideos, miniMus, loc.SubsSongs, loc.SubsTextModelsMini, fmt.Sprintf(loc.SubsDiscount, 10),
 		startPrice, loc.SubsPerWeek, loc.SubsTextDaily, startImg, loc.SubsImages, startVid, loc.SubsVideos, startMus, loc.SubsSongs, fmt.Sprintf(loc.SubsContext, 2), loc.SubsTextModelsHi, fmt.Sprintf(loc.SubsDiscount, 15),
 		proPrice, loc.SubsPerWeek, loc.SubsTextDaily, proImg, loc.SubsImages, proVid, loc.SubsVideos, proMus, loc.SubsSongs, loc.SubsTextModelsHi, fmt.Sprintf(loc.SubsChatStyles, 6), fmt.Sprintf(loc.SubsContext, 3), loc.SubsNoAds, fmt.Sprintf(loc.SubsDiscount, 20),
 	)
