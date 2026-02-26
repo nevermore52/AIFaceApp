@@ -3988,7 +3988,7 @@ func (b *Bot) handleTextMessage(msg *tgbotapi.Message) {
 		if !b.ensureCategoryEnabled(msg.Chat.ID, ModelCategoryVideo) {
 			return
 		}
-		b.setUserModel(msg.From.ID, "wan/2-6-image-to-video")
+		b.setUserModel(msg.From.ID, "kling-2.6/image-to-video")
 		b.sendModelMenu(msg.Chat.ID, msg.From.ID, ModelCategoryVideo, 0)
 		return
 	case loc.MenuInviteFriendBtn, ruLoc.MenuInviteFriendBtn, enLoc.MenuInviteFriendBtn, "👥 Пригласить друга":

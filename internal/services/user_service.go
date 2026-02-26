@@ -987,13 +987,13 @@ func (s *UserService) setSubscriptionQuotas(telegramID int64, subType string) er
 	textDaily := 10
 	switch subType {
 	case "mini":
-		image, music, video = 30, 5, 1
+		image, music, video = 25, 3, 0
 		textDaily = 50
 	case "start":
-		image, music, video = 70, 10, 3
+		image, music, video = 40, 5, 2
 		textDaily = 100
 	case "pro":
-		image, music, video = 130, 15, 5
+		image, music, video = 90, 10, 4
 		textDaily = 200
 	default:
 		return nil
@@ -1014,11 +1014,11 @@ func (s *UserService) setSubscriptionQuotas(telegramID int64, subType string) er
 func subscriptionQuotaValues(subType string) (image, music, video int) {
 	switch strings.ToLower(strings.TrimSpace(subType)) {
 	case "mini":
-		return 30, 5, 1
+		return 25, 3, 0
 	case "start":
-		return 70, 10, 3
+		return 40, 5, 2
 	case "pro":
-		return 130, 15, 5
+		return 90, 10, 5
 	default:
 		return 0, 0, 0
 	}
