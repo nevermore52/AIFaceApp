@@ -3,7 +3,6 @@ package telegram
 import (
 	"fmt"
 	"log"
-	"strings"
 
 	tgbotapi "github.com/go-telegram-bot-api/telegram-bot-api/v5"
 )
@@ -50,12 +49,8 @@ func (b *Bot) sendKlingAnimateMenu(chatID int64, userID int64, messageID int) {
 	markup := tgbotapi.NewInlineKeyboardMarkup(rows...)
 
 	if messageID > 0 {
-		edited := tgbotapi.NewEditMessageTextAndMarkup(chatID, messageID, text, markup)
-		if _, err := b.api.Send(edited); err != nil {
-			errStr := err.Error()
-			if strings.Contains(errStr, "message is not modified") {
-				return
-			}
+		// Use editMessageTextOrCaption to handle both text and photo messages
+		if err := b.editMessageTextOrCaption(chatID, messageID, text, markup); err != nil {
 			log.Printf("Failed to edit kling animate menu: %v", err)
 		}
 		return
