@@ -2956,7 +2956,7 @@ func (b *Bot) handleAnimatePhoto(chatID int64, userID int64, callback *tgbotapi.
 		return
 	}
 
-	b.processVideoGeneration(chatID, userID, photoURL, "оживи фото, звук придумай сам(желательно чтобы звук был в стиле фото)", veoOpt)
+	b.processVideoGeneration(chatID, userID, photoURL, "оживи фото", veoOpt)
 }
 
 // processVideoGenerationMultiPhoto обрабатывает видео-генерацию из нескольких фото
@@ -3572,7 +3572,10 @@ func (b *Bot) handleCallback(callback *tgbotapi.CallbackQuery) {
 		b.setUserChatStyle(userID, "empathetic")
 		b.sendChatStyleMenu(chatID, userID)
 	case "animate_photo":
-		b.handleAnimatePhoto(chatID, userID, callback)
+		// Open Kling 2.6 filter menu instead of direct generation
+		b.sendKlingAnimateMenu(chatID, userID, callback.Message.MessageID)
+	case "kling_animate_start":
+		b.handleKlingAnimateStart(chatID, userID, callback)
 	case "invite":
 		b.sendInviteInfo(chatID, userID)
 	case "models_menu":
@@ -3621,6 +3624,20 @@ func (b *Bot) handleCallback(callback *tgbotapi.CallbackQuery) {
 			sound := strings.TrimPrefix(data, "sound_toggle:")
 			b.setUserVideoSound(userID, sound)
 			b.sendModelMenu(chatID, userID, ModelCategoryVideo, callback.Message.MessageID)
+		} else if strings.HasPrefix(data, "kling_animate_duration:") {
+			duration := strings.TrimPrefix(data, "kling_animate_duration:")
+			if b.getUserVideoDuration(userID) == duration {
+				return
+			}
+			b.setUserVideoDuration(userID, duration)
+			b.sendKlingAnimateMenu(chatID, userID, callback.Message.MessageID)
+		} else if strings.HasPrefix(data, "kling_animate_sound:") {
+			sound := strings.TrimPrefix(data, "kling_animate_sound:")
+			if b.getUserVideoSound(userID) == sound {
+				return
+			}
+			b.setUserVideoSound(userID, sound)
+			b.sendKlingAnimateMenu(chatID, userID, callback.Message.MessageID)
 		} else if strings.HasPrefix(data, "duration_toggle:") {
 			duration := strings.TrimPrefix(data, "duration_toggle:")
 			b.setUserVideoDuration(userID, duration)
@@ -5598,10 +5615,11 @@ func (b *Bot) sendGenerationStatus(chatID int64, req *models.GenerationRequest) 
 		output := *req.Output
 		caption := truncate(baseText, 900) // подпись к фото
 
-		// Кнопка "Оживить фото" для nano-banana и nano-banana-pro
+		// Кнопка "Оживить фото" для nano-banana, nano-banana-pro и nano-banana-2
 		var animateMarkup *tgbotapi.InlineKeyboardMarkup
 		if req.Model == "google/nano-banana" || req.Model == "google/nano-banana-pro" ||
-			req.Model == "nano-banana" || req.Model == "kie/nano-banana-edit" || req.Model == "kie/nano-banana-pro" {
+			req.Model == "nano-banana" || req.Model == "kie/nano-banana-edit" || req.Model == "kie/nano-banana-pro" ||
+			req.Model == "nano-banana-2" {
 			kb := tgbotapi.NewInlineKeyboardMarkup(
 				tgbotapi.NewInlineKeyboardRow(
 					tgbotapi.NewInlineKeyboardButtonData("🎬 Оживить фото", "animate_photo"),
