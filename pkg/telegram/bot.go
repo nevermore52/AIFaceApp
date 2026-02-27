@@ -849,6 +849,7 @@ func (b *Bot) isUserAllowed(userID int64) bool {
 var modelOptions = []ModelOption{
 	{ID: "google/nano-banana", Label: "🚀 Nano Banana", Desc: locRU.ModelNanoBanana, Category: ModelCategoryPhoto, RequestCost: 1},
 	{ID: "google/nano-banana-pro", Label: "🌟 Nano Banana Pro", Desc: locRU.ModelNanoBananaPro, Category: ModelCategoryPhoto, RequestCost: 4},
+	{ID: "nano-banana-2", Label: "⚡ Nano Banana 2", Desc: locRU.ModelNanoBanana2, Category: ModelCategoryPhoto, RequestCost: 2},
 	{ID: "seedream/4.5-edit", Label: "✨ Seedream 4.5", Desc: locRU.ModelSeedream, Category: ModelCategoryPhoto, RequestCost: 3},
 	{ID: "veo3_fast", ApiModel: "veo3_fast", Label: "🎬 Veo 3.1 Fast", Desc: locRU.ModelVeo3Fast, Category: ModelCategoryVideo, RequestCost: 1},
 	{ID: "wan/2-6-image-to-video", ApiModel: "wan/2-6-image-to-video", Label: "🎥 Wan 2.6", Desc: locRU.ModelWan26, Category: ModelCategoryVideo, RequestCost: 2},
@@ -1401,7 +1402,7 @@ func (b *Bot) flushAlbum(mediaGroupID string) {
 	maxPhotos := 1
 	if modelOpt.ID == "google/nano-banana" {
 		maxPhotos = 2
-	} else if modelOpt.ID == "google/nano-banana-pro" || modelOpt.ID == "seedream/4.5-edit" {
+	} else if modelOpt.ID == "google/nano-banana-pro" || modelOpt.ID == "nano-banana-2" || modelOpt.ID == "seedream/4.5-edit" {
 		maxPhotos = 4
 	} else if modelOpt.ID == "wan/2-6-image-to-video" {
 		maxPhotos = 4 // wan 2.6 supports up to 4 photos
@@ -1779,6 +1780,14 @@ func instructionForModel(m ModelOption) string {
 Как отправить:
 1) Пришлите фото.
 2) В подписи опишите, что нужно изменить или улучшить.
+
+Используйте /menu для выбора другой модели.`
+	case "nano-banana-2":
+		return base + `Новейшая модель. Поддерживает текст без фото, альбомы до 4 фото, разрешение 1K/2K/4K и Google Search.
+
+Как отправить:
+1) Отправьте текстовый промпт (фото необязательно).
+2) Или пришлите до 4 фото с подписью.
 
 Используйте /menu для выбора другой модели.`
 	case "veo3_fast":
@@ -2784,6 +2793,8 @@ func (b *Bot) modelDescriptionLoc(id string, loc *Localization) string {
 		return loc.ModelNanoBanana
 	case "google/nano-banana-pro":
 		return loc.ModelNanoBananaPro
+	case "nano-banana-2":
+		return loc.ModelNanoBanana2
 	case "seedream/4.5-edit":
 		return loc.ModelSeedream
 	case "veo3_fast":
@@ -2810,7 +2821,7 @@ func (b *Bot) modelDescriptionLoc(id string, loc *Localization) string {
 func (b *Bot) modelInstructionLoc(id string, loc *Localization) string {
 	if opt, ok := findModelOption(id); ok {
 		switch opt.ID {
-		case "google/nano-banana", "google/nano-banana-pro", "seedream/4.5-edit":
+		case "google/nano-banana", "google/nano-banana-pro", "nano-banana-2", "seedream/4.5-edit":
 			return loc.InstrNanoBanana
 		case "veo3_fast":
 			return loc.InstrVeo3Video
@@ -3622,6 +3633,14 @@ func (b *Bot) handleCallback(callback *tgbotapi.CallbackQuery) {
 			resolution := strings.TrimPrefix(data, "resolution_toggle:")
 			b.setUserVideoResolution(userID, resolution)
 			b.sendModelMenu(chatID, userID, ModelCategoryVideo, callback.Message.MessageID)
+		} else if strings.HasPrefix(data, "photo_resolution_toggle:") {
+			resolution := strings.TrimPrefix(data, "photo_resolution_toggle:")
+			b.setUserPhotoResolution(userID, resolution)
+			b.sendModelMenu(chatID, userID, ModelCategoryPhoto, callback.Message.MessageID)
+		} else if strings.HasPrefix(data, "google_search_toggle:") {
+			val := strings.TrimPrefix(data, "google_search_toggle:")
+			b.setUserGoogleSearch(userID, val)
+			b.sendModelMenu(chatID, userID, ModelCategoryPhoto, callback.Message.MessageID)
 		} else if strings.HasPrefix(data, "models_menu:") {
 			cat := ModelCategory(strings.TrimPrefix(data, "models_menu:"))
 			b.sendModelMenu(chatID, userID, cat, callback.Message.MessageID)
@@ -3816,8 +3835,12 @@ func (b *Bot) processGeneration(chatID int64, userID int64, photoURLs []string, 
 	}
 
 	if len(photoURLs) == 0 {
-		b.sendErrorMessage(chatID, "Не получено ни одного изображения")
-		return
+		// nano-banana-2 supports text-only generation
+		modelIDCheck := b.getUserModel(userID)
+		if modelIDCheck != "nano-banana-2" {
+			b.sendErrorMessage(chatID, "Не получено ни одного изображения")
+			return
+		}
 	}
 	if len(photoURLs) > 4 {
 		photoURLs = photoURLs[:4]
@@ -3859,6 +3882,10 @@ func (b *Bot) processGeneration(chatID int64, userID int64, photoURLs []string, 
 	if requestCost < 1 {
 		requestCost = 1
 	}
+	// Dynamic cost for pro and nano-banana-2 based on resolution
+	if modelOpt.ID == "google/nano-banana-pro" || modelOpt.ID == "nano-banana-2" {
+		requestCost = b.getPhotoResolutionCost(userID, modelOpt.ID)
+	}
 
 	// Списываем запросы согласно выбранной модели
 	primaryUsed, extraUsed, err := b.userService.ConsumeQuotaDetailed(userID, models.QuotaCategoryImage, requestCost)
@@ -3894,9 +3921,13 @@ func (b *Bot) processGeneration(chatID int64, userID int64, photoURLs []string, 
 	if userRec != nil {
 		username = userRec.Username
 	}
+	inputImage := ""
+	if len(imageList) > 0 {
+		inputImage = imageList[0]
+	}
 	opts := services.GenerationOptions{
 		InputImages:       imageList,
-		InputImage:        imageList[0],
+		InputImage:        inputImage,
 		Prompt:            prompt,
 		TokensCost:        requestCost,
 		TokensPrimaryUsed: primaryUsed,
@@ -3906,10 +3937,10 @@ func (b *Bot) processGeneration(chatID int64, userID int64, photoURLs []string, 
 		ModelType:         string(modelOpt.Category),
 		Username:          username,
 	}
-	if modelOpt.ID == "google/nano-banana" || modelOpt.ID == "google/nano-banana-pro" || modelOpt.ID == "seedream/4.5-edit" {
+	if modelOpt.ID == "google/nano-banana" || modelOpt.ID == "google/nano-banana-pro" || modelOpt.ID == "nano-banana-2" || modelOpt.ID == "seedream/4.5-edit" {
 		opts.AspectRatio = b.getAspectRatioForModel(userID, modelOpt.ID)
 	}
-	if modelOpt.ID == "google/nano-banana" || modelOpt.ID == "google/nano-banana-pro" || modelOpt.ID == "seedream/4.5-edit" {
+	if modelOpt.ID == "google/nano-banana" || modelOpt.ID == "google/nano-banana-pro" || modelOpt.ID == "nano-banana-2" || modelOpt.ID == "seedream/4.5-edit" {
 		if provider, err := b.userService.GetNanoBananaProvider(); err == nil {
 			opts.NanoBananaProvider = provider
 		}
@@ -3918,6 +3949,14 @@ func (b *Bot) processGeneration(chatID int64, userID int64, photoURLs []string, 
 		if useDef, err := b.userService.IsNanoBananaDefAPIEnabled(); err == nil {
 			opts.UseDefAPI = useDef
 		}
+	}
+	// Pass photo resolution for pro and nano-banana-2
+	if modelOpt.ID == "google/nano-banana-pro" || modelOpt.ID == "nano-banana-2" {
+		opts.PhotoResolution = b.getUserPhotoResolution(userID)
+	}
+	// Pass google search for nano-banana-2
+	if modelOpt.ID == "nano-banana-2" {
+		opts.GoogleSearch = b.getUserGoogleSearch(userID)
 	}
 
 	req, err := b.generationService.StartGeneration(userID, opts)
@@ -4008,6 +4047,12 @@ func (b *Bot) handleTextMessage(msg *tgbotapi.Message) {
 		return
 	case loc.MenuHelpBtn, ruLoc.MenuHelpBtn, enLoc.MenuHelpBtn:
 		b.sendHelpMessage(msg.Chat.ID)
+		return
+	}
+
+	// nano-banana-2: поддержка генерации только по тексту (без фото)
+	if ok && modelOpt.ID == "nano-banana-2" {
+		b.processGeneration(msg.Chat.ID, msg.From.ID, []string{}, "text_only", userText)
 		return
 	}
 
@@ -4243,12 +4288,13 @@ func (b *Bot) sendMainMenu(chatID int64, userID int64) {
 		limitLine = fmt.Sprintf(loc.MenuLimitFormat, base, extra)
 	}
 
-	text := fmt.Sprintf(loc.MenuTitle,
-		userID,
-		subLabel,
-		displayCategory,
-		b.modelLabelLoc(currentModel, loc),
-		limitLine,
+	modelLabel := strings.TrimSpace(displayCategory + " " + b.modelLabelLoc(currentModel, loc))
+	htmlText := fmt.Sprintf(
+		loc.MenuMainHTML,
+		html.EscapeString(fmt.Sprintf("%d", userID)),
+		html.EscapeString(subLabel),
+		html.EscapeString(modelLabel),
+		html.EscapeString(limitLine),
 	)
 
 	// reply-клавиатура
@@ -4299,7 +4345,8 @@ func (b *Bot) sendMainMenu(chatID int64, userID int64) {
 	}
 
 	// Сообщение с основным текстом и инлайн-кнопками
-	inlineMsg := tgbotapi.NewMessage(chatID, text)
+	inlineMsg := tgbotapi.NewMessage(chatID, htmlText)
+	inlineMsg.ParseMode = tgbotapi.ModeHTML
 	inlineMsg.ReplyMarkup = inlineKB
 	if _, err := b.api.Send(inlineMsg); err != nil {
 		log.Printf("Failed to send inline main menu: %v", err)
@@ -4340,22 +4387,22 @@ func (b *Bot) sendAccount(chatID int64, userID int64) {
 	}
 
 	accountText := fmt.Sprintf(
-		fmt.Sprintf(loc.AccountUserID, userID) + "\n" +
-			fmt.Sprintf(loc.AccountSubscription, subType) + "\n" +
-			fmt.Sprintf(loc.AccountValidUntil, subEndStr) + "\n" +
-			"------------------------------\n" +
-			fmt.Sprintf(loc.AccountTextDaily, textDaily) + "\n" +
-			fmt.Sprintf(loc.AccountImagesWeekly, imageWeekly) + "\n" +
-			fmt.Sprintf(loc.AccountMusicWeekly, musicWeekly) + "\n" +
-			fmt.Sprintf(loc.AccountVideoWeekly, videoWeekly) + "\n" +
-			"------------------------------\n" +
-			fmt.Sprintf(loc.AccountExtraText, textExtra) + "\n" +
-			fmt.Sprintf(loc.AccountExtraImages, imageExtra) + "\n" +
-			fmt.Sprintf(loc.AccountExtraMusic, musicExtra) + "\n" +
-			fmt.Sprintf(loc.AccountExtraVideo, videoExtra),
+		loc.AccountCardTemplate,
+		html.EscapeString(fmt.Sprintf("%d", userID)),
+		html.EscapeString(subType),
+		html.EscapeString(subEndStr),
+		html.EscapeString(fmt.Sprintf("%d", textDaily)),
+		html.EscapeString(fmt.Sprintf("%d", imageWeekly)),
+		html.EscapeString(fmt.Sprintf("%d", musicWeekly)),
+		html.EscapeString(fmt.Sprintf("%d", videoWeekly)),
+		html.EscapeString(fmt.Sprintf("%d", textExtra)),
+		html.EscapeString(fmt.Sprintf("%d", imageExtra)),
+		html.EscapeString(fmt.Sprintf("%d", musicExtra)),
+		html.EscapeString(fmt.Sprintf("%d", videoExtra)),
 	)
 
 	msg := tgbotapi.NewMessage(chatID, accountText)
+	msg.ParseMode = tgbotapi.ModeHTML
 	if _, err := b.api.Send(msg); err != nil {
 		log.Printf("Failed to send account card: %v", err)
 	}
@@ -4656,21 +4703,34 @@ func (b *Bot) sendModelMenu(chatID int64, userID int64, category ModelCategory, 
 		tgbotapi.NewInlineKeyboardButtonData(loc.BackBtn, "menu"),
 	))
 
-	text := fmt.Sprintf(loc.ModelsCategory, b.categoryLabelLoc(category, loc)) + "\n" + loc.ModelsSelect
-	currentDesc := b.modelDescriptionLoc(current, loc)
+	text := "<b>" + fmt.Sprintf(loc.ModelsCat, b.categoryLabelLoc(category, loc)) + "</b>\n\n"
+	currentDesc := strings.TrimSpace(b.modelDescriptionLoc(current, loc))
+	text += loc.ModelsCurrentLabel + " " + html.EscapeString(b.modelLabelLoc(current, loc))
 	if currentDesc != "" {
-		text += "\n" + loc.ModelsCurrent + ": " + b.modelLabelLoc(current, loc) + " — " + currentDesc
-		if cost := modelRequestCost(current); cost > 0 {
-			text += "\n" + fmt.Sprintf(loc.ModelsCost, cost, requestWord(cost, loc))
-		}
-		if current == "google/nano-banana" {
-			text += "\n" + fmt.Sprintf(loc.ModelsMaxPhotos, 2) + "\n"
-		} else if current == "google/nano-banana-pro" || current == "seedream/4.5-edit" {
-			text += "\n" + fmt.Sprintf(loc.ModelsMaxPhotos, 4) + "\n"
-		}
-		if instr := b.modelInstructionLoc(current, loc); instr != "" {
-			text += "\n" + instr
-		}
+		text += " — " + html.EscapeString(currentDesc)
+	}
+	if current == "google/nano-banana-pro" {
+		minCost := 4
+		text += "\n<b>" + fmt.Sprintf(loc.ModelsCostFrom, minCost) + "</b>"
+	} else if current == "nano-banana-2" {
+		minCost := 2
+		text += "\n<b>" + fmt.Sprintf(loc.ModelsCostFrom, minCost) + "</b>"
+	} else if current == "wan/2-6-image-to-video" {
+		minCost := 2
+		text += "\n<b>" + fmt.Sprintf(loc.ModelsCostFrom, minCost) + "</b>"
+	} else if current == "kling-2.6/image-to-video" {
+		minCost := 1
+		text += "\n<b>" + fmt.Sprintf(loc.ModelsCostFromSingular, minCost) + "</b>"
+	} else if cost := modelRequestCost(current); cost > 0 {
+		text += "\n<b>Расход:</b> " + fmt.Sprintf("%d %s", cost, html.EscapeString(requestWord(cost, loc)))
+	}
+	if current == "google/nano-banana" {
+		text += "\nМаксимум фото: 2\n"
+	} else if current == "google/nano-banana-pro" || current == "seedream/4.5-edit" || current == "nano-banana-2" {
+		text += "\nМаксимум фото: 4\n"
+	}
+	if instr := b.modelInstructionLoc(current, loc); instr != "" {
+		text += "\n" + html.EscapeString(instr)
 	}
 	if category == ModelCategoryMusic {
 		if opt, ok := findModelOption(current); ok && (opt.ID == "music-suno" || strings.Contains(strings.ToLower(opt.ApiModel), "suno")) {
@@ -4694,11 +4754,38 @@ func (b *Bot) sendModelMenu(chatID int64, userID int64, category ModelCategory, 
 			}
 		}
 	}
-	if (category == ModelCategoryPhoto && (current == "google/nano-banana" || current == "google/nano-banana-pro" || current == "kie/nano-banana-edit" || current == "kie/nano-banana-pro" || current == "seedream/4.5-edit")) || (category == ModelCategoryVideo && current == "veo3_fast") {
+	if (category == ModelCategoryPhoto && (current == "google/nano-banana" || current == "google/nano-banana-pro" || current == "nano-banana-2" || current == "kie/nano-banana-edit" || current == "kie/nano-banana-pro" || current == "seedream/4.5-edit")) || (category == ModelCategoryVideo && current == "veo3_fast") {
 		ratio := b.getAspectRatioForModel(userID, current)
 		label := loc.AspectTitle + ": " + ratio
 		rows = append(rows, tgbotapi.NewInlineKeyboardRow(
 			tgbotapi.NewInlineKeyboardButtonData(label, "aspect_menu"),
+		))
+	}
+	if category == ModelCategoryPhoto && (current == "google/nano-banana-pro" || current == "nano-banana-2") {
+		resolution := b.getUserPhotoResolution(userID)
+		// Cycle: 1K -> 2K -> 4K -> 1K
+		nextRes := "2K"
+		if resolution == "2K" {
+			nextRes = "4K"
+		} else if resolution == "4K" {
+			nextRes = "1K"
+		}
+		dynCost := b.getPhotoResolutionCost(userID, current)
+		resLabel := fmt.Sprintf("📐 Разрешение: %s (%d ген.)", resolution, dynCost)
+		rows = append(rows, tgbotapi.NewInlineKeyboardRow(
+			tgbotapi.NewInlineKeyboardButtonData(resLabel, "photo_resolution_toggle:"+nextRes),
+		))
+	}
+	if category == ModelCategoryPhoto && current == "nano-banana-2" {
+		gsearch := b.getUserGoogleSearch(userID)
+		gsLabel := "🔍 Google Поиск: выкл"
+		nextGS := "true"
+		if gsearch == "true" {
+			gsLabel = "🔍 Google Поиск: вкл"
+			nextGS = "false"
+		}
+		rows = append(rows, tgbotapi.NewInlineKeyboardRow(
+			tgbotapi.NewInlineKeyboardButtonData(gsLabel, "google_search_toggle:"+nextGS),
 		))
 	}
 	if category == ModelCategoryVideo && current == "wan/2-6-image-to-video" {
@@ -4775,6 +4862,7 @@ func (b *Bot) sendModelMenu(chatID int64, userID int64, category ModelCategory, 
 
 	msg := tgbotapi.NewMessage(chatID, text)
 	msg.ReplyMarkup = keyboard
+	msg.ParseMode = tgbotapi.ModeHTML
 	if _, err := b.api.Send(msg); err != nil {
 		log.Printf("Failed to send model menu: %v", err)
 	}
@@ -4896,6 +4984,7 @@ func aspectPreviewURL(ratio string) string {
 
 func (b *Bot) editMessageTextOrCaption(chatID int64, messageID int, text string, markup tgbotapi.InlineKeyboardMarkup) error {
 	editText := tgbotapi.NewEditMessageTextAndMarkup(chatID, messageID, text, markup)
+	editText.ParseMode = tgbotapi.ModeHTML
 	if _, err := b.api.Send(editText); err == nil {
 		return nil
 	} else {
@@ -4906,6 +4995,7 @@ func (b *Bot) editMessageTextOrCaption(chatID int64, messageID int, text string,
 		if strings.Contains(errText, "there is no text in the message to edit") || strings.Contains(errText, "message to edit not found") {
 			editCaption := tgbotapi.NewEditMessageCaption(chatID, messageID, text)
 			editCaption.ReplyMarkup = &markup
+			editCaption.ParseMode = tgbotapi.ModeHTML
 			if _, errCap := b.api.Send(editCaption); errCap == nil {
 				return nil
 			} else {

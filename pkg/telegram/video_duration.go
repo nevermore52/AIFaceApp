@@ -313,3 +313,84 @@ func soundOptionButton(label, sound, current string) tgbotapi.InlineKeyboardButt
 	}
 	return tgbotapi.NewInlineKeyboardButtonData(label, "sound_set:"+sound)
 }
+
+// Photo resolution helpers (for nano-banana-pro and nano-banana-2)
+func (b *Bot) getUserPhotoResolution(userID int64) string {
+	resolution, err := b.redisClient.GetUserPhotoResolution(userID)
+	if err != nil {
+		log.Printf("getUserPhotoResolution err: %v", err)
+	}
+	if resolution == "" {
+		return "1K"
+	}
+	switch resolution {
+	case "1K", "2K", "4K":
+		return resolution
+	default:
+		return "1K"
+	}
+}
+
+func (b *Bot) setUserPhotoResolution(userID int64, resolution string) {
+	switch resolution {
+	case "1K", "2K", "4K":
+		// valid
+	default:
+		resolution = "1K"
+	}
+	if err := b.redisClient.SetUserPhotoResolution(userID, resolution); err != nil {
+		log.Printf("setUserPhotoResolution err: %v", err)
+	}
+}
+
+// getPhotoResolutionCost returns the generation cost based on resolution and model
+func (b *Bot) getPhotoResolutionCost(userID int64, modelID string) int {
+	resolution := b.getUserPhotoResolution(userID)
+	if modelID == "google/nano-banana-pro" {
+		// Pro: 1K=4, 2K=4, 4K=5
+		switch resolution {
+		case "4K":
+			return 5
+		default:
+			return 4
+		}
+	}
+	// nano-banana-2: 1K=2, 2K=3, 4K=4
+	switch resolution {
+	case "2K":
+		return 3
+	case "4K":
+		return 4
+	default:
+		return 2
+	}
+}
+
+// Google search helpers (for nano-banana-2)
+func (b *Bot) getUserGoogleSearch(userID int64) string {
+	val, err := b.redisClient.GetUserGoogleSearch(userID)
+	if err != nil {
+		log.Printf("getUserGoogleSearch err: %v", err)
+	}
+	if val == "" {
+		return "false"
+	}
+	switch val {
+	case "true", "false":
+		return val
+	default:
+		return "false"
+	}
+}
+
+func (b *Bot) setUserGoogleSearch(userID int64, enabled string) {
+	switch enabled {
+	case "true", "false":
+		// valid
+	default:
+		enabled = "false"
+	}
+	if err := b.redisClient.SetUserGoogleSearch(userID, enabled); err != nil {
+		log.Printf("setUserGoogleSearch err: %v", err)
+	}
+}

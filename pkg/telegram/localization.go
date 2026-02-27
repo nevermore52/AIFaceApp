@@ -21,6 +21,7 @@ type Localization struct {
 
 	// Main menu
 	MenuTitle           string
+	MenuMainHTML        string
 	MenuYourID          string
 	MenuSubscription    string
 	MenuCurrentModel    string
@@ -49,6 +50,7 @@ type Localization struct {
 	AccountExtraImages  string
 	AccountExtraMusic   string
 	AccountExtraVideo   string
+	AccountCardTemplate string
 
 	// Buy menu
 	BuyTitle           string
@@ -135,24 +137,29 @@ type Localization struct {
 	ChatStyleProOnly      string
 
 	// Models
-	ModelsCategory    string
-	ModelsSelect      string
-	ModelsCurrent     string
-	ModelsCost        string
-	ModelsMaxPhotos   string
-	ModelsDescription string
-	ModelsCatPhoto    string
-	ModelsCatVideo    string
-	ModelsCatMusic    string
-	ModelsCatChat     string
-	InstrNanoBanana   string
-	InstrTextModels   string
-	InstrSunoMusic    string
-	InstrVeo3Video    string
+	ModelsCurrent          string
+	ModelsCurrentLabel     string
+	ModelsCategory         string
+	ModelsSelect           string
+	ModelsCost             string
+	ModelsCostFrom         string
+	ModelsCostFromSingular string
+	ModelsMaxPhotos        string
+	ModelsDescription      string
+	ModelsCat              string
+	ModelsCatPhoto         string
+	ModelsCatVideo         string
+	ModelsCatMusic         string
+	ModelsCatChat          string
+	InstrNanoBanana        string
+	InstrTextModels        string
+	InstrSunoMusic         string
+	InstrVeo3Video         string
 
 	// Photo models
 	ModelNanoBanana    string
 	ModelNanoBananaPro string
+	ModelNanoBanana2   string
 	ModelSeedream      string
 	ModelVeo3Fast      string
 	ModelWan26         string
@@ -164,8 +171,9 @@ type Localization struct {
 	ModelGPT41Mini     string
 
 	// Photo instructions
-	PhotoReceived   string
-	PhotoAddCaption string
+	PhotoReceived      string
+	PhotoAddCaption    string
+	PhotoInstrTemplate string
 
 	// Generation
 	GenStarted     string
@@ -349,6 +357,7 @@ var locRU = Localization{
 	CmdSettings:         "Настройки",
 	CmdAdmin:            "Админ",
 	MenuTitle:           "🍌  Ваш айди: %d\n⭐  Тип подписки: %s\n🧠  Текущая ИИ модель: %s %s %s",
+	MenuMainHTML:        "🍌  <b>Ваш айди:</b> %s\n⭐️  <b>Тип подписки:</b> %s\n🧠  <b>Текущая ИИ модель:</b> %s %s",
 	MenuYourID:          "Ваш айди: %d",
 	MenuSubscription:    "Тип подписки: %s",
 	MenuCurrentModel:    "Текущая ИИ модель: %s",
@@ -374,9 +383,10 @@ var locRU = Localization{
 	AccountMusicWeekly:  "🎵 Аудио генерации: %d",
 	AccountVideoWeekly:  "🎬 Видео генерации: %d",
 	AccountExtraText:    "📝 Доп. текстовые генерации: %d",
-	AccountExtraImages:  "🖼️ Доп. изображения: %d",
-	AccountExtraMusic:   "🎵 Доп. музыка: %d",
+	AccountExtraImages:  "🖼️ Доп. фото: %d",
+	AccountExtraMusic:   "🎵 Доп. аудио: %d",
 	AccountExtraVideo:   "🎬 Доп. видео: %d",
+	AccountCardTemplate: "<b>ID Пользователя: %s</b>\n<b>⭐️ Тип подписки: %s</b>\n<b>📅 Действует до: %s</b>\n------------------------------\n<b>📝 Текстовые генерации (24 ч): %s</b>\n<b>🖼️ Фото осталось: %s</b>\n<b>🎵 Аудио генерации: %s</b>\n<b>🎬 Видео генерации:</b> %s\n------------------------------\n<b>📝 Доп. текстовые генерации: %s</b>\n<b>🖼️ Доп. фото: %s</b>\n<b>🎵 Доп. аудио: %s</b>\n<b>🎬 Доп. видео: %s</b>",
 
 	// Правила бота
 	RulesTitle:   "📜 Правила сервиса:",
@@ -472,20 +482,24 @@ var locRU = Localization{
 	ChatSystemLangHint:    "Если пользователь пишет по-русски, отвечай на русском. Если по-английски — отвечай на английском.",
 	ChatStyleProOnly:      "Стили общения доступны только с подпиской Pro и выше.",
 
-	ModelsCurrent:     "Текущая",
-	ModelsCategory:    "%s",
-	ModelsSelect:      "Выберите модель:",
-	ModelsCost:        "Расход: %d %s",
-	ModelsMaxPhotos:   "Максимум фото: %d",
-	ModelsDescription: "",
-	ModelsCatPhoto:    "📸 Фото",
-	ModelsCatVideo:    "🎬 Видео",
-	ModelsCatMusic:    "🎵 Аудио",
-	ModelsCatChat:     "💬 Текст",
-	InstrNanoBanana:   "В 1 сообщении отправьте 1 или более фото, в подписи укажите что хотите изменить (промпт).",
-	InstrTextModels:   "Отправьте любое сообщение в чат.",
-	InstrSunoMusic:    "Отправьте в чат описание музыки, которую хотите создать.",
-	InstrVeo3Video:    "Отправьте 1 фото с подписью — опишите, какое видео хотите получить.",
+	ModelsCurrent:          "Текущая",
+	ModelsCurrentLabel:     "<b>Текущая модель:</b>",
+	ModelsCategory:         "%s",
+	ModelsSelect:           "",
+	ModelsCost:             "<b>Расход: %d %s</b>",
+	ModelsCostFrom:         "Расход: от %d запросов",
+	ModelsCostFromSingular: "Расход: от %d запроса",
+	ModelsMaxPhotos:        "Максимум фото: %d",
+	ModelsDescription:      "",
+	ModelsCat:              "Категория: %s",
+	ModelsCatPhoto:         "📸 Фото",
+	ModelsCatVideo:         "🎬 Видео",
+	ModelsCatMusic:         "🎵 Аудио",
+	ModelsCatChat:          "💬 Текст",
+	InstrNanoBanana:        "В 1 сообщении отправьте 1 или более фото, в подписи укажите что хотите изменить (промпт).",
+	InstrTextModels:        "Отправьте любое сообщение в чат.",
+	InstrSunoMusic:         "Отправьте в чат описание музыки, которую хотите создать.",
+	InstrVeo3Video:         "Отправьте 1 фото с подписью — опишите, какое видео хотите получить.",
 
 	// Aspect ratio
 	AspectTitle:     "🔲 Формат",
@@ -495,21 +509,23 @@ var locRU = Localization{
 	AspectAuto:      "Auto",
 
 	// Photo models descriptions
-	ModelNanoBanana:    " ",
-	ModelNanoBananaPro: " ",
-	ModelSeedream:      " ",
-	ModelVeo3Fast:      " ",
-	ModelWan26:         " ",
-	ModelKling26:       " ",
-	ModelSunoMusic:     " ",
-	ModelGeminiFlash:   " ",
-	ModelGPT5Mini:      " ",
-	ModelGPT5Nano:      " ",
-	ModelGPT41Mini:     " ",
+	ModelNanoBanana:    "Среднее качество. \nСреднее время: 20 сек.",
+	ModelNanoBananaPro: "Отличное качество. \nСреднее время: 1-2 мин.",
+	ModelNanoBanana2:   "Новейшая модель. Поддержка текста без фото. \nСреднее время: 30сек-2 мин.",
+	ModelSeedream:      "Хорошо работает с купальниками и другими фото. \nСреднее время: 1-2 мин.",
+	ModelVeo3Fast:      "Видео из фото. \nСреднее время: 2-5 мин.",
+	ModelWan26:         "Видео из фото. Выбор длительности (5/10/15 сек) и разрешения. \nСреднее время: 2-5 мин.",
+	ModelKling26:       "Видео из фото. Выбор длительности (5/10 сек) и звука. \nСреднее время: 2-5 мин.",
+	ModelSunoMusic:     "Генерация музыки. Выбор голоса и режима. \nСреднее время: 2-5 мин.",
+	ModelGeminiFlash:   "Быстрые текстовые ответы. Доступно с подпиской Start+.",
+	ModelGPT5Mini:      "Быстрые текстовые ответы. Доступно с подпиской Mini+.",
+	ModelGPT5Nano:      "Текстовые ответы. Доступно с подпиской Mini+.",
+	ModelGPT41Mini:     "Быстрые текстовые ответы для текстовых запросов.",
 
 	// Photo instructions
-	PhotoReceived:   "📷 Фото получено!",
-	PhotoAddCaption: "Пожалуйста, отправьте фото ещё раз, но в подписи укажите промпт.",
+	PhotoReceived:      "📷 Фото получено!",
+	PhotoAddCaption:    "Пожалуйста, отправьте фото ещё раз, но в подписи укажите промпт.",
+	PhotoInstrTemplate: "📸 <b>Фото</b>\n<b>Текущая:</b> %s — %s\n<b>Расход:</b> %s\n<b>Максимум фото:</b> %s\n\nВ 1 сообщении отправьте 1 или более фото, в подписи укажите что хотите изменить (промпт).",
 
 	// Generation
 	GenStarted:     "🔄 Генерация запущена",
@@ -674,6 +690,8 @@ var locEN = Localization{
 	CmdSettings: "Settings",
 	CmdAdmin:    "Admin",
 
+	MenuMainHTML: "🍌  <b>Your ID:</b> %s\n⭐️  <b>Subscription:</b> %s\n🧠  <b>Current AI model:</b> %s %s",
+
 	// Main menu
 	MenuBuyBtn:          "💰 Buy",
 	MenuInviteBtn:       "👥 Invite friends",
@@ -698,6 +716,7 @@ var locEN = Localization{
 	AccountExtraImages:  "🖼️ Extra images: %d",
 	AccountExtraMusic:   "🎵 Extra music: %d",
 	AccountExtraVideo:   "🎬 Extra video: %d",
+	AccountCardTemplate: "<b>User ID:</b> %s\n<b>⭐️ Subscription:</b> %s\n<b>📅 Valid until:</b> %s\n------------------------------\n<b>📝 Text requests (24h):</b> %s\n<b>🖼️ Photos left:</b> %s\n<b>🎵 Music:</b> %s\n<b>🎬 Video:</b> %s\n------------------------------\n<b>📝 Extra text requests:</b> %s\n<b>🖼️ Extra images:</b> %s\n<b>🎵 Extra music:</b> %s\n<b>🎬 Extra video:</b> %s",
 
 	// Buy menu
 	BuyTitle:           "💳 Buy",
@@ -792,9 +811,13 @@ var locEN = Localization{
 	ModelsCategory:              "%s",
 	ModelsSelect:                "Select a model:",
 	ModelsCurrent:               "Current",
+	ModelsCurrentLabel:          "Current model:",
 	ModelsCost:                  "Cost: %d %s",
+	ModelsCostFrom:              "Cost: from %d requests",
+	ModelsCostFromSingular:      "Cost: from %d request",
 	ModelsMaxPhotos:             "Max photos: %d",
 	ModelsDescription:           "",
+	ModelsCat:                   "Category: %s",
 	ModelsCatPhoto:              "📸 Photo",
 	ModelsCatVideo:              "🎬 Video",
 	ModelsCatMusic:              "🎵 Music",
@@ -805,6 +828,7 @@ var locEN = Localization{
 	InstrVeo3Video:              "Send 1 photo with a caption — describe the video you want.",
 	ModelNanoBanana:             "Medium quality. Works poorly with two photos. Average wait time ~1 minute.",
 	ModelNanoBananaPro:          "Newest model, best quality. Average wait time 1–2 minutes.",
+	ModelNanoBanana2:            "Latest model. Text-only support, albums up to 4 photos, 1K/2K/4K resolution, Google Search. Cost: 1K=2, 2K=3, 4K=4 gen. Average wait time 1–2 min.",
 	ModelSeedream:               "High quality photo editing. Average wait time 1–2 minutes.",
 	ModelVeo3Fast:               "Video from photo. Send 1 photo with a caption. Average wait time 2–5 minutes.",
 	ModelWan26:                  "Video from photo with duration (5/10/15 sec) and resolution (720p/1080p) selection. Supports up to 4 photos. Cost: 2 per 5 seconds. Average wait time 3–7 minutes.",
@@ -816,6 +840,7 @@ var locEN = Localization{
 	ModelGPT41Mini:              "Text: fast replies for text requests.",
 	PhotoReceived:               "📷 Photo received!",
 	PhotoAddCaption:             "Please resend the photo with a caption — describe what you want.",
+	PhotoInstrTemplate:          "📸 <b>Photo</b>\n<b>Current:</b> %s — %s\n<b>Cost:</b> %s\n<b>Max photos:</b> %s\n\nSend 1 or more photos in 1 message, add a caption describing what you want to change (prompt).",
 	GenStarted:                  "🔄 Generation started",
 	GenModel:                    "Model: %s",
 	GenDeducted:                 "Deducted: %d request(s)",

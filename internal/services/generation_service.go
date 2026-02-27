@@ -86,6 +86,8 @@ type GenerationOptions struct {
 	UseDefAPI          bool
 	NanoBananaProvider string
 	AspectRatio        string
+	PhotoResolution    string
+	GoogleSearch       string
 }
 
 func NewGenerationService(db *sql.DB, client *openrouter.Client) *GenerationService {
@@ -183,7 +185,8 @@ func (s *GenerationService) processGeneration(req *models.GenerationRequest, opt
 	if len(images) == 0 && opts.InputImage != "" {
 		images = []string{opts.InputImage}
 	}
-	if len(images) == 0 {
+	// nano-banana-2 supports text-only generation (empty images allowed)
+	if len(images) == 0 && !strings.EqualFold(strings.TrimSpace(opts.Model), "nano-banana-2") {
 		debugLog("processGeneration ERROR: no input images provided")
 		_ = s.updateRequestStatus(req.ID, "failed", "no input images provided")
 		if s.notify != nil {
@@ -226,6 +229,27 @@ func (s *GenerationService) processGeneration(req *models.GenerationRequest, opt
 			return
 		}
 		debugLog("processGeneration DefAPI task created: requestID=%d taskID=%s", req.ID, taskID)
+		return
+	}
+
+	// nano-banana-2 — KieAPI task with resolution and google_search parameters
+	if strings.EqualFold(strings.TrimSpace(opts.Model), "nano-banana-2") {
+		taskID, err := s.createNanoBanana2Task(req.ID, opts, images)
+		if err != nil {
+			debugLog("processGeneration NanoBanana2 FAILED: requestID=%d, error=%v", req.ID, err)
+			_ = s.updateRequestStatus(req.ID, "failed", err.Error())
+			req.Status = "failed"
+			errMsg := err.Error()
+			req.ErrorMsg = &errMsg
+			if s.notify != nil {
+				s.notify(opts.ChatID, req)
+			}
+			s.markDone(req.ID)
+			return
+		}
+		debugLog("processGeneration NanoBanana2 task created: requestID=%d taskID=%s", req.ID, taskID)
+		// Start timeout checker: 3 minutes for photo models
+		s.startKieAPITimeoutChecker(req.ID, taskID, 3*time.Minute, opts.ChatID)
 		return
 	}
 
@@ -516,6 +540,60 @@ func (s *GenerationService) createKieAPITask(requestID int64, opts GenerationOpt
 	}
 	payload := kieapi.CreateTaskRequest{
 		Model:       apiModel,
+		CallBackURL: callbackURL,
+		Input:       input,
+	}
+
+	taskID, err := s.kieAPI.CreateTask(payload)
+	if err != nil {
+		return "", err
+	}
+	if err := s.updateExternalTaskID(requestID, taskID); err != nil {
+		return "", err
+	}
+	return taskID, nil
+}
+
+func (s *GenerationService) createNanoBanana2Task(requestID int64, opts GenerationOptions, images []string) (string, error) {
+	if s.kieAPI == nil {
+		return "", fmt.Errorf("kieapi client is not configured")
+	}
+	callbackURL := strings.TrimSpace(os.Getenv("KIEAPI_CALLBACK_URL"))
+	if callbackURL == "" {
+		callbackURL = strings.TrimSpace(os.Getenv("KIE_CALLBACK_URL"))
+	}
+	if callbackURL == "" {
+		return "", fmt.Errorf("KIEAPI_CALLBACK_URL is not set")
+	}
+
+	input := map[string]any{
+		"prompt": opts.Prompt,
+	}
+	if opts.AspectRatio != "" {
+		input["aspect_ratio"] = opts.AspectRatio
+	}
+	if len(images) > 0 {
+		input["image_input"] = images
+	} else {
+		input["image_input"] = []string{}
+	}
+
+	// Resolution: 1K, 2K, 4K
+	resolution := strings.TrimSpace(opts.PhotoResolution)
+	if resolution == "" {
+		resolution = "1K"
+	}
+	input["resolution"] = resolution
+
+	// Google Search: true/false
+	googleSearch := false
+	if strings.TrimSpace(opts.GoogleSearch) == "true" {
+		googleSearch = true
+	}
+	input["google_search"] = googleSearch
+
+	payload := kieapi.CreateTaskRequest{
+		Model:       "nano-banana-2",
 		CallBackURL: callbackURL,
 		Input:       input,
 	}

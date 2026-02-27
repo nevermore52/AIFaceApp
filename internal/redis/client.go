@@ -137,6 +137,40 @@ func (c *Client) GetUserVideoSound(userID int64) (string, error) {
 	return sound, nil
 }
 
+func (c *Client) SetUserPhotoResolution(userID int64, resolution string) error {
+	key := fmt.Sprintf("user:%d:photo_resolution", userID)
+	return c.rdb.Set(c.ctx, key, resolution, 0).Err()
+}
+
+func (c *Client) GetUserPhotoResolution(userID int64) (string, error) {
+	key := fmt.Sprintf("user:%d:photo_resolution", userID)
+	resolution, err := c.rdb.Get(c.ctx, key).Result()
+	if err == redis.Nil {
+		return "", nil
+	}
+	if err != nil {
+		return "", err
+	}
+	return resolution, nil
+}
+
+func (c *Client) SetUserGoogleSearch(userID int64, enabled string) error {
+	key := fmt.Sprintf("user:%d:google_search", userID)
+	return c.rdb.Set(c.ctx, key, enabled, 0).Err()
+}
+
+func (c *Client) GetUserGoogleSearch(userID int64) (string, error) {
+	key := fmt.Sprintf("user:%d:google_search", userID)
+	val, err := c.rdb.Get(c.ctx, key).Result()
+	if err == redis.Nil {
+		return "", nil
+	}
+	if err != nil {
+		return "", err
+	}
+	return val, nil
+}
+
 func (c *Client) SetUserLanguage(userID int64, lang string) error {
 	key := fmt.Sprintf("user:%d:language", userID)
 	return c.rdb.Set(c.ctx, key, lang, 0).Err()
