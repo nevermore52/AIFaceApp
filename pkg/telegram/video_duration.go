@@ -331,6 +331,21 @@ func (b *Bot) getUserPhotoResolution(userID int64) string {
 	}
 }
 
+// getUserPhotoResolutionPro returns resolution for nano-banana-pro (only 2K and 4K, no 1K)
+func (b *Bot) getUserPhotoResolutionPro(userID int64) string {
+	resolution, err := b.redisClient.GetUserPhotoResolution(userID)
+	if err != nil {
+		log.Printf("getUserPhotoResolutionPro err: %v", err)
+	}
+	// For Pro model, only 2K and 4K are allowed, default is 2K
+	switch resolution {
+	case "2K", "4K":
+		return resolution
+	default:
+		return "2K"
+	}
+}
+
 func (b *Bot) setUserPhotoResolution(userID int64, resolution string) {
 	switch resolution {
 	case "1K", "2K", "4K":
@@ -345,9 +360,9 @@ func (b *Bot) setUserPhotoResolution(userID int64, resolution string) {
 
 // getPhotoResolutionCost returns the generation cost based on resolution and model
 func (b *Bot) getPhotoResolutionCost(userID int64, modelID string) int {
-	resolution := b.getUserPhotoResolution(userID)
 	if modelID == "google/nano-banana-pro" {
-		// Pro: 1K=4, 2K=4, 4K=5
+		resolution := b.getUserPhotoResolutionPro(userID)
+		// Pro: 2K=4, 4K=5 (no 1K)
 		switch resolution {
 		case "4K":
 			return 5
@@ -355,6 +370,7 @@ func (b *Bot) getPhotoResolutionCost(userID int64, modelID string) int {
 			return 4
 		}
 	}
+	resolution := b.getUserPhotoResolution(userID)
 	// nano-banana-2: 1K=2, 2K=3, 4K=4
 	switch resolution {
 	case "2K":

@@ -89,11 +89,13 @@ func (b *Bot) processBroadcastAlbum(mediaID string) {
 	b.sendText(chatID, fmt.Sprintf("📣 Запускаю рассылку альбома (%d фото)...", len(photos)))
 
 	b.goLimited(func() {
-		const batchSize = 200
-		total := 0
-		sent := 0
-		failed := 0
+		const (
+			batchSize  = 500
+			numWorkers = 20
+		)
 
+		// Collect all users first
+		var allUsers []int64
 		for offset := 0; ; offset += batchSize {
 			users, err := b.userService.GetAllUsers(batchSize, offset)
 			if err != nil {
@@ -103,31 +105,76 @@ func (b *Bot) processBroadcastAlbum(mediaID string) {
 			if len(users) == 0 {
 				break
 			}
-
 			for _, user := range users {
-				if user == nil || user.TelegramID == 0 {
-					continue
+				if user != nil && user.TelegramID != 0 {
+					allUsers = append(allUsers, user.TelegramID)
 				}
-				total++
+			}
+		}
 
-				var mediaGroup []interface{}
-				for i, photoID := range photos {
-					media := tgbotapi.NewInputMediaPhoto(photoID)
-					if i == 0 && caption != "" {
-						media.Caption = convertBroadcastMarkupToHTML(caption)
-						media.ParseMode = tgbotapi.ModeHTML
+		total := len(allUsers)
+		if total == 0 {
+			b.sendText(chatID, "❌ Нет пользователей для рассылки")
+			return
+		}
+
+		b.sendText(chatID, fmt.Sprintf("📊 Найдено %d пользователей, начинаю рассылку...", total))
+
+		// Create channels for worker pool
+		jobs := make(chan int64, total)
+		results := make(chan bool, total)
+
+		// Start workers
+		var wg sync.WaitGroup
+		for w := 0; w < numWorkers; w++ {
+			wg.Add(1)
+			go func() {
+				defer wg.Done()
+				for userID := range jobs {
+					var mediaGroup []interface{}
+					for i, photoID := range photos {
+						media := tgbotapi.NewInputMediaPhoto(photoID)
+						if i == 0 && caption != "" {
+							media.Caption = convertBroadcastMarkupToHTML(caption)
+							media.ParseMode = tgbotapi.ModeHTML
+						}
+						mediaGroup = append(mediaGroup, media)
 					}
-					mediaGroup = append(mediaGroup, media)
-				}
 
-				config := tgbotapi.NewMediaGroup(user.TelegramID, mediaGroup)
-				if _, err := b.api.Send(config); err != nil {
-					failed++
-					log.Printf("broadcast album send to %d failed: %v", user.TelegramID, err)
-				} else {
-					sent++
+					config := tgbotapi.NewMediaGroup(userID, mediaGroup)
+					if _, err := b.api.Send(config); err != nil {
+						log.Printf("broadcast album send to %d failed: %v", userID, err)
+						results <- false
+					} else {
+						results <- true
+					}
+					time.Sleep(35 * time.Millisecond)
 				}
-				time.Sleep(50 * time.Millisecond)
+			}()
+		}
+
+		// Send jobs to workers
+		go func() {
+			for _, userID := range allUsers {
+				jobs <- userID
+			}
+			close(jobs)
+		}()
+
+		// Wait for all workers to finish
+		go func() {
+			wg.Wait()
+			close(results)
+		}()
+
+		// Collect results
+		sent := 0
+		failed := 0
+		for success := range results {
+			if success {
+				sent++
+			} else {
+				failed++
 			}
 		}
 

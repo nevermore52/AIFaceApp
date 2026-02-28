@@ -2123,8 +2123,9 @@ func (b *Bot) processAudioMessage(msg *tgbotapi.Message, modelOpt ModelOption) {
 
 func (b *Bot) handleAdminBroadcastPhoto(chatID int64, fileID tgbotapi.FileID, text string) {
 	const (
-		batchSize    = 200
+		batchSize    = 500
 		captionLimit = 900
+		numWorkers   = 20
 	)
 
 	caption := strings.TrimSpace(text)
@@ -2136,10 +2137,8 @@ func (b *Bot) handleAdminBroadcastPhoto(chatID int64, fileID tgbotapi.FileID, te
 
 	b.sendText(chatID, "📣 Запускаю рассылку с фото...")
 	b.goLimited(func() {
-		total := 0
-		sent := 0
-		failed := 0
-
+		// Collect all users first
+		var allUsers []int64
 		for offset := 0; ; offset += batchSize {
 			users, err := b.userService.GetAllUsers(batchSize, offset)
 			if err != nil {
@@ -2150,27 +2149,74 @@ func (b *Bot) handleAdminBroadcastPhoto(chatID int64, fileID tgbotapi.FileID, te
 				break
 			}
 			for _, user := range users {
-				if user == nil || user.TelegramID == 0 {
-					continue
+				if user != nil && user.TelegramID != 0 {
+					allUsers = append(allUsers, user.TelegramID)
 				}
-				total++
-				photoMsg := tgbotapi.NewPhoto(user.TelegramID, fileID)
-				if caption != "" {
-					photoMsg.Caption = convertBroadcastMarkupToHTML(caption)
-					photoMsg.ParseMode = tgbotapi.ModeHTML
-				}
-				if _, err := b.api.Send(photoMsg); err != nil {
-					failed++
-					log.Printf("broadcast photo to %d failed: %v", user.TelegramID, err)
-				} else {
-					sent++
-					if remaining != "" {
-						if err := b.sendMarkdownLong(user.TelegramID, remaining); err != nil {
-							log.Printf("broadcast photo extra text to %d failed: %v", user.TelegramID, err)
-						}
+			}
+		}
+
+		total := len(allUsers)
+		if total == 0 {
+			b.sendText(chatID, "❌ Нет пользователей для рассылки")
+			return
+		}
+
+		b.sendText(chatID, fmt.Sprintf("📊 Найдено %d пользователей, начинаю рассылку...", total))
+
+		// Create channels for worker pool
+		jobs := make(chan int64, total)
+		results := make(chan bool, total)
+
+		// Start workers
+		var wg sync.WaitGroup
+		for w := 0; w < numWorkers; w++ {
+			wg.Add(1)
+			go func() {
+				defer wg.Done()
+				for userID := range jobs {
+					photoMsg := tgbotapi.NewPhoto(userID, fileID)
+					if caption != "" {
+						photoMsg.Caption = convertBroadcastMarkupToHTML(caption)
+						photoMsg.ParseMode = tgbotapi.ModeHTML
 					}
+					if _, err := b.api.Send(photoMsg); err != nil {
+						log.Printf("broadcast photo to %d failed: %v", userID, err)
+						results <- false
+					} else {
+						if remaining != "" {
+							if err := b.sendMarkdownLong(userID, remaining); err != nil {
+								log.Printf("broadcast photo extra text to %d failed: %v", userID, err)
+							}
+						}
+						results <- true
+					}
+					time.Sleep(35 * time.Millisecond)
 				}
-				time.Sleep(35 * time.Millisecond)
+			}()
+		}
+
+		// Send jobs to workers
+		go func() {
+			for _, userID := range allUsers {
+				jobs <- userID
+			}
+			close(jobs)
+		}()
+
+		// Wait for all workers to finish
+		go func() {
+			wg.Wait()
+			close(results)
+		}()
+
+		// Collect results
+		sent := 0
+		failed := 0
+		for success := range results {
+			if success {
+				sent++
+			} else {
+				failed++
 			}
 		}
 
@@ -4778,7 +4824,20 @@ func (b *Bot) sendModelMenu(chatID int64, userID int64, category ModelCategory, 
 			tgbotapi.NewInlineKeyboardButtonData(label, "aspect_menu"),
 		))
 	}
-	if category == ModelCategoryPhoto && (current == "google/nano-banana-pro" || current == "nano-banana-2") {
+	if category == ModelCategoryPhoto && current == "google/nano-banana-pro" {
+		resolution := b.getUserPhotoResolutionPro(userID)
+		// Cycle: 2K -> 4K -> 2K (no 1K for Pro)
+		nextRes := "4K"
+		if resolution == "4K" {
+			nextRes = "2K"
+		}
+		dynCost := b.getPhotoResolutionCost(userID, current)
+		resLabel := fmt.Sprintf("📐 Разрешение: %s (%d ген.)", resolution, dynCost)
+		rows = append(rows, tgbotapi.NewInlineKeyboardRow(
+			tgbotapi.NewInlineKeyboardButtonData(resLabel, "photo_resolution_toggle:"+nextRes),
+		))
+	}
+	if category == ModelCategoryPhoto && current == "nano-banana-2" {
 		resolution := b.getUserPhotoResolution(userID)
 		// Cycle: 1K -> 2K -> 4K -> 1K
 		nextRes := "2K"
@@ -5272,14 +5331,15 @@ func (b *Bot) handleAdminCommand(msg *tgbotapi.Message) {
 }
 
 func (b *Bot) handleAdminBroadcast(chatID int64, text string) {
-	const batchSize = 200
+	const (
+		batchSize  = 500
+		numWorkers = 20
+	)
 
 	b.sendText(chatID, "📣 Запускаю рассылку...")
 	b.goLimited(func() {
-		total := 0
-		sent := 0
-		failed := 0
-
+		// Collect all users first
+		var allUsers []int64
 		for offset := 0; ; offset += batchSize {
 			users, err := b.userService.GetAllUsers(batchSize, offset)
 			if err != nil {
@@ -5290,17 +5350,64 @@ func (b *Bot) handleAdminBroadcast(chatID int64, text string) {
 				break
 			}
 			for _, user := range users {
-				if user == nil || user.TelegramID == 0 {
-					continue
+				if user != nil && user.TelegramID != 0 {
+					allUsers = append(allUsers, user.TelegramID)
 				}
-				total++
-				if err := b.sendMarkdownLong(user.TelegramID, text); err != nil {
-					failed++
-					log.Printf("broadcast send to %d failed: %v", user.TelegramID, err)
-				} else {
-					sent++
+			}
+		}
+
+		total := len(allUsers)
+		if total == 0 {
+			b.sendText(chatID, "❌ Нет пользователей для рассылки")
+			return
+		}
+
+		b.sendText(chatID, fmt.Sprintf("📊 Найдено %d пользователей, начинаю рассылку...", total))
+
+		// Create channels for worker pool
+		jobs := make(chan int64, total)
+		results := make(chan bool, total)
+
+		// Start workers
+		var wg sync.WaitGroup
+		for w := 0; w < numWorkers; w++ {
+			wg.Add(1)
+			go func() {
+				defer wg.Done()
+				for userID := range jobs {
+					if err := b.sendMarkdownLong(userID, text); err != nil {
+						log.Printf("broadcast send to %d failed: %v", userID, err)
+						results <- false
+					} else {
+						results <- true
+					}
+					time.Sleep(35 * time.Millisecond)
 				}
-				time.Sleep(35 * time.Millisecond)
+			}()
+		}
+
+		// Send jobs to workers
+		go func() {
+			for _, userID := range allUsers {
+				jobs <- userID
+			}
+			close(jobs)
+		}()
+
+		// Wait for all workers to finish
+		go func() {
+			wg.Wait()
+			close(results)
+		}()
+
+		// Collect results
+		sent := 0
+		failed := 0
+		for success := range results {
+			if success {
+				sent++
+			} else {
+				failed++
 			}
 		}
 
