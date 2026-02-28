@@ -615,8 +615,8 @@ var locRU = Localization{
 
 	// Common
 	WelcomeText:         "Добро пожаловать! Используйте /menu, чтобы выбрать модель и начать.",
-	StartPromoTitle:     "🔥 В данный момент действует скидка 50%% на фото генерации",
-	StartPromoCountdown: "⏳ До конца акции: %dд %dч %dм",
+	StartPromoTitle:     "🔥 В данный момент действует скидка %d%% на фото генерации",
+	StartPromoCountdown: "⏳ До конца акции: %dд %dч %dм %dс",
 	BackBtn:             "⬅️ Назад",
 	MenuBtn:             "🏠 Меню",
 	RequestUnit:         "запрос",
@@ -899,8 +899,8 @@ var locEN = Localization{
 	PrivacyTerms:  "📜 Terms of Service:",
 
 	WelcomeText:         "Welcome! Use /menu to select a model and get started.",
-	StartPromoTitle:     "🔥 50%% discounts until %s",
-	StartPromoCountdown: "⏳ Offer ends in: %dd %dh %dm",
+	StartPromoTitle:     "🔥 Current photo discount: %d%%",
+	StartPromoCountdown: "⏳ Offer ends in: %dd %dh %dm %ds",
 
 	// Help
 	HelpTitle:    "📋 Available commands:",

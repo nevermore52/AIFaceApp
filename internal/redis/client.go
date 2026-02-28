@@ -331,3 +331,51 @@ func (c *Client) TryAcquireCustomCooldown(userID int64, name string, ttl time.Du
 func (c *Client) Close() error {
 	return c.rdb.Close()
 }
+
+// PhotoDiscount stores discount settings for photo category
+type PhotoDiscount struct {
+	Percent int   `json:"percent"`  // Discount percentage (e.g., 50 for 50% off)
+	EndTime int64 `json:"end_time"` // Unix timestamp when discount ends
+}
+
+// SetPhotoDiscount sets a temporary discount for photo category
+func (c *Client) SetPhotoDiscount(percent int, endTime time.Time) error {
+	discount := PhotoDiscount{
+		Percent: percent,
+		EndTime: endTime.Unix(),
+	}
+	data, err := json.Marshal(discount)
+	if err != nil {
+		return fmt.Errorf("failed to marshal photo discount: %w", err)
+	}
+	ttl := time.Until(endTime)
+	if ttl <= 0 {
+		return fmt.Errorf("end time must be in the future")
+	}
+	return c.rdb.Set(c.ctx, "global:photo_discount", data, ttl).Err()
+}
+
+// GetPhotoDiscount returns current photo discount settings if active
+func (c *Client) GetPhotoDiscount() (*PhotoDiscount, error) {
+	data, err := c.rdb.Get(c.ctx, "global:photo_discount").Result()
+	if err == redis.Nil {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+	var discount PhotoDiscount
+	if err := json.Unmarshal([]byte(data), &discount); err != nil {
+		return nil, err
+	}
+	// Check if discount is still active
+	if time.Now().Unix() >= discount.EndTime {
+		return nil, nil
+	}
+	return &discount, nil
+}
+
+// RemovePhotoDiscount removes the photo discount
+func (c *Client) RemovePhotoDiscount() error {
+	return c.rdb.Del(c.ctx, "global:photo_discount").Err()
+}

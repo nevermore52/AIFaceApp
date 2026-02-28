@@ -179,23 +179,43 @@ func (b *Bot) extrasPrice(category string, qty int) (int, bool) {
 	return b.paymentService.ExtrasPrice(category, qty)
 }
 
-func extrasDiscountActiveForCategory(category string) bool {
-	if category != "image" {
-		return false
+func (b *Bot) getPhotoDiscountPercent() int {
+	if b.redisClient == nil {
+		return 0
 	}
-	deadline := time.Date(2026, time.March, 1, 0, 0, 0, 0, time.UTC)
-	return time.Now().UTC().Before(deadline)
+	discount, err := b.redisClient.GetPhotoDiscount()
+	if err != nil || discount == nil {
+		return 0
+	}
+	return discount.Percent
 }
 
-func formatExtrasPriceMarkdownV2(category string, currentPrice int) string {
+func (b *Bot) formatExtrasPriceMarkdownV2(category string, currentPrice int) string {
 	if currentPrice < 0 {
 		currentPrice = 0
 	}
-	if extrasDiscountActiveForCategory(category) {
-		oldPrice := currentPrice * 2
-		return fmt.Sprintf("%d ₽ <s>%d ₽</s>", currentPrice, oldPrice)
+	if category == "image" {
+		discountPercent := b.getPhotoDiscountPercent()
+		if discountPercent > 0 && discountPercent < 100 {
+			// Calculate discounted price
+			discountedPrice := currentPrice * (100 - discountPercent) / 100
+			return fmt.Sprintf("%d ₽ <s>%d ₽</s>", discountedPrice, currentPrice)
+		}
 	}
 	return fmt.Sprintf("%d ₽", currentPrice)
+}
+
+func (b *Bot) extrasDiscountedPrice(category string, currentPrice int) int {
+	if currentPrice < 0 {
+		currentPrice = 0
+	}
+	if category == "image" {
+		discountPercent := b.getPhotoDiscountPercent()
+		if discountPercent > 0 && discountPercent < 100 {
+			return currentPrice * (100 - discountPercent) / 100
+		}
+	}
+	return currentPrice
 }
 
 func escapeMarkdownV2(s string) string {
@@ -393,8 +413,9 @@ func (b *Bot) sendBuyExtrasCategory(chatID int64, userID int64, category string,
 	escapedUnit := html.EscapeString(unit)
 	for _, p := range packs {
 		if price, ok := b.extrasPrice(category, p); ok {
-			perItem := float64(price) / float64(p)
-			sb.WriteString(fmt.Sprintf("• %d %s — %s (%0.1f ₽/шт)\n", p, escapedUnit, formatExtrasPriceMarkdownV2(category, price), perItem))
+			effectivePrice := b.extrasDiscountedPrice(category, price)
+			perItem := float64(effectivePrice) / float64(p)
+			sb.WriteString(fmt.Sprintf("• %d %s — %s (%0.1f ₽/шт)\n", p, escapedUnit, b.formatExtrasPriceMarkdownV2(category, price), perItem))
 		} else {
 			sb.WriteString(fmt.Sprintf("• %d %s\n", p, escapedUnit))
 		}
@@ -4244,18 +4265,25 @@ func (b *Bot) saveMessageToContext(userID int64, message string) {
 	}
 }
 
-func startPromoText(loc *Localization) string {
-	deadline := time.Date(2026, time.March, 1, 0, 0, 0, 0, time.UTC)
-	now := time.Now().UTC()
-	if !now.Before(deadline) {
+func (b *Bot) startPromoText(loc *Localization) string {
+	if b.redisClient == nil {
 		return ""
 	}
-	left := deadline.Sub(now)
+	discount, err := b.redisClient.GetPhotoDiscount()
+	if err != nil || discount == nil || discount.Percent <= 0 {
+		return ""
+	}
+	endTime := time.Unix(discount.EndTime, 0)
+	left := time.Until(endTime)
+	if left <= 0 {
+		return ""
+	}
 	days := int(left.Hours()) / 24
 	hours := int(left.Hours()) % 24
 	minutes := int(left.Minutes()) % 60
+	seconds := int(left.Seconds()) % 60
 
-	return fmt.Sprintf(loc.StartPromoTitle) + "\n" + fmt.Sprintf(loc.StartPromoCountdown, days, hours, minutes)
+	return fmt.Sprintf(loc.StartPromoTitle, discount.Percent) + "\n" + fmt.Sprintf(loc.StartPromoCountdown, days, hours, minutes, seconds)
 }
 
 // handleStart обрабатывает команду /start
@@ -4265,7 +4293,7 @@ func (b *Bot) handleStart(msg *tgbotapi.Message) {
 	}
 	loc := b.getLocalization(msg.From.ID)
 	text := loc.WelcomeText
-	if promo := startPromoText(loc); promo != "" {
+	if promo := b.startPromoText(loc); promo != "" {
 		text += "\n\n" + promo
 	}
 	b.sendText(msg.Chat.ID, text)
@@ -4300,7 +4328,7 @@ func (b *Bot) handleStartWithReferral(msg *tgbotapi.Message, referralCode string
 	}
 	loc := b.getLocalization(user.ID)
 	text := loc.WelcomeText
-	if promo := startPromoText(loc); promo != "" {
+	if promo := b.startPromoText(loc); promo != "" {
 		text += "\n\n" + promo
 	}
 	b.sendText(msg.Chat.ID, text)
@@ -5323,11 +5351,79 @@ func (b *Bot) handleAdminCommand(msg *tgbotapi.Message) {
 		b.sendText(msg.Chat.ID, fmt.Sprintf("✅ Подписка удалена у пользователя %d", userID))
 	case "top_users":
 		b.handleAdminTopUsers(msg.Chat.ID)
+	case "photo_discount":
+		b.handleAdminPhotoDiscountStatus(msg.Chat.ID)
+	case "photo_discount_set":
+		// Usage: /admin photo_discount_set <percent> <duration_seconds>
+		if len(parts) < 3 {
+			b.sendErrorMessage(msg.Chat.ID, "Использование: /admin photo_discount_set <percent> <duration_seconds>\nПример: /admin photo_discount_set 50 3600 (50% скидка на 1 час)")
+			return
+		}
+		percent, err := strconv.Atoi(parts[1])
+		if err != nil || percent <= 0 || percent >= 100 {
+			b.sendErrorMessage(msg.Chat.ID, "Процент скидки должен быть от 1 до 99")
+			return
+		}
+		durationSec, err := strconv.ParseInt(parts[2], 10, 64)
+		if err != nil || durationSec <= 0 {
+			b.sendErrorMessage(msg.Chat.ID, "Длительность должна быть положительным числом секунд")
+			return
+		}
+		endTime := time.Now().Add(time.Duration(durationSec) * time.Second)
+		if err := b.redisClient.SetPhotoDiscount(percent, endTime); err != nil {
+			b.sendErrorMessage(msg.Chat.ID, fmt.Sprintf("Ошибка установки скидки: %v", err))
+			return
+		}
+		b.sendText(msg.Chat.ID, fmt.Sprintf("✅ Скидка %d%% на фото установлена до %s", percent, endTime.Format("02.01.2006 15:04:05")))
+	case "photo_discount_remove":
+		if err := b.redisClient.RemovePhotoDiscount(); err != nil {
+			b.sendErrorMessage(msg.Chat.ID, fmt.Sprintf("Ошибка удаления скидки: %v", err))
+			return
+		}
+		b.sendText(msg.Chat.ID, "✅ Скидка на фото удалена")
 	case "help":
 		b.handleAdminHelp(msg.Chat.ID)
 	default:
 		b.sendErrorMessage(msg.Chat.ID, "Неизвестная админ-команда. Используйте /admin help")
 	}
+}
+
+func (b *Bot) handleAdminPhotoDiscountStatus(chatID int64) {
+	discount, err := b.redisClient.GetPhotoDiscount()
+	if err != nil {
+		b.sendErrorMessage(chatID, fmt.Sprintf("Ошибка получения скидки: %v", err))
+		return
+	}
+	if discount == nil || discount.Percent <= 0 {
+		b.sendText(chatID, "📊 Скидка на фото: не установлена")
+		return
+	}
+	endTime := time.Unix(discount.EndTime, 0)
+	remaining := time.Until(endTime)
+	b.sendText(chatID, fmt.Sprintf("📊 Скидка на фото: %d%%\n⏱️ До окончания: %s\n📅 Окончание: %s",
+		discount.Percent,
+		formatDuration(remaining),
+		endTime.Format("02.01.2006 15:04:05")))
+}
+
+func formatDuration(d time.Duration) string {
+	if d < 0 {
+		return "истекла"
+	}
+	days := int(d.Hours()) / 24
+	hours := int(d.Hours()) % 24
+	minutes := int(d.Minutes()) % 60
+	seconds := int(d.Seconds()) % 60
+	if days > 0 {
+		return fmt.Sprintf("%dд %dч %dм %dс", days, hours, minutes, seconds)
+	}
+	if hours > 0 {
+		return fmt.Sprintf("%dч %dм %dс", hours, minutes, seconds)
+	}
+	if minutes > 0 {
+		return fmt.Sprintf("%dм %dс", minutes, seconds)
+	}
+	return fmt.Sprintf("%dс", seconds)
 }
 
 func (b *Bot) handleAdminBroadcast(chatID int64, text string) {
@@ -5626,6 +5722,12 @@ func (b *Bot) handleAdminHelp(chatID int64) {
 /admin sub_set <user_id> <mini|start|pro> <days> - Выдать подписку
 /admin sub_remove <user_id> - Убрать подписку
 /admin help - Эта справка
+
+/admin photo_discount_set 50 3600     # 50% на 1 час
+/admin photo_discount_set 30 86400    # 30% на 24 часа
+/admin photo_discount_set 25 604800   # 25% на неделю
+/admin photo_discount_remove          # Удалить скидку
+/admin photo_discount                 # Статус скидки
 `
 
 	msg := tgbotapi.NewMessage(chatID, text)

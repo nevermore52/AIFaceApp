@@ -9,27 +9,30 @@ import (
 
 	"telegram-ai-face-bot/internal/models"
 	"telegram-ai-face-bot/internal/payments"
+	"telegram-ai-face-bot/internal/redis"
 )
 
 type PaymentService struct {
 	provider    *payments.PaymentProvider
 	userService *UserService
+	redisClient *redis.Client
 	priceTable  map[string]map[int]int
 	subPrices   map[string]int
 	notifier    func(userID int64, category string, qty int, amount float64, paymentID string)
 }
 
-func NewPaymentService(provider *payments.PaymentProvider, userService *UserService) *PaymentService {
+func NewPaymentService(provider *payments.PaymentProvider, userService *UserService, redisClient *redis.Client) *PaymentService {
 	return &PaymentService{
 		provider:    provider,
 		userService: userService,
+		redisClient: redisClient,
 		priceTable: map[string]map[int]int{
 			"image": {
-				10:  49,
-				50:  225,
-				100: 425,
-				250: 880,
-				500: 1710,
+				10:  99,
+				50:  389,
+				100: 669,
+				250: 1499,
+				500: 2899,
 			},
 			"text": {
 				10:  10,
@@ -46,7 +49,7 @@ func NewPaymentService(provider *payments.PaymentProvider, userService *UserServ
 				100: 1599,
 			},
 			"video": {
-				1:	 99,
+				1:   99,
 				5:   379,
 				10:  699,
 				25:  1650,
@@ -68,9 +71,17 @@ func (s *PaymentService) CreateExtrasPayment(userID int64, category string, qty 
 		return nil, err
 	}
 
-	discount := s.userService.SubscriptionDiscount(userID)
-	if discount < 1.0 {
-		price = int(float64(price) * discount)
+	// Apply photo discount from Redis for image category
+	if category == "image" && s.redisClient != nil {
+		if photoDiscount, err := s.redisClient.GetPhotoDiscount(); err == nil && photoDiscount != nil && photoDiscount.Percent > 0 {
+			price = price * (100 - photoDiscount.Percent) / 100
+		}
+	} else {
+		// Apply subscription discount for non-image categories
+		discount := s.userService.SubscriptionDiscount(userID)
+		if discount < 1.0 {
+			price = int(float64(price) * discount)
+		}
 	}
 
 	username := ""

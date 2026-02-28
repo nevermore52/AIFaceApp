@@ -48,7 +48,7 @@ func NewBot(cfg *config.Config, db *sql.DB) (*Bot, error) {
 		generationService.SetKieAPIClient(kieapi.NewClient(cfg.KieAPI.APIKey, cfg.KieAPI.BaseURL))
 	}
 	paymentProvider := payments.NewPaymentProvider(cfg.Payment)
-	paymentService := services.NewPaymentService(paymentProvider, userService)
+	paymentService := services.NewPaymentService(paymentProvider, userService, redisClient)
 
 	tgBot, err := telegram.NewBot(cfg.TelegramToken, userService, generationService, paymentService, redisClient, cfg)
 	if err != nil {
