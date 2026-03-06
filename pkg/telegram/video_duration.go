@@ -170,6 +170,21 @@ func (b *Bot) getKlingVideoCost(userID int64) int {
 	return baseCost
 }
 
+// getVideoTotalCost returns total cost for video models considering user settings
+func (b *Bot) getVideoTotalCost(userID int64, modelID string) int {
+	switch modelID {
+	case "wan/2-6-image-to-video":
+		return b.getVideoDurationCost(userID)
+	case "kling-2.6/image-to-video":
+		return b.getKlingVideoCost(userID)
+	default:
+		if cost := modelRequestCost(modelID); cost > 0 {
+			return cost
+		}
+		return 1
+	}
+}
+
 func (b *Bot) getUserVideoResolution(userID int64) string {
 	resolution, err := b.redisClient.GetUserVideoResolution(userID)
 	if err != nil {

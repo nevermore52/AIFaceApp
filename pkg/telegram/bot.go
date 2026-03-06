@@ -53,6 +53,26 @@ type Bot struct {
 	sunoVoice         map[int64]string
 }
 
+// sendVideoTotalInfo показывает итоговую цену и инструкцию по отправке фото и промпта
+func (b *Bot) sendVideoTotalInfo(chatID int64, userID int64, modelID string) {
+	loc := b.getLocalization(userID)
+	total := b.getVideoTotalCost(userID, modelID)
+	if total < 1 {
+		total = 1
+	}
+	modelLabel := b.modelLabelLoc(modelID, loc)
+	text := fmt.Sprintf("Модель: %s\nСтоимость: %d %s\n\nОтправьте фото и в подписи укажите промпт (описание что вы хотите получить)",
+		html.EscapeString(modelLabel),
+		total,
+		html.EscapeString(requestWord(total, loc)))
+
+	msg := tgbotapi.NewMessage(chatID, text)
+	msg.ParseMode = tgbotapi.ModeHTML
+	if _, err := b.api.Send(msg); err != nil {
+		log.Printf("Failed to send video total info: %v", err)
+	}
+}
+
 func (b *Bot) isChatModelAllowed(userID int64, model ModelOption) bool {
 	if model.ID != "google/gemini-3-flash" && model.ID != "openai/gpt-5-mini" && model.ID != "openai/gpt-5-nano" {
 		return true
@@ -3728,6 +3748,9 @@ func (b *Bot) handleCallback(callback *tgbotapi.CallbackQuery) {
 		} else if strings.HasPrefix(data, "models_menu:") {
 			cat := ModelCategory(strings.TrimPrefix(data, "models_menu:"))
 			b.sendModelMenu(chatID, userID, cat, callback.Message.MessageID)
+		} else if strings.HasPrefix(data, "video_total:") {
+			modelID := strings.TrimPrefix(data, "video_total:")
+			b.sendVideoTotalInfo(chatID, userID, modelID)
 		} else if strings.HasPrefix(data, "buy_package:") {
 			parts := strings.Split(data, ":")
 			if len(parts) == 3 {
@@ -4930,8 +4953,6 @@ func (b *Bot) sendModelMenu(chatID int64, userID int64, category ModelCategory, 
 		if duration == "10" {
 			nextDuration = "5"
 		}
-		// Calculate total cost with sound multiplier
-		totalCost := b.getKlingVideoCost(userID)
 		label := fmt.Sprintf("⏱️ Длительность: %s сек", duration)
 		rows = append(rows, tgbotapi.NewInlineKeyboardRow(
 			tgbotapi.NewInlineKeyboardButtonData(label, "duration_toggle_kling:"+nextDuration),
@@ -4945,11 +4966,15 @@ func (b *Bot) sendModelMenu(chatID int64, userID int64, category ModelCategory, 
 		rows = append(rows, tgbotapi.NewInlineKeyboardRow(
 			tgbotapi.NewInlineKeyboardButtonData(soundLabel, "sound_toggle:"+nextSound),
 		))
-		// Show total cost
-		costLabel := fmt.Sprintf("💰 Итого: %d ген.", totalCost)
-		rows = append(rows, tgbotapi.NewInlineKeyboardRow(
-			tgbotapi.NewInlineKeyboardButtonData(costLabel, "kling_cost_info"),
-		))
+	}
+	if category == ModelCategoryVideo {
+		totalCost := b.getVideoTotalCost(userID, current)
+		if totalCost > 0 {
+			costLabel := fmt.Sprintf("💰 Итого: %d ген.", totalCost)
+			rows = append(rows, tgbotapi.NewInlineKeyboardRow(
+				tgbotapi.NewInlineKeyboardButtonData(costLabel, "video_total:"+current),
+			))
+		}
 	}
 	if desc := strings.TrimSpace(loc.ModelsDescription); desc != "" {
 		text += "\n\n" + desc
