@@ -4566,6 +4566,7 @@ func (b *Bot) handleTextMessage(msg *tgmodels.Message) {
 	// Для всех остальных категорий показываем инструкцию конкретной модели
 	instruction := instructionForModel(modelOpt)
 	reply := newMessageConfig(msg.Chat.ID, instruction)
+	reply.ParseMode = "HTML"
 	_, _ = b.sendMsg(reply)
 }
 
