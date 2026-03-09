@@ -6195,11 +6195,7 @@ func (b *Bot) sendGenerationStatus(chatID int64, req *models.GenerationRequest) 
 			modelLabel = req.Model
 		}
 	}
-	baseText := fmt.Sprintf(`%s Статус генерации:
-
-<tg-emoji emoji-id=\"5271912827869737544\">📸</tg-emoji> Модель: %s
-🔄 Статус: %s
-%s`,
+	baseText := fmt.Sprintf("%s Статус генерации:\n\n<tg-emoji emoji-id=\"5271912827869737544\">🤖</tg-emoji> Модель: %s\n🔄 Статус: %s\n%s",
 		statusEmoji,
 		modelLabel,
 		statusText,
