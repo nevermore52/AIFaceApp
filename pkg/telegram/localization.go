@@ -377,7 +377,7 @@ var locRU = Localization{
 	// Account
 	AccountUserID:       "ID Пользователя: %d",
 	AccountSubscription: "⭐ Тип подписки: %s",
-	AccountValidUntil:   "📅 Действует до: %s",
+	AccountValidUntil:   "<tg-emoji emoji-id=\"5413879192267805083\">📸</tg-emoji> Действует до: %s",
 	AccountTextDaily:    "📝 Текстовые генерации (24 ч): %d",
 	AccountImagesWeekly: "🖼️ Фото осталось: %d",
 	AccountMusicWeekly:  "🎵 Аудио генерации: %d",
@@ -386,7 +386,7 @@ var locRU = Localization{
 	AccountExtraImages:  "🖼️ Доп. фото: %d",
 	AccountExtraMusic:   "🎵 Доп. аудио: %d",
 	AccountExtraVideo:   "🎬 Доп. видео: %d",
-	AccountCardTemplate: "<b>ID Пользователя: %s</b>\n<b>⭐️ Тип подписки: %s</b>\n<b>📅 Действует до: %s</b>\n------------------------------\n<b>📝 Текстовые генерации (24 ч): %s</b>\n<b>🖼️ Фото осталось: %s</b>\n<b>🎵 Аудио генерации: %s</b>\n<b>🎬 Видео генерации: %s</b>\n------------------------------\n<b>📝 Доп. текстовые генерации: %s</b>\n<b>🖼️ Доп. фото: %s</b>\n<b>🎵 Доп. аудио: %s</b>\n<b>🎬 Доп. видео: %s</b>",
+	AccountCardTemplate: "<b>ID Пользователя: %s</b>\n<b><tg-emoji emoji-id=\"5463289097336405244\">📸</tg-emoji> Тип подписки: %s</b>\n<b><tg-emoji emoji-id=\"5413879192267805083\">📸</tg-emoji> Действует до: %s</b>\n------------------------------\n<b><tg-emoji emoji-id=\"5323538339062628165\">📸</tg-emoji> Текстовые генерации (24 ч): %s</b>\n<b><tg-emoji emoji-id=\"5235837920081887219\">📸</tg-emoji> Фото осталось: %s</b>\n<b><tg-emoji emoji-id=\"5463107823946717464\">📸</tg-emoji> Аудио генерации: %s</b>\n<b>🎬 Видео генерации: %s</b>\n------------------------------\n<b><tg-emoji emoji-id=\"5323538339062628165\">📸</tg-emoji> Доп. текстовые генерации: %s</b>\n<b><tg-emoji emoji-id=\"5235837920081887219\">📸</tg-emoji> Доп. фото: %s</b>\n<b><tg-emoji emoji-id=\"5463107823946717464\">📸</tg-emoji> Доп. аудио: %s</b>\n<b>🎬 Доп. видео: %s</b>",
 
 	// Правила бота
 	RulesTitle:   "📜 Правила сервиса:",
