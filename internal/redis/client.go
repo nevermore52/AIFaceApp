@@ -348,11 +348,11 @@ func (c *Client) SetPhotoDiscount(percent int, endTime time.Time) error {
 	if err != nil {
 		return fmt.Errorf("failed to marshal photo discount: %w", err)
 	}
-	ttl := time.Until(endTime)
-	if ttl <= 0 {
+	if time.Until(endTime) <= 0 {
 		return fmt.Errorf("end time must be in the future")
 	}
-	return c.rdb.Set(c.ctx, "global:photo_discount", data, ttl).Err()
+	// Store without TTL to avoid premature deletion on Redis restart/eviction; expiration is enforced in GetPhotoDiscount.
+	return c.rdb.Set(c.ctx, "global:photo_discount", data, 0).Err()
 }
 
 // GetPhotoDiscount returns current photo discount settings if active
@@ -370,6 +370,8 @@ func (c *Client) GetPhotoDiscount() (*PhotoDiscount, error) {
 	}
 	// Check if discount is still active
 	if time.Now().Unix() >= discount.EndTime {
+		// Clean up expired key to prevent stale data
+		_ = c.rdb.Del(c.ctx, "global:photo_discount").Err()
 		return nil, nil
 	}
 	return &discount, nil
