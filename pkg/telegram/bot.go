@@ -5303,7 +5303,8 @@ func (b *Bot) sendModelMenu(chatID int64, userID int64, category ModelCategory, 
 			newInlineKeyboardButtonData(soundLabel, "sound_toggle:"+nextSound),
 		))
 	}
-	if category == ModelCategoryVideo {
+	// Показываем кнопку "Итого" только если текущая модель - видео модель
+	if currentOpt, ok := findModelOption(current); ok && currentOpt.Category == ModelCategoryVideo {
 		totalCost := b.getVideoTotalCost(userID, current)
 		if totalCost > 0 {
 			costLabel := fmt.Sprintf("💰 Итого: %d ген.", totalCost)
