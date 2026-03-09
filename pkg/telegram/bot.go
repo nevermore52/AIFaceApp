@@ -4622,7 +4622,7 @@ func (b *Bot) handleStart(msg *tgmodels.Message) {
 	// Отправляем приветствие с кнопкой меню
 	keyboard := newInlineKeyboardMarkup(
 		newInlineKeyboardRow(
-			newInlineKeyboardButtonDataStyledWithEmoji(loc.MenuBtn, "menu","success", EmojiIDMenu),
+			newInlineKeyboardButtonDataStyledWithEmoji(loc.MenuBtn, "menu", "success", EmojiIDMenu),
 		),
 	)
 	reply := newMessageConfig(msg.Chat.ID, text)
@@ -4748,11 +4748,11 @@ func (b *Bot) sendMainMenu(chatID int64, userID int64) {
 	// инлайн-кнопки (без обычных эмодзи - используем только custom emoji)
 	inlineKB := newInlineKeyboardMarkup(
 		newInlineKeyboardRow(
-			newInlineKeyboardButtonDataStyledWithEmoji("Покупка", "buy", "success",EmojiIDBuy),
+			newInlineKeyboardButtonDataStyledWithEmoji("Покупка", "buy", "success", EmojiIDBuy),
 			newInlineKeyboardButtonDataStyledWithEmoji("Пригласить друга", "invite", "success", EmojiIDGift),
 		),
 		newInlineKeyboardRow(
-			newInlineKeyboardButtonDataStyledWithEmoji(loc.MenuSelectModelBtn, "models_menu", "success",EmojiIDSelectModel),
+			newInlineKeyboardButtonDataStyledWithEmoji(loc.MenuSelectModelBtn, "models_menu", "success", EmojiIDSelectModel),
 		),
 	)
 
@@ -4855,7 +4855,7 @@ func (b *Bot) sendBuyMenu(chatID int64, userID int64) {
 	rows := [][]tgmodels.InlineKeyboardButton{}
 	row := []tgmodels.InlineKeyboardButton{}
 	if subsEnabled {
-		row = append(row, newInlineKeyboardButtonDataStyledWithEmoji(loc.BuySubscriptionBtn, "buy:sub", "success","5215420556089776398"))
+		row = append(row, newInlineKeyboardButtonDataStyledWithEmoji(loc.BuySubscriptionBtn, "buy:sub", "success", "5215420556089776398"))
 	}
 	row = append(row, newInlineKeyboardButtonDataStyledWithEmoji(loc.BuyExtrasBtn, "buy:extras", "success", EmojiIDBuy))
 	rows = append(rows, newInlineKeyboardRow(row...))
@@ -5579,7 +5579,7 @@ func (b *Bot) sendInsufficientQuotaMessage(chatID int64, category models.QuotaCa
 
 	keyboard := newInlineKeyboardMarkup(
 		newInlineKeyboardRow(
-			newInlineKeyboardButtonDataStyledWithEmoji("Купить генерации", "buy", "success",EmojiIDBuy),
+			newInlineKeyboardButtonDataStyledWithEmoji("Купить генерации", "buy", "success", EmojiIDBuy),
 		),
 	)
 
@@ -6194,9 +6194,6 @@ func (b *Bot) sendGenerationStatus(chatID int64, req *models.GenerationRequest) 
 		} else {
 			modelLabel = req.Model
 		}
-		if strings.EqualFold(req.Model, "google/nano-banana") || strings.EqualFold(req.Model, "nano-banana") || strings.EqualFold(req.Model, "gemini") || strings.EqualFold(req.Model, "gemini-2.5-flash-image") || strings.EqualFold(req.Model, "kie/nano-banana-edit") {
-			modelHint = "❗️ Если вас не устраивает результат, попробуйте выбрать Pro модель"
-		}
 	}
 	baseText := fmt.Sprintf(`%s Статус генерации:
 
@@ -6456,7 +6453,7 @@ func (b *Bot) statusInfo(status string) (string, string) {
 	case "completed":
 		return "<tg-emoji emoji-id=\"5206607081334906820\">✔️</tg-emoji>", "Завершено"
 	case "failed":
-		return "❌", "Ошибка"
+		return "<tg-emoji emoji-id=\"5210952531676504517\">❌</tg-emoji>", "Ошибка"
 	default:
 		return "ℹ️", status
 	}
