@@ -1,6 +1,7 @@
 package telegram
 
 import (
+	"bytes"
 	"context"
 	"encoding/base64"
 	"encoding/json"
@@ -27,17 +28,21 @@ import (
 	"telegram-ai-face-bot/internal/services"
 
 	tgbotapi "github.com/go-telegram-bot-api/telegram-bot-api/v5"
+	tgbot "github.com/go-telegram/bot"
+	tgmodels "github.com/go-telegram/bot/models"
 )
 
 type Bot struct {
-	api               *tgbotapi.BotAPI
+	api               *tgbot.Bot
+	ctx               context.Context
+	cancel            context.CancelFunc
+	botUser           *tgmodels.User
 	userService       *services.UserService
 	generationService *services.GenerationService
 	paymentService    *services.PaymentService
 	redisClient       *redis.Client
 	cfg               *config.Config
 	concurrencySem    chan struct{}
-	updates           tgbotapi.UpdatesChannel
 	shutdownOnce      sync.Once
 	shuttingDown      atomic.Bool
 	wg                sync.WaitGroup
@@ -53,6 +58,301 @@ type Bot struct {
 	sunoVoice         map[int64]string
 }
 
+// --- Telegram helper constructors (replaces tgbotapi convenience functions) ---
+
+// Button styles for Telegram Bot API 9.4+
+const (
+	ButtonStyleDefault = ""
+	ButtonStylePrimary = "primary" // blue
+	ButtonStyleDanger  = "danger"  // red
+	ButtonStyleSuccess = "success" // green
+)
+
+// Custom emoji IDs
+const (
+	EmojiIDBack          = "5352759161945867747"
+	EmojiIDBuy           = "5224257782013769471"
+	EmojiIDGift          = "5203996991054432397"
+	EmojiIDSelectModel   = "5271912827869737544"
+	EmojiIDText          = "5429273196870254885"
+	EmojiIDPhoto         = "5429200581858182504"
+	EmojiIDAudio         = "5429372861586359061"
+	EmojiIDPhotoCategory = "5235837920081887219"
+	EmojiIDMenu          = "5416041192905265756"
+)
+
+func newInlineKeyboardButtonData(text, data string) tgmodels.InlineKeyboardButton {
+	return tgmodels.InlineKeyboardButton{Text: text, CallbackData: data}
+}
+
+func newInlineKeyboardButtonDataStyled(text, data, style string) tgmodels.InlineKeyboardButton {
+	return tgmodels.InlineKeyboardButton{Text: text, CallbackData: data, Style: style}
+}
+
+func newInlineKeyboardButtonDataWithEmoji(text, data, emojiID string) tgmodels.InlineKeyboardButton {
+	return tgmodels.InlineKeyboardButton{Text: text, CallbackData: data, IconCustomEmojiID: emojiID}
+}
+
+func newInlineKeyboardButtonDataStyledWithEmoji(text, data, style, emojiID string) tgmodels.InlineKeyboardButton {
+	return tgmodels.InlineKeyboardButton{Text: text, CallbackData: data, Style: style, IconCustomEmojiID: emojiID}
+}
+
+// newBackButton creates a styled back button with custom emoji
+func newBackButton(text, data string) tgmodels.InlineKeyboardButton {
+	return tgmodels.InlineKeyboardButton{Text: text, CallbackData: data, Style: ButtonStyleDanger, IconCustomEmojiID: EmojiIDBack}
+}
+
+func newInlineKeyboardButtonURL(text, url string) tgmodels.InlineKeyboardButton {
+	return tgmodels.InlineKeyboardButton{Text: text, URL: url}
+}
+
+func newInlineKeyboardRow(buttons ...tgmodels.InlineKeyboardButton) []tgmodels.InlineKeyboardButton {
+	return buttons
+}
+
+func newInlineKeyboardMarkup(rows ...[]tgmodels.InlineKeyboardButton) tgmodels.InlineKeyboardMarkup {
+	return tgmodels.InlineKeyboardMarkup{InlineKeyboard: rows}
+}
+func newKeyboardButton(text string) tgmodels.KeyboardButton {
+	return tgmodels.KeyboardButton{Text: text}
+}
+func newKeyboardButtonEmoji(text, emojiId string) tgmodels.KeyboardButton {
+	return tgmodels.KeyboardButton{Text: text, IconCustomEmojiID: emojiId}
+}
+
+func newKeyboardButtonRow(buttons ...tgmodels.KeyboardButton) []tgmodels.KeyboardButton {
+	return buttons
+}
+
+func newReplyKeyboard(rows ...[]tgmodels.KeyboardButton) tgmodels.ReplyKeyboardMarkup {
+	return tgmodels.ReplyKeyboardMarkup{
+		Keyboard:       rows,
+		ResizeKeyboard: true,
+	}
+}
+
+// messageConfig mimics old tgbotapi.MessageConfig for easy migration
+type messageConfig struct {
+	ChatID                int64
+	Text                  string
+	ParseMode             string
+	ReplyMarkup           interface{}
+	DisableWebPagePreview bool
+	DisableNotification   bool
+}
+
+func newMessageConfig(chatID int64, text string) messageConfig {
+	return messageConfig{ChatID: chatID, Text: text}
+}
+
+func (b *Bot) sendMsg(msg messageConfig) (*tgmodels.Message, error) {
+	params := &tgbot.SendMessageParams{
+		ChatID:              msg.ChatID,
+		Text:                msg.Text,
+		ParseMode:           tgmodels.ParseMode(msg.ParseMode),
+		DisableNotification: msg.DisableNotification,
+	}
+	if msg.DisableWebPagePreview {
+		params.LinkPreviewOptions = &tgmodels.LinkPreviewOptions{IsDisabled: &msg.DisableWebPagePreview}
+	}
+	if msg.ReplyMarkup != nil {
+		params.ReplyMarkup = msg.ReplyMarkup
+	}
+	return b.api.SendMessage(b.ctx, params)
+}
+
+// isCommand checks if the message is a bot command (starts with /)
+func isCommand(msg *tgmodels.Message) bool {
+	if msg == nil || msg.Text == "" {
+		return false
+	}
+	return strings.HasPrefix(msg.Text, "/")
+}
+
+// getCommand extracts the command from a message (without the leading /)
+func getCommand(msg *tgmodels.Message) string {
+	if msg == nil || msg.Text == "" {
+		return ""
+	}
+	text := msg.Text
+	if !strings.HasPrefix(text, "/") {
+		return ""
+	}
+	text = text[1:] // remove leading /
+	// Command ends at space or @ (for @botname)
+	if idx := strings.IndexAny(text, " @"); idx != -1 {
+		return text[:idx]
+	}
+	return text
+}
+
+// getCommandArgs extracts the arguments after the command
+func getCommandArgs(msg *tgmodels.Message) string {
+	if msg == nil || msg.Text == "" {
+		return ""
+	}
+	text := msg.Text
+	if !strings.HasPrefix(text, "/") {
+		return ""
+	}
+	// Find space after command
+	if idx := strings.Index(text, " "); idx != -1 {
+		return strings.TrimSpace(text[idx+1:])
+	}
+	return ""
+}
+
+// getCallbackMessage safely extracts Message from MaybeInaccessibleMessage
+func getCallbackMessage(callback *tgmodels.CallbackQuery) *tgmodels.Message {
+	if callback == nil {
+		return nil
+	}
+	// MaybeInaccessibleMessage has a Message field that is a pointer
+	return callback.Message.Message
+}
+
+// getCallbackChatID extracts chat ID from callback, handling MaybeInaccessibleMessage
+func getCallbackChatID(callback *tgmodels.CallbackQuery) int64 {
+	if callback == nil {
+		return 0
+	}
+	if callback.Message.Message != nil {
+		return callback.Message.Message.Chat.ID
+	}
+	if callback.Message.InaccessibleMessage != nil {
+		return callback.Message.InaccessibleMessage.Chat.ID
+	}
+	return 0
+}
+
+// getCallbackMessageID extracts message ID from callback
+func getCallbackMessageID(callback *tgmodels.CallbackQuery) int {
+	if callback == nil {
+		return 0
+	}
+	if callback.Message.Message != nil {
+		return callback.Message.Message.ID
+	}
+	if callback.Message.InaccessibleMessage != nil {
+		return callback.Message.InaccessibleMessage.MessageID
+	}
+	return 0
+}
+
+// getFileURL constructs the file download URL from a File object
+func (b *Bot) getFileURL(file *tgmodels.File) string {
+	if file == nil || file.FilePath == "" {
+		return ""
+	}
+	return fmt.Sprintf("https://api.telegram.org/file/bot%s/%s", b.cfg.TelegramToken, file.FilePath)
+}
+
+// sendPhoto sends a photo message
+func (b *Bot) sendPhoto(chatID int64, photo tgmodels.InputFile, caption string, parseMode string, replyMarkup interface{}) (*tgmodels.Message, error) {
+	params := &tgbot.SendPhotoParams{
+		ChatID:  chatID,
+		Photo:   photo,
+		Caption: caption,
+	}
+	if parseMode != "" {
+		params.ParseMode = tgmodels.ParseMode(parseMode)
+	}
+	if replyMarkup != nil {
+		params.ReplyMarkup = replyMarkup
+	}
+	return b.api.SendPhoto(b.ctx, params)
+}
+
+// sendVideo sends a video message
+func (b *Bot) sendVideo(chatID int64, video tgmodels.InputFile, caption string) (*tgmodels.Message, error) {
+	return b.api.SendVideo(b.ctx, &tgbot.SendVideoParams{
+		ChatID:  chatID,
+		Video:   video,
+		Caption: caption,
+	})
+}
+
+// sendAudio sends an audio message
+func (b *Bot) sendAudio(chatID int64, audio tgmodels.InputFile, caption string) (*tgmodels.Message, error) {
+	return b.api.SendAudio(b.ctx, &tgbot.SendAudioParams{
+		ChatID:  chatID,
+		Audio:   audio,
+		Caption: caption,
+	})
+}
+
+// sendDocument sends a document message
+func (b *Bot) sendDocument(chatID int64, document tgmodels.InputFile, caption string) (*tgmodels.Message, error) {
+	return b.api.SendDocument(b.ctx, &tgbot.SendDocumentParams{
+		ChatID:   chatID,
+		Document: document,
+		Caption:  caption,
+	})
+}
+
+// answerCallback answers a callback query
+func (b *Bot) answerCallback(callbackID string, text string) error {
+	_, err := b.api.AnswerCallbackQuery(b.ctx, &tgbot.AnswerCallbackQueryParams{
+		CallbackQueryID: callbackID,
+		Text:            text,
+	})
+	return err
+}
+
+// editMessageText edits the text of a message (with HTML parse mode)
+func (b *Bot) editMessageText(chatID int64, messageID int, text string, markup *tgmodels.InlineKeyboardMarkup) error {
+	params := &tgbot.EditMessageTextParams{
+		ChatID:    chatID,
+		MessageID: messageID,
+		Text:      text,
+		ParseMode: tgmodels.ParseModeHTML,
+	}
+	if markup != nil {
+		params.ReplyMarkup = markup
+	}
+	_, err := b.api.EditMessageText(b.ctx, params)
+	return err
+}
+
+// editMessageCaption edits the caption of a message
+func (b *Bot) editMessageCaption(chatID int64, messageID int, caption string, markup *tgmodels.InlineKeyboardMarkup) error {
+	params := &tgbot.EditMessageCaptionParams{
+		ChatID:    chatID,
+		MessageID: messageID,
+		Caption:   caption,
+	}
+	if markup != nil {
+		params.ReplyMarkup = markup
+	}
+	_, err := b.api.EditMessageCaption(b.ctx, params)
+	return err
+}
+
+// deleteMessage deletes a message
+func (b *Bot) deleteMessage(chatID int64, messageID int) error {
+	_, err := b.api.DeleteMessage(b.ctx, &tgbot.DeleteMessageParams{
+		ChatID:    chatID,
+		MessageID: messageID,
+	})
+	return err
+}
+
+// editMessageMedia edits the media of a message (photo/video)
+func (b *Bot) editMessageMedia(chatID int64, messageID int, media tgmodels.InputMedia, markup *tgmodels.InlineKeyboardMarkup) error {
+	params := &tgbot.EditMessageMediaParams{
+		ChatID:    chatID,
+		MessageID: messageID,
+		Media:     media,
+	}
+	if markup != nil {
+		params.ReplyMarkup = markup
+	}
+	_, err := b.api.EditMessageMedia(b.ctx, params)
+	return err
+}
+
+// --- End Telegram helper constructors ---
+
 // sendVideoTotalInfo показывает итоговую цену и инструкцию по отправке фото и промпта
 func (b *Bot) sendVideoTotalInfo(chatID int64, userID int64, modelID string) {
 	loc := b.getLocalization(userID)
@@ -66,9 +366,9 @@ func (b *Bot) sendVideoTotalInfo(chatID int64, userID int64, modelID string) {
 		total,
 		html.EscapeString(requestWord(total, loc)))
 
-	msg := tgbotapi.NewMessage(chatID, text)
-	msg.ParseMode = tgbotapi.ModeHTML
-	if _, err := b.api.Send(msg); err != nil {
+	msg := newMessageConfig(chatID, text)
+	msg.ParseMode = "HTML"
+	if _, err := b.sendMsg(msg); err != nil {
 		log.Printf("Failed to send video total info: %v", err)
 	}
 }
@@ -100,10 +400,10 @@ func (b *Bot) sendMarkdownLong(chatID int64, text string) error {
 	text = strings.TrimSpace(convertBroadcastMarkupToHTML(text))
 	for len(text) > 0 {
 		if len(text) <= maxChunkBytes {
-			msg := tgbotapi.NewMessage(chatID, text)
-			msg.ParseMode = tgbotapi.ModeHTML
+			msg := newMessageConfig(chatID, text)
+			msg.ParseMode = "HTML"
 			msg.DisableWebPagePreview = true
-			_, err := b.api.Send(msg)
+			_, err := b.sendMsg(msg)
 			return err
 		}
 
@@ -137,10 +437,10 @@ func (b *Bot) sendMarkdownLong(chatID int64, text string) error {
 		if chunk == "" {
 			continue
 		}
-		msg := tgbotapi.NewMessage(chatID, chunk)
-		msg.ParseMode = tgbotapi.ModeHTML
+		msg := newMessageConfig(chatID, chunk)
+		msg.ParseMode = "HTML"
 		msg.DisableWebPagePreview = true
-		if _, err := b.api.Send(msg); err != nil {
+		if _, err := b.sendMsg(msg); err != nil {
 			return err
 		}
 	}
@@ -169,14 +469,14 @@ func convertBroadcastMarkupToHTML(text string) string {
 }
 
 func (b *Bot) sendStartTrialMenu(chatID int64) {
-	btn := tgbotapi.NewInlineKeyboardButtonData("Проверить подписку", "trial:check")
-	kb := tgbotapi.NewInlineKeyboardMarkup(
-		tgbotapi.NewInlineKeyboardRow(btn),
+	btn := newInlineKeyboardButtonData("Проверить подписку", "trial:check")
+	kb := newInlineKeyboardMarkup(
+		newInlineKeyboardRow(btn),
 	)
 	text := fmt.Sprintf("Чтобы получить 1 пробную генерацию фото — подпишитесь на канал %s\nи нажмите «Проверить подписку»\n%s", requiredChannelUsername, requiredChannelLink)
-	msg := tgbotapi.NewMessage(chatID, text)
+	msg := newMessageConfig(chatID, text)
 	msg.ReplyMarkup = kb
-	if _, err := b.api.Send(msg); err != nil {
+	if _, err := b.sendMsg(msg); err != nil {
 		log.Printf("sendStartTrialMenu send message error: %v", err)
 	}
 }
@@ -324,15 +624,15 @@ func (b *Bot) sendNanoBananaAPIStatus(chatID int64) {
 		toggleLabel = "Переключить на KieAPI"
 	}
 	text := fmt.Sprintf("📸 Фото API: %s", state)
-	kb := tgbotapi.NewInlineKeyboardMarkup(
-		tgbotapi.NewInlineKeyboardRow(
-			tgbotapi.NewInlineKeyboardButtonData(toggleLabel, "admin:nano_api_toggle"),
-			tgbotapi.NewInlineKeyboardButtonData("🏠 Меню", "menu"),
+	kb := newInlineKeyboardMarkup(
+		newInlineKeyboardRow(
+			newInlineKeyboardButtonData(toggleLabel, "admin:nano_api_toggle"),
+			newInlineKeyboardButtonData("🏠 Меню", "menu"),
 		),
 	)
-	msg := tgbotapi.NewMessage(chatID, text)
+	msg := newMessageConfig(chatID, text)
 	msg.ReplyMarkup = kb
-	if _, err := b.api.Send(msg); err != nil {
+	if _, err := b.sendMsg(msg); err != nil {
 		log.Printf("Failed to send photo api status: %v", err)
 	}
 }
@@ -365,7 +665,7 @@ type albumBuffer struct {
 
 type albumPhoto struct {
 	msgID int
-	photo tgbotapi.PhotoSize
+	photo tgmodels.PhotoSize
 }
 
 type photoRecord struct {
@@ -442,29 +742,26 @@ func (b *Bot) sendBuyExtrasCategory(chatID int64, userID int64, category string,
 	}
 	text := sb.String() + "\n" + html.EscapeString(loc.BuyConsentNote)
 
-	var rows [][]tgbotapi.InlineKeyboardButton
+	var rows [][]tgmodels.InlineKeyboardButton
 	for i := 0; i < len(packs); i += 2 {
-		btn1 := tgbotapi.NewInlineKeyboardButtonData(fmt.Sprintf("%d", packs[i]), fmt.Sprintf("%s:%d", callbackPrefix, packs[i]))
+		btn1 := newInlineKeyboardButtonDataStyled(fmt.Sprintf("%d", packs[i]), fmt.Sprintf("%s:%d", callbackPrefix, packs[i]), "success")
 		if i+1 < len(packs) {
-			btn2 := tgbotapi.NewInlineKeyboardButtonData(fmt.Sprintf("%d", packs[i+1]), fmt.Sprintf("%s:%d", callbackPrefix, packs[i+1]))
-			rows = append(rows, tgbotapi.NewInlineKeyboardRow(btn1, btn2))
+			btn2 := newInlineKeyboardButtonDataStyled(fmt.Sprintf("%d", packs[i+1]), fmt.Sprintf("%s:%d", callbackPrefix, packs[i+1]), "success")
+			rows = append(rows, newInlineKeyboardRow(btn1, btn2))
 		} else {
-			rows = append(rows, tgbotapi.NewInlineKeyboardRow(btn1))
+			rows = append(rows, newInlineKeyboardRow(btn1))
 		}
 	}
-	rows = append(rows, tgbotapi.NewInlineKeyboardRow(
-		tgbotapi.NewInlineKeyboardButtonData(loc.BackBtn, "buy:extras"),
-	))
-	rows = append(rows, tgbotapi.NewInlineKeyboardRow(
-		tgbotapi.NewInlineKeyboardButtonData(loc.MenuBtn, "menu"),
+	rows = append(rows, newInlineKeyboardRow(
+		newBackButton(loc.BackBtn, "buy:extras"),
 	))
 
-	keyboard := tgbotapi.NewInlineKeyboardMarkup(rows...)
-	reply := tgbotapi.NewMessage(chatID, text)
+	keyboard := newInlineKeyboardMarkup(rows...)
+	reply := newMessageConfig(chatID, text)
 	reply.ParseMode = "HTML"
 	reply.ReplyMarkup = keyboard
 
-	if _, err := b.api.Send(reply); err != nil {
+	if _, err := b.sendMsg(reply); err != nil {
 		log.Printf("Failed to send buy extras category: %v", err)
 	}
 }
@@ -525,18 +822,15 @@ func (b *Bot) sendBuyPackageInfo(chatID int64, userID int64, category string, pa
 
 	text := fmt.Sprintf(loc.BuyPackageTitle, label, qty, resp.CheckoutURL) + "\n\n" + loc.BuyConsentNote
 
-	keyboard := tgbotapi.NewInlineKeyboardMarkup(
-		tgbotapi.NewInlineKeyboardRow(
-			tgbotapi.NewInlineKeyboardButtonData(loc.BuyPackageBackBtn, "buy:extras"),
-		),
-		tgbotapi.NewInlineKeyboardRow(
-			tgbotapi.NewInlineKeyboardButtonData(loc.MenuBtn, "menu"),
+	keyboard := newInlineKeyboardMarkup(
+		newInlineKeyboardRow(
+			newBackButton(loc.BuyPackageBackBtn, "buy:extras"),
 		),
 	)
 
-	msg := tgbotapi.NewMessage(chatID, text)
+	msg := newMessageConfig(chatID, text)
 	msg.ReplyMarkup = keyboard
-	if _, err := b.api.Send(msg); err != nil {
+	if _, err := b.sendMsg(msg); err != nil {
 		log.Printf("Failed to send buy package info: %v", err)
 	}
 }
@@ -550,19 +844,19 @@ func (b *Bot) sendAdminCategories(chatID int64) {
 	}
 
 	lines := []string{"⚙️ Категории:"}
-	rows := [][]tgbotapi.InlineKeyboardButton{}
+	rows := [][]tgmodels.InlineKeyboardButton{}
 	for _, s := range settings {
 		state := "❌"
 		if s.Enabled {
 			state = "✅"
 		}
 		label := fmt.Sprintf("%s %s", state, categoryLabelByKey(s.Category))
-		rows = append(rows, tgbotapi.NewInlineKeyboardRow(
-			tgbotapi.NewInlineKeyboardButtonData(label, "admin:cat:"+s.Category),
+		rows = append(rows, newInlineKeyboardRow(
+			newInlineKeyboardButtonData(label, "admin:cat:"+s.Category),
 		))
 	}
-	rows = append(rows, tgbotapi.NewInlineKeyboardRow(
-		tgbotapi.NewInlineKeyboardButtonData("🏠 Меню", "menu"),
+	rows = append(rows, newInlineKeyboardRow(
+		newInlineKeyboardButtonData("🏠 Меню", "menu"),
 	))
 
 	for _, s := range settings {
@@ -574,9 +868,9 @@ func (b *Bot) sendAdminCategories(chatID int64) {
 	}
 
 	text := strings.Join(lines, "\n")
-	msg := tgbotapi.NewMessage(chatID, text)
-	msg.ReplyMarkup = tgbotapi.NewInlineKeyboardMarkup(rows...)
-	if _, err := b.api.Send(msg); err != nil {
+	msg := newMessageConfig(chatID, text)
+	msg.ReplyMarkup = newInlineKeyboardMarkup(rows...)
+	if _, err := b.sendMsg(msg); err != nil {
 		log.Printf("Failed to send admin categories: %v", err)
 	}
 }
@@ -595,22 +889,22 @@ func (b *Bot) sendPaymentsStatus(chatID int64) {
 	}
 
 	text := fmt.Sprintf("💳 Платежи: %s", state)
-	kb := tgbotapi.NewInlineKeyboardMarkup(
-		tgbotapi.NewInlineKeyboardRow(
-			tgbotapi.NewInlineKeyboardButtonData(toggleLabel, "admin:payments_toggle"),
+	kb := newInlineKeyboardMarkup(
+		newInlineKeyboardRow(
+			newInlineKeyboardButtonData(toggleLabel, "admin:payments_toggle"),
 		),
-		tgbotapi.NewInlineKeyboardRow(
-			tgbotapi.NewInlineKeyboardButtonData("📊 Статистика платежей", "admin:pay_stats"),
-			tgbotapi.NewInlineKeyboardButtonData("📋 Последние платежи", "admin:pay_list"),
+		newInlineKeyboardRow(
+			newInlineKeyboardButtonData("📊 Статистика платежей", "admin:pay_stats"),
+			newInlineKeyboardButtonData("📋 Последние платежи", "admin:pay_list"),
 		),
-		tgbotapi.NewInlineKeyboardRow(
-			tgbotapi.NewInlineKeyboardButtonData("◀️ Назад", "admin:menu"),
-			tgbotapi.NewInlineKeyboardButtonData("🏠 Меню", "menu"),
+		newInlineKeyboardRow(
+			newBackButton("Назад", "admin:menu"),
+			newInlineKeyboardButtonData("🏠 Меню", "menu"),
 		),
 	)
-	msg := tgbotapi.NewMessage(chatID, text)
+	msg := newMessageConfig(chatID, text)
 	msg.ReplyMarkup = kb
-	if _, err := b.api.Send(msg); err != nil {
+	if _, err := b.sendMsg(msg); err != nil {
 		log.Printf("Failed to send payments status: %v", err)
 	}
 }
@@ -645,19 +939,19 @@ func (b *Bot) sendPaymentStats(chatID int64) {
 		allStats.Count, allStats.TotalAmount,
 	)
 
-	kb := tgbotapi.NewInlineKeyboardMarkup(
-		tgbotapi.NewInlineKeyboardRow(
-			tgbotapi.NewInlineKeyboardButtonData("📋 Последние платежи", "admin:pay_list"),
+	kb := newInlineKeyboardMarkup(
+		newInlineKeyboardRow(
+			newInlineKeyboardButtonData("📋 Последние платежи", "admin:pay_list"),
 		),
-		tgbotapi.NewInlineKeyboardRow(
-			tgbotapi.NewInlineKeyboardButtonData("◀️ Назад", "admin:payments"),
-			tgbotapi.NewInlineKeyboardButtonData("🏠 Меню", "menu"),
+		newInlineKeyboardRow(
+			newBackButton("Назад", "admin:payments"),
+			newInlineKeyboardButtonData("🏠 Меню", "menu"),
 		),
 	)
-	msg := tgbotapi.NewMessage(chatID, text)
-	msg.ParseMode = tgbotapi.ModeHTML
+	msg := newMessageConfig(chatID, text)
+	msg.ParseMode = "HTML"
 	msg.ReplyMarkup = kb
-	if _, err := b.api.Send(msg); err != nil {
+	if _, err := b.sendMsg(msg); err != nil {
 		log.Printf("Failed to send payment stats: %v", err)
 	}
 }
@@ -671,16 +965,16 @@ func (b *Bot) sendRecentPayments(chatID int64) {
 
 	if len(payments) == 0 {
 		text := "📋 <b>Платежи</b>\n\nПлатежей пока нет."
-		kb := tgbotapi.NewInlineKeyboardMarkup(
-			tgbotapi.NewInlineKeyboardRow(
-				tgbotapi.NewInlineKeyboardButtonData("◀️ Назад", "admin:payments"),
-				tgbotapi.NewInlineKeyboardButtonData("🏠 Меню", "menu"),
+		kb := newInlineKeyboardMarkup(
+			newInlineKeyboardRow(
+				newInlineKeyboardButtonData("◀️ Назад", "admin:payments"),
+				newInlineKeyboardButtonData("🏠 Меню", "menu"),
 			),
 		)
-		msg := tgbotapi.NewMessage(chatID, text)
-		msg.ParseMode = tgbotapi.ModeHTML
+		msg := newMessageConfig(chatID, text)
+		msg.ParseMode = "HTML"
 		msg.ReplyMarkup = kb
-		b.api.Send(msg)
+		b.sendMsg(msg)
 		return
 	}
 
@@ -705,19 +999,19 @@ func (b *Bot) sendRecentPayments(chatID int64) {
 		)
 	}
 
-	kb := tgbotapi.NewInlineKeyboardMarkup(
-		tgbotapi.NewInlineKeyboardRow(
-			tgbotapi.NewInlineKeyboardButtonData("📊 Статистика", "admin:pay_stats"),
+	kb := newInlineKeyboardMarkup(
+		newInlineKeyboardRow(
+			newInlineKeyboardButtonData("📊 Статистика", "admin:pay_stats"),
 		),
-		tgbotapi.NewInlineKeyboardRow(
-			tgbotapi.NewInlineKeyboardButtonData("◀️ Назад", "admin:payments"),
-			tgbotapi.NewInlineKeyboardButtonData("🏠 Меню", "menu"),
+		newInlineKeyboardRow(
+			newBackButton("Назад", "admin:payments"),
+			newInlineKeyboardButtonData("🏠 Меню", "menu"),
 		),
 	)
-	msg := tgbotapi.NewMessage(chatID, text)
-	msg.ParseMode = tgbotapi.ModeHTML
+	msg := newMessageConfig(chatID, text)
+	msg.ParseMode = "HTML"
 	msg.ReplyMarkup = kb
-	if _, err := b.api.Send(msg); err != nil {
+	if _, err := b.sendMsg(msg); err != nil {
 		log.Printf("Failed to send recent payments: %v", err)
 	}
 }
@@ -736,15 +1030,15 @@ func (b *Bot) sendSubscriptionsStatus(chatID int64) {
 	}
 
 	text := fmt.Sprintf("🔒 Подписки: %s", state)
-	kb := tgbotapi.NewInlineKeyboardMarkup(
-		tgbotapi.NewInlineKeyboardRow(
-			tgbotapi.NewInlineKeyboardButtonData(toggleLabel, "admin:subs_toggle"),
-			tgbotapi.NewInlineKeyboardButtonData("🏠 Меню", "menu"),
+	kb := newInlineKeyboardMarkup(
+		newInlineKeyboardRow(
+			newInlineKeyboardButtonData(toggleLabel, "admin:subs_toggle"),
+			newInlineKeyboardButtonData("🏠 Меню", "menu"),
 		),
 	)
-	msg := tgbotapi.NewMessage(chatID, text)
+	msg := newMessageConfig(chatID, text)
 	msg.ReplyMarkup = kb
-	if _, err := b.api.Send(msg); err != nil {
+	if _, err := b.sendMsg(msg); err != nil {
 		log.Printf("Failed to send subscriptions status: %v", err)
 	}
 }
@@ -777,32 +1071,32 @@ func (b *Bot) togglePayments(chatID int64) {
 // sendAdminMenu выводит инлайн-меню админки
 func (b *Bot) sendAdminMenu(chatID int64) {
 	text := "👑 Админ-панель\nВыберите действие:"
-	kb := tgbotapi.NewInlineKeyboardMarkup(
-		tgbotapi.NewInlineKeyboardRow(
-			tgbotapi.NewInlineKeyboardButtonData("📊 Статистика", "admin:stats"),
-			tgbotapi.NewInlineKeyboardButtonData("👥 Пользователи", "admin:users"),
+	kb := newInlineKeyboardMarkup(
+		newInlineKeyboardRow(
+			newInlineKeyboardButtonData("📊 Статистика", "admin:stats"),
+			newInlineKeyboardButtonData("👥 Пользователи", "admin:users"),
 		),
-		tgbotapi.NewInlineKeyboardRow(
-			tgbotapi.NewInlineKeyboardButtonData("📈 Топ за день", "admin:top_users"),
-			tgbotapi.NewInlineKeyboardButtonData("👤 Кол-во пользователей", "admin:users_count"),
+		newInlineKeyboardRow(
+			newInlineKeyboardButtonData("📈 Топ за день", "admin:top_users"),
+			newInlineKeyboardButtonData("👤 Кол-во пользователей", "admin:users_count"),
 		),
-		tgbotapi.NewInlineKeyboardRow(
-			tgbotapi.NewInlineKeyboardButtonData("⚙️ Категории", "admin:categories"),
-			tgbotapi.NewInlineKeyboardButtonData("💳 Платежи", "admin:payments"),
+		newInlineKeyboardRow(
+			newInlineKeyboardButtonData("⚙️ Категории", "admin:categories"),
+			newInlineKeyboardButtonData("💳 Платежи", "admin:payments"),
 		),
-		tgbotapi.NewInlineKeyboardRow(
-			tgbotapi.NewInlineKeyboardButtonData("💰 Баланс API", "admin:suno_balance"),
-			tgbotapi.NewInlineKeyboardButtonData("📸 Фото API", "admin:nano_api"),
+		newInlineKeyboardRow(
+			newInlineKeyboardButtonData("💰 Баланс API", "admin:suno_balance"),
+			newInlineKeyboardButtonData("📸 Фото API", "admin:nano_api"),
 		),
-		tgbotapi.NewInlineKeyboardRow(
-			tgbotapi.NewInlineKeyboardButtonData("🔒 Подписки", "admin:subs"),
-			tgbotapi.NewInlineKeyboardButtonData("ℹ️ Справка", "admin:help"),
-			tgbotapi.NewInlineKeyboardButtonData("🏠 Меню", "menu"),
+		newInlineKeyboardRow(
+			newInlineKeyboardButtonData("🔒 Подписки", "admin:subs"),
+			newInlineKeyboardButtonData("ℹ️ Справка", "admin:help"),
+			newInlineKeyboardButtonData("🏠 Меню", "menu"),
 		),
 	)
-	msg := tgbotapi.NewMessage(chatID, text)
+	msg := newMessageConfig(chatID, text)
 	msg.ReplyMarkup = kb
-	if _, err := b.api.Send(msg); err != nil {
+	if _, err := b.sendMsg(msg); err != nil {
 		log.Printf("Failed to send admin menu: %v", err)
 	}
 }
@@ -875,6 +1169,7 @@ type ModelOption struct {
 	RequestCost int
 	TaskType    string
 	AdminOnly   bool
+	EmojiID     string // Custom emoji ID for button icon
 }
 
 // isUserAllowed проверяет доступ по белому списку (ADMIN_TELEGRAM_IDS)
@@ -888,30 +1183,29 @@ func (b *Bot) isUserAllowed(userID int64) bool {
 
 // Доступные модели для выбора
 var modelOptions = []ModelOption{
-	{ID: "google/nano-banana", Label: "🚀 Nano Banana", Desc: locRU.ModelNanoBanana, Category: ModelCategoryPhoto, RequestCost: 1},
-	{ID: "google/nano-banana-pro", Label: "🌟 Nano Banana Pro", Desc: locRU.ModelNanoBananaPro, Category: ModelCategoryPhoto, RequestCost: 4},
-	{ID: "nano-banana-2", Label: "⚡ Nano Banana 2", Desc: locRU.ModelNanoBanana2, Category: ModelCategoryPhoto, RequestCost: 2},
-	{ID: "seedream/4.5-edit", Label: "✨ Seedream 4.5", Desc: locRU.ModelSeedream, Category: ModelCategoryPhoto, RequestCost: 3},
+	{ID: "google/nano-banana", Label: "Nano Banana", Desc: locRU.ModelNanoBanana, Category: ModelCategoryPhoto, RequestCost: 1, EmojiID: "5188481279963715781"},
+	{ID: "google/nano-banana-pro", Label: "Nano Banana Pro", Desc: locRU.ModelNanoBananaPro, Category: ModelCategoryPhoto, RequestCost: 4, EmojiID: "5463289097336405244"},
+	{ID: "nano-banana-2", Label: "Nano Banana 2", Desc: locRU.ModelNanoBanana2, Category: ModelCategoryPhoto, RequestCost: 2, EmojiID: "5258203794772085854"},
+	{ID: "seedream/4.5-edit", Label: "👙 Seedream 4.5", Desc: locRU.ModelSeedream, Category: ModelCategoryPhoto, RequestCost: 3},
 	{ID: "veo3_fast", ApiModel: "veo3_fast", Label: "🎬 Veo 3.1 Fast", Desc: locRU.ModelVeo3Fast, Category: ModelCategoryVideo, RequestCost: 1},
 	{ID: "wan/2-6-image-to-video", ApiModel: "wan/2-6-image-to-video", Label: "🎥 Wan 2.6", Desc: locRU.ModelWan26, Category: ModelCategoryVideo, RequestCost: 2},
 	{ID: "kling-2.6/image-to-video", ApiModel: "kling-2.6/image-to-video", Label: "🎬 Kling 2.6", Desc: locRU.ModelKling26, Category: ModelCategoryVideo, RequestCost: 1},
-	{ID: "music-suno", ApiModel: "suno", Label: "🎵 Suno Music", Desc: locRU.ModelSunoMusic, Category: ModelCategoryMusic, RequestCost: 1, TaskType: "music"},
-	{ID: "google/gemini-3-flash", Label: "💬 Gemini 3 Flash", Desc: "", Category: ModelCategoryChat, RequestCost: 1},
-	{ID: "openai/gpt-5-mini", Label: "💬 GPT-5 mini", Desc: locRU.ModelGPT5Mini, Category: ModelCategoryChat, RequestCost: 1},
-	{ID: "openai/gpt-5-nano", Label: "💬 GPT-5 nano", Desc: locRU.ModelGPT5Nano, Category: ModelCategoryChat, RequestCost: 1},
-	{ID: "chat-gpt-4.1mini", ApiModel: "gpt-4.1-mini", Label: "💬 GPT-4.1 mini", Desc: locRU.ModelGPT41Mini, Category: ModelCategoryChat, RequestCost: 1, TaskType: "chat"},
+	{ID: "music-suno", ApiModel: "suno", Label: "Suno Music", Desc: locRU.ModelSunoMusic, Category: ModelCategoryMusic, RequestCost: 1, TaskType: "music", EmojiID: "5217933090483098080"},
+	{ID: "google/gemini-3-flash", Label: "Gemini 3 Flash", Desc: "", Category: ModelCategoryChat, RequestCost: 1, EmojiID: "5443038326535759644"},
+	{ID: "openai/gpt-5-mini", Label: "GPT-5 mini", Desc: locRU.ModelGPT5Mini, Category: ModelCategoryChat, RequestCost: 1, EmojiID: "5443038326535759644"},
+	{ID: "openai/gpt-5-nano", Label: "GPT-5 nano", Desc: locRU.ModelGPT5Nano, Category: ModelCategoryChat, RequestCost: 1, EmojiID: "5443038326535759644"},
+	{ID: "chat-gpt-4.1mini", ApiModel: "gpt-4.1-mini", Label: "GPT-4.1 mini", Desc: locRU.ModelGPT41Mini, Category: ModelCategoryChat, RequestCost: 1, TaskType: "chat", EmojiID: "5443038326535759644"},
 }
 
 var modelCategories = []ModelCategory{ModelCategoryPhoto, ModelCategoryVideo, ModelCategoryMusic, ModelCategoryChat}
 var adminModelCategories = []ModelCategory{ModelCategoryPhoto, ModelCategoryVideo, ModelCategoryMusic, ModelCategoryChat}
 
 func NewBot(token string, userService *services.UserService, generationService *services.GenerationService, paymentService *services.PaymentService, redisClient *redis.Client, cfg *config.Config) (*Bot, error) {
-	api, err := tgbotapi.NewBotAPI(token)
-	if err != nil {
-		return nil, fmt.Errorf("failed to create bot API: %w", err)
-	}
+	ctx, cancel := context.WithCancel(context.Background())
+
 	bot := &Bot{
-		api:               api,
+		ctx:               ctx,
+		cancel:            cancel,
 		userService:       userService,
 		generationService: generationService,
 		paymentService:    paymentService,
@@ -925,6 +1219,29 @@ func NewBot(token string, userService *services.UserService, generationService *
 		sunoVoice:         make(map[int64]string),
 	}
 
+	opts := []tgbot.Option{
+		tgbot.WithDefaultHandler(func(ctx context.Context, _ *tgbot.Bot, update *tgmodels.Update) {
+			bot.goLimited(func() {
+				bot.safeHandleUpdate(update)
+			})
+		}),
+	}
+
+	api, err := tgbot.New(token, opts...)
+	if err != nil {
+		cancel()
+		return nil, fmt.Errorf("failed to create bot API: %w", err)
+	}
+	bot.api = api
+
+	// Get bot user info
+	botUser, err := api.GetMe(ctx)
+	if err != nil {
+		cancel()
+		return nil, fmt.Errorf("failed to get bot info: %w", err)
+	}
+	bot.botUser = botUser
+
 	// Уведомление после успешного платежа
 	paymentService.SetNotifier(bot.notifyPaymentSuccess)
 
@@ -932,9 +1249,11 @@ func NewBot(token string, userService *services.UserService, generationService *
 }
 
 func (b *Bot) Start() error {
-	log.Printf("Authorized on account %s", b.api.Self.UserName)
+	log.Printf("Authorized on account %s", b.botUser.Username)
 
-	if _, err := b.api.Request(tgbotapi.DeleteWebhookConfig{DropPendingUpdates: false}); err != nil {
+	// Delete webhook if any
+	_, err := b.api.DeleteWebhook(b.ctx, &tgbot.DeleteWebhookParams{DropPendingUpdates: false})
+	if err != nil {
 		log.Printf("failed to delete webhook: %v", err)
 	}
 
@@ -944,17 +1263,8 @@ func (b *Bot) Start() error {
 	// Запускаем планировщик напоминаний о пробной генерации
 	go b.startTrialReminderScheduler()
 
-	u := tgbotapi.NewUpdate(0)
-	u.Timeout = 60
-
-	b.updates = b.api.GetUpdatesChan(u)
-
-	for update := range b.updates {
-		upd := update
-		b.goLimited(func() {
-			b.safeHandleUpdate(upd)
-		})
-	}
+	// Start polling via the new library
+	b.api.Start(b.ctx)
 
 	return nil
 }
@@ -962,8 +1272,8 @@ func (b *Bot) Start() error {
 func (b *Bot) Stop() {
 	b.shutdownOnce.Do(func() {
 		b.shuttingDown.Store(true)
-		if b.api != nil {
-			b.api.StopReceivingUpdates()
+		if b.cancel != nil {
+			b.cancel()
 		}
 	})
 	b.wg.Wait()
@@ -991,7 +1301,7 @@ func (b *Bot) WaitSunoTasks(ctx context.Context) {
 }
 
 // safeHandleUpdate оборачивает обработку апдейта с восстановлением после паники
-func (b *Bot) safeHandleUpdate(update tgbotapi.Update) {
+func (b *Bot) safeHandleUpdate(update *tgmodels.Update) {
 	defer func() {
 		if r := recover(); r != nil {
 			log.Printf("panic in update handler: %v", r)
@@ -1009,9 +1319,11 @@ func (b *Bot) safeHandleUpdate(update tgbotapi.Update) {
 	if update.CallbackQuery != nil {
 		if b.shuttingDown.Load() {
 			// убираем крутилку у пользователя
-			_, _ = b.api.Request(tgbotapi.NewCallback(update.CallbackQuery.ID, ""))
-			if update.CallbackQuery.Message != nil {
-				b.sendText(update.CallbackQuery.Message.Chat.ID, "В данный момент бот перезагружается. Попробуйте ещё через пару минут.")
+			b.api.AnswerCallbackQuery(b.ctx, &tgbot.AnswerCallbackQueryParams{
+				CallbackQueryID: update.CallbackQuery.ID,
+			})
+			if update.CallbackQuery.Message.Message != nil {
+				b.sendText(update.CallbackQuery.Message.Message.Chat.ID, "В данный момент бот перезагружается. Попробуйте ещё через пару минут.")
 			}
 			return
 		}
@@ -1052,7 +1364,7 @@ func (b *Bot) goLimited(fn func()) {
 
 // setCommands устанавливает команды меню бота
 func (b *Bot) setCommands() {
-	commands := []tgbotapi.BotCommand{
+	commands := []tgmodels.BotCommand{
 		{Command: "start", Description: "Начать"},
 		{Command: "menu", Description: "Главное меню"},
 		{Command: "account", Description: "Аккаунт и лимиты"},
@@ -1064,8 +1376,9 @@ func (b *Bot) setCommands() {
 		{Command: "settings", Description: "Настройки стиля общения"},
 	}
 
-	cfg := tgbotapi.NewSetMyCommands(commands...)
-	_, err := b.api.Request(cfg)
+	_, err := b.api.SetMyCommands(b.ctx, &tgbot.SetMyCommandsParams{
+		Commands: commands,
+	})
 	if err != nil {
 		log.Printf("Failed to set commands: %v", err)
 	}
@@ -1073,7 +1386,7 @@ func (b *Bot) setCommands() {
 
 // setChatCommands устанавливает команды для конкретного чата (например, добавить /admin только админам)
 func (b *Bot) setChatCommands(chatID int64, isAdmin bool) {
-	commands := []tgbotapi.BotCommand{
+	commands := []tgmodels.BotCommand{
 		{Command: "start", Description: "Начать"},
 		{Command: "menu", Description: "Главное меню"},
 		{Command: "account", Description: "Аккаунт и лимиты"},
@@ -1085,30 +1398,32 @@ func (b *Bot) setChatCommands(chatID int64, isAdmin bool) {
 		{Command: "settings", Description: "Настройки стиля общения"},
 	}
 	if isAdmin {
-		commands = append(commands, tgbotapi.BotCommand{Command: "admin", Description: "Админ-панель"})
+		commands = append(commands, tgmodels.BotCommand{Command: "admin", Description: "Админ-панель"})
 	}
-	scope := tgbotapi.NewBotCommandScopeChat(chatID)
-	cfg := tgbotapi.NewSetMyCommandsWithScope(scope, commands...)
-	if _, err := b.api.Request(cfg); err != nil {
+	_, err := b.api.SetMyCommands(b.ctx, &tgbot.SetMyCommandsParams{
+		Commands: commands,
+		Scope:    &tgmodels.BotCommandScopeChat{ChatID: chatID},
+	})
+	if err != nil {
 		log.Printf("Failed to set chat commands: %v", err)
 	}
 }
 
-func (b *Bot) handleMessage(msg *tgbotapi.Message) {
+func (b *Bot) handleMessage(msg *tgmodels.Message) {
 	user := msg.From
 	if user == nil {
 		return
 	}
 
 	// Если /start с реферальным кодом — обрабатываем раньше, чтобы не создать пользователя без referrer
-	if msg.IsCommand() {
-		cmd := msg.Command()
-		args := msg.CommandArguments()
+	if isCommand(msg) {
+		cmd := getCommand(msg)
+		args := getCommandArgs(msg)
 		if cmd == "start" && args != "" {
 			// Сначала создаем/обновляем пользователя с referrer_id, а потом проверяем подписку
 			if _, err := b.userService.GetOrCreateUserWithReferrer(
 				user.ID,
-				user.UserName,
+				user.Username,
 				user.FirstName,
 				user.LastName,
 				user.LanguageCode,
@@ -1124,7 +1439,7 @@ func (b *Bot) handleMessage(msg *tgbotapi.Message) {
 	// Получаем или создаем пользователя
 	_, err := b.userService.GetOrCreateUser(
 		user.ID,
-		user.UserName,
+		user.Username,
 		user.FirstName,
 		user.LastName,
 		user.LanguageCode,
@@ -1145,7 +1460,7 @@ func (b *Bot) handleMessage(msg *tgbotapi.Message) {
 	b.checkAndGrantChannelTrial(user.ID)
 
 	// Обрабатываем команды
-	if msg.IsCommand() {
+	if isCommand(msg) {
 		b.handleCommand(msg)
 		return
 	}
@@ -1166,9 +1481,9 @@ func (b *Bot) handleMessage(msg *tgbotapi.Message) {
 	b.handleTextMessage(msg)
 }
 
-func (b *Bot) handleCommand(msg *tgbotapi.Message) {
-	cmd := msg.Command()
-	args := msg.CommandArguments()
+func (b *Bot) handleCommand(msg *tgmodels.Message) {
+	cmd := getCommand(msg)
+	args := getCommandArgs(msg)
 
 	switch cmd {
 	case "start":
@@ -1191,6 +1506,8 @@ func (b *Bot) handleCommand(msg *tgbotapi.Message) {
 		b.sendInviteInfo(msg.Chat.ID, msg.From.ID)
 	case "help":
 		b.sendHelpMessage(msg.Chat.ID)
+	case "emoji":
+		b.handleEmojiCommand(msg)
 	case "rules":
 		b.sendRulesMessage(msg.Chat.ID, msg.From.ID)
 	case "privacy":
@@ -1204,7 +1521,7 @@ func (b *Bot) handleCommand(msg *tgbotapi.Message) {
 	}
 }
 
-func (b *Bot) handlePhoto(msg *tgbotapi.Message) {
+func (b *Bot) handlePhoto(msg *tgmodels.Message) {
 	userID := msg.From.ID
 	chatID := msg.Chat.ID
 	loc := b.getLocalization(userID)
@@ -1231,8 +1548,8 @@ func (b *Bot) handlePhoto(msg *tgbotapi.Message) {
 	// Проверяем, есть ли подпись к фото (caption) — только для фото-моделей и видео-моделей
 	if caption == "" && (modelOpt.Category == ModelCategoryPhoto || modelOpt.Category == ModelCategoryVideo) {
 		text := loc.PhotoReceived + "\n\n" + loc.PhotoAddCaption
-		reply := tgbotapi.NewMessage(chatID, text)
-		_, _ = b.api.Send(reply)
+		reply := newMessageConfig(chatID, text)
+		_, _ = b.sendMsg(reply)
 		return
 	}
 
@@ -1240,14 +1557,14 @@ func (b *Bot) handlePhoto(msg *tgbotapi.Message) {
 	photo := msg.Photo[len(msg.Photo)-1]
 
 	// Получаем информацию о файле
-	file, err := b.api.GetFile(tgbotapi.FileConfig{FileID: photo.FileID})
+	file, err := b.api.GetFile(b.ctx, &tgbot.GetFileParams{FileID: photo.FileID})
 	if err != nil {
 		log.Printf("Failed to get file info: %v", err)
 		b.sendErrorMessage(chatID, "Не удалось получить изображение")
 		return
 	}
 
-	fileURL := file.Link(b.cfg.TelegramToken)
+	fileURL := b.getFileURL(file)
 
 	// Если выбрана видео-модель — запускаем видео-генерацию с промптом
 	if modelOpt.Category == ModelCategoryVideo {
@@ -1263,7 +1580,7 @@ func (b *Bot) handlePhoto(msg *tgbotapi.Message) {
 }
 
 // handleDocument обрабатывает документы как изображения (если это картинка)
-func (b *Bot) handleDocument(msg *tgbotapi.Message) {
+func (b *Bot) handleDocument(msg *tgmodels.Message) {
 	userID := msg.From.ID
 	chatID := msg.Chat.ID
 
@@ -1297,19 +1614,19 @@ func (b *Bot) handleDocument(msg *tgbotapi.Message) {
 		text := `📷 Фото получено!
 
 Пожалуйста, отправьте фото ещё раз, но в подписи укажите промпт.`
-		reply := tgbotapi.NewMessage(chatID, text)
-		_, _ = b.api.Send(reply)
+		reply := newMessageConfig(chatID, text)
+		_, _ = b.sendMsg(reply)
 		return
 	}
 
 	// Получаем информацию о файле
-	file, err := b.api.GetFile(tgbotapi.FileConfig{FileID: msg.Document.FileID})
+	file, err := b.api.GetFile(b.ctx, &tgbot.GetFileParams{FileID: msg.Document.FileID})
 	if err != nil {
 		log.Printf("Failed to get file info (doc): %v", err)
 		b.sendErrorMessage(chatID, "Не удалось получить изображение")
 		return
 	}
-	fileURL := file.Link(b.cfg.TelegramToken)
+	fileURL := b.getFileURL(file)
 
 	// Если выбрана видео-модель — запускаем видео-генерацию с промптом
 	if modelOpt.Category == ModelCategoryVideo {
@@ -1325,7 +1642,7 @@ func (b *Bot) handleDocument(msg *tgbotapi.Message) {
 }
 
 // handleAlbumPhoto агрегирует альбом до 4 фото и запускает генерацию одним запросом
-func (b *Bot) handleAlbumPhoto(msg *tgbotapi.Message) {
+func (b *Bot) handleAlbumPhoto(msg *tgmodels.Message) {
 	mediaID := msg.MediaGroupID
 	if mediaID == "" {
 		return
@@ -1342,11 +1659,11 @@ func (b *Bot) handleAlbumPhoto(msg *tgbotapi.Message) {
 	} else if msg.Document != nil {
 		fileID = msg.Document.FileID
 		uniqueID = msg.Document.FileUniqueID
-		fileSize = msg.Document.FileSize
+		fileSize = int(msg.Document.FileSize)
 	} else {
 		return
 	}
-	log.Printf("handleAlbumPhoto: mediaGroup=%s msgID=%d fileID=%s uniqueID=%s", mediaID, msg.MessageID, fileID, uniqueID)
+	log.Printf("handleAlbumPhoto: mediaGroup=%s msgID=%d fileID=%s uniqueID=%s", mediaID, msg.ID, fileID, uniqueID)
 
 	b.albumMu.Lock()
 	if b.albumBuffers == nil {
@@ -1362,8 +1679,8 @@ func (b *Bot) handleAlbumPhoto(msg *tgbotapi.Message) {
 		b.albumBuffers[mediaID] = buf
 	}
 	buf.photos = append(buf.photos, albumPhoto{
-		msgID: msg.MessageID,
-		photo: tgbotapi.PhotoSize{
+		msgID: msg.ID,
+		photo: tgmodels.PhotoSize{
 			FileID:       fileID,
 			FileUniqueID: uniqueID,
 			FileSize:     fileSize,
@@ -1421,14 +1738,14 @@ func (b *Bot) flushAlbum(mediaGroupID string) {
 	var fileIDs []string
 	var fileUniqueIDs []string
 	for _, p := range buf.photos {
-		file, err := b.api.GetFile(tgbotapi.FileConfig{FileID: p.photo.FileID})
+		file, err := b.api.GetFile(b.ctx, &tgbot.GetFileParams{FileID: p.photo.FileID})
 		if err != nil {
 			log.Printf("Failed to get file info from album: %v", err)
 			continue
 		}
 		fileIDs = append(fileIDs, p.photo.FileID)
 		fileUniqueIDs = append(fileUniqueIDs, p.photo.FileUniqueID)
-		url := file.Link(b.cfg.TelegramToken)
+		url := b.getFileURL(file)
 		imageURLs = append(imageURLs, url)
 		b.rememberPhoto(buf.userID, url, p.photo.FileUniqueID)
 	}
@@ -1456,8 +1773,8 @@ func (b *Bot) flushAlbum(mediaGroupID string) {
 	if caption == "" {
 		loc := b.getLocalization(buf.userID)
 		text := loc.PhotoReceived + "\n\n" + loc.PhotoAddCaption
-		reply := tgbotapi.NewMessage(buf.chatID, text)
-		_, _ = b.api.Send(reply)
+		reply := newMessageConfig(buf.chatID, text)
+		_, _ = b.sendMsg(reply)
 		return
 	}
 
@@ -1482,6 +1799,7 @@ func (b *Bot) rememberPhoto(userID int64, url string, uniqueID string) {
 	if len(list) > 10 {
 		list = list[len(list)-10:]
 	}
+
 	b.recentPhotos[userID] = list
 }
 
@@ -1968,7 +2286,7 @@ func decodeDataURLGeneric(dataURL string, defaultExt string) ([]byte, string, st
 }
 
 // processAudioMessage обрабатывает текст как запрос на озвучку
-func (b *Bot) processAudioMessage(msg *tgbotapi.Message, modelOpt ModelOption) {
+func (b *Bot) processAudioMessage(msg *tgmodels.Message, modelOpt ModelOption) {
 	userID := msg.From.ID
 	chatID := msg.Chat.ID
 	text := strings.TrimSpace(msg.Text)
@@ -2215,12 +2533,13 @@ func (b *Bot) handleAdminBroadcastPhoto(chatID int64, fileID tgbotapi.FileID, te
 			go func() {
 				defer wg.Done()
 				for userID := range jobs {
-					photoMsg := tgbotapi.NewPhoto(userID, fileID)
+					captionHTML := ""
+					parseMode := ""
 					if caption != "" {
-						photoMsg.Caption = convertBroadcastMarkupToHTML(caption)
-						photoMsg.ParseMode = tgbotapi.ModeHTML
+						captionHTML = convertBroadcastMarkupToHTML(caption)
+						parseMode = "HTML"
 					}
-					if _, err := b.api.Send(photoMsg); err != nil {
+					if _, err := b.sendPhoto(userID, &tgmodels.InputFileString{Data: string(fileID)}, captionHTML, parseMode, nil); err != nil {
 						log.Printf("broadcast photo to %d failed: %v", userID, err)
 						results <- false
 					} else {
@@ -2939,22 +3258,22 @@ func (b *Bot) categoryLabelLoc(cat ModelCategory, loc *Localization) string {
 
 func (b *Bot) sendSettingsMenu(chatID int64, userID int64) {
 	loc := b.getLocalization(userID)
-	rows := [][]tgbotapi.InlineKeyboardButton{
+	rows := [][]tgmodels.InlineKeyboardButton{
 		{
-			tgbotapi.NewInlineKeyboardButtonData(loc.SettingsChatStyle, "settings:style"),
+			newInlineKeyboardButtonData(loc.SettingsChatStyle, "settings:style"),
 		},
 		{
-			tgbotapi.NewInlineKeyboardButtonData(loc.SettingsLanguage, "settings:language"),
+			newInlineKeyboardButtonData(loc.SettingsLanguage, "settings:language"),
 		},
 	}
-	rows = append(rows, tgbotapi.NewInlineKeyboardRow(
-		tgbotapi.NewInlineKeyboardButtonData(loc.SettingsBackBtn, "menu"),
+	rows = append(rows, newInlineKeyboardRow(
+		newBackButton(loc.SettingsBackBtn, "menu"),
 	))
 
 	text := loc.SettingsTitle + "\n\n" + loc.SettingsSelect
-	msg := tgbotapi.NewMessage(chatID, text)
-	msg.ReplyMarkup = tgbotapi.NewInlineKeyboardMarkup(rows...)
-	if _, err := b.api.Send(msg); err != nil {
+	msg := newMessageConfig(chatID, text)
+	msg.ReplyMarkup = newInlineKeyboardMarkup(rows...)
+	if _, err := b.sendMsg(msg); err != nil {
 		log.Printf("Failed to send settings menu: %v", err)
 	}
 }
@@ -2965,27 +3284,27 @@ func (b *Bot) sendChatStyleMenu(chatID int64, userID int64) {
 		return
 	}
 	current := b.getUserChatStyle(userID)
-	var rows [][]tgbotapi.InlineKeyboardButton
+	var rows [][]tgmodels.InlineKeyboardButton
 	for i := 0; i < len(chatStyles); i += 2 {
-		btns := []tgbotapi.InlineKeyboardButton{}
+		btns := []tgmodels.InlineKeyboardButton{}
 		for j := i; j < len(chatStyles) && j < i+2; j++ {
 			st := chatStyles[j]
 			label := b.chatStyleLabel(st.ID, loc)
 			if st.ID == current {
 				label = "✅ " + label
 			}
-			btns = append(btns, tgbotapi.NewInlineKeyboardButtonData(label, "set_style:"+st.ID))
+			btns = append(btns, newInlineKeyboardButtonData(label, "set_style:"+st.ID))
 		}
-		rows = append(rows, tgbotapi.NewInlineKeyboardRow(btns...))
+		rows = append(rows, newInlineKeyboardRow(btns...))
 	}
-	rows = append(rows, tgbotapi.NewInlineKeyboardRow(
-		tgbotapi.NewInlineKeyboardButtonData(loc.BackBtn, "settings"),
+	rows = append(rows, newInlineKeyboardRow(
+		newBackButton(loc.BackBtn, "settings"),
 	))
 
 	text := loc.StyleSelectTitle
-	msg := tgbotapi.NewMessage(chatID, text)
-	msg.ReplyMarkup = tgbotapi.NewInlineKeyboardMarkup(rows...)
-	if _, err := b.api.Send(msg); err != nil {
+	msg := newMessageConfig(chatID, text)
+	msg.ReplyMarkup = newInlineKeyboardMarkup(rows...)
+	if _, err := b.sendMsg(msg); err != nil {
 		log.Printf("Failed to send chat style menu: %v", err)
 	}
 }
@@ -3002,40 +3321,41 @@ func (b *Bot) sendLanguageMenu(chatID int64, userID int64) {
 		enLabel = "✅ " + enLabel
 	}
 
-	rows := [][]tgbotapi.InlineKeyboardButton{
+	rows := [][]tgmodels.InlineKeyboardButton{
 		{
-			tgbotapi.NewInlineKeyboardButtonData(ruLabel, "set_lang:ru"),
-			tgbotapi.NewInlineKeyboardButtonData(enLabel, "set_lang:en"),
+			newInlineKeyboardButtonData(ruLabel, "set_lang:ru"),
+			newInlineKeyboardButtonData(enLabel, "set_lang:en"),
 		},
 	}
-	rows = append(rows, tgbotapi.NewInlineKeyboardRow(
-		tgbotapi.NewInlineKeyboardButtonData(loc.BackBtn, "settings"),
-		tgbotapi.NewInlineKeyboardButtonData(loc.MenuBtn, "menu"),
+	rows = append(rows, newInlineKeyboardRow(
+		newBackButton(loc.BackBtn, "settings"),
+		newInlineKeyboardButtonData(loc.MenuBtn, "menu"),
 	))
 
-	msg := tgbotapi.NewMessage(chatID, loc.LangTitle)
-	msg.ReplyMarkup = tgbotapi.NewInlineKeyboardMarkup(rows...)
-	if _, err := b.api.Send(msg); err != nil {
+	msg := newMessageConfig(chatID, loc.LangTitle)
+	msg.ReplyMarkup = newInlineKeyboardMarkup(rows...)
+	if _, err := b.sendMsg(msg); err != nil {
 		log.Printf("Failed to send language menu: %v", err)
 	}
 }
 
 // handleAnimatePhoto обрабатывает нажатие кнопки "Оживить фото" — берёт фото из сообщения и запускает veo3_fast
-func (b *Bot) handleAnimatePhoto(chatID int64, userID int64, callback *tgbotapi.CallbackQuery) {
-	if callback.Message == nil || callback.Message.Photo == nil || len(callback.Message.Photo) == 0 {
+func (b *Bot) handleAnimatePhoto(chatID int64, userID int64, callback *tgmodels.CallbackQuery) {
+	cbMsg := getCallbackMessage(callback)
+	if cbMsg == nil || cbMsg.Photo == nil || len(cbMsg.Photo) == 0 {
 		b.sendErrorMessage(chatID, "Не удалось найти фото в сообщении.")
 		return
 	}
 
 	// Берём самое большое фото из сообщения
-	photo := callback.Message.Photo[len(callback.Message.Photo)-1]
-	file, err := b.api.GetFile(tgbotapi.FileConfig{FileID: photo.FileID})
+	photo := cbMsg.Photo[len(cbMsg.Photo)-1]
+	file, err := b.api.GetFile(b.ctx, &tgbot.GetFileParams{FileID: photo.FileID})
 	if err != nil {
 		log.Printf("animate_photo: failed to get file: %v", err)
 		b.sendErrorMessage(chatID, "Не удалось получить фото для оживления.")
 		return
 	}
-	photoURL := file.Link(b.cfg.TelegramToken)
+	photoURL := b.getFileURL(file)
 
 	veoOpt, ok := findModelOption("veo3_fast")
 	if !ok {
@@ -3267,12 +3587,7 @@ func (b *Bot) sendAudioResult(chatID int64, caption, output string) {
 			b.sendText(chatID, truncate(caption+"\n\nАудио недоступно", 3800))
 			return
 		}
-		msg := tgbotapi.NewAudio(chatID, tgbotapi.FileBytes{
-			Name:  fileName,
-			Bytes: audioBytes,
-		})
-		msg.Caption = caption
-		if _, err := b.api.Send(msg); err != nil {
+		if _, err := b.sendAudio(chatID, &tgmodels.InputFileUpload{Filename: fileName, Data: bytes.NewReader(audioBytes)}, caption); err != nil {
 			log.Printf("Failed to send audio (bytes): %v", err)
 			b.sendText(chatID, truncate(caption+"\n\nАудио недоступно", 3800))
 		}
@@ -3288,20 +3603,10 @@ func (b *Bot) sendAudioResult(chatID int64, caption, output string) {
 		}
 
 		// Пытаемся отправить как аудио
-		audioMsg := tgbotapi.NewAudio(chatID, tgbotapi.FileBytes{
-			Name:  fileName,
-			Bytes: audioBytes,
-		})
-		audioMsg.Caption = caption
-		if _, err := b.api.Send(audioMsg); err != nil {
+		if _, err := b.sendAudio(chatID, &tgmodels.InputFileUpload{Filename: fileName, Data: bytes.NewReader(audioBytes)}, caption); err != nil {
 			log.Printf("Failed to send audio (bytes): %v, trying as document", err)
 			// Пытаемся как документ (например, если формат flac не поддерживается как Audio)
-			docMsg := tgbotapi.NewDocument(chatID, tgbotapi.FileBytes{
-				Name:  fileName,
-				Bytes: audioBytes,
-			})
-			docMsg.Caption = caption
-			if _, err := b.api.Send(docMsg); err != nil {
+			if _, err := b.sendDocument(chatID, &tgmodels.InputFileUpload{Filename: fileName, Data: bytes.NewReader(audioBytes)}, caption); err != nil {
 				log.Printf("Failed to send audio as document: %v", err)
 				b.sendText(chatID, truncate(caption+"\n\nАудио недоступно", 3800))
 			}
@@ -3324,19 +3629,9 @@ func (b *Bot) sendVideoResult(chatID int64, caption, output string) {
 			return
 		}
 
-		videoMsg := tgbotapi.NewVideo(chatID, tgbotapi.FileBytes{
-			Name:  fileName,
-			Bytes: videoBytes,
-		})
-		videoMsg.Caption = caption
-		if _, err := b.api.Send(videoMsg); err != nil {
+		if _, err := b.sendVideo(chatID, &tgmodels.InputFileUpload{Filename: fileName, Data: bytes.NewReader(videoBytes)}, caption); err != nil {
 			log.Printf("Failed to send video: %v, trying as document", err)
-			docMsg := tgbotapi.NewDocument(chatID, tgbotapi.FileBytes{
-				Name:  fileName,
-				Bytes: videoBytes,
-			})
-			docMsg.Caption = caption
-			if _, err := b.api.Send(docMsg); err != nil {
+			if _, err := b.sendDocument(chatID, &tgmodels.InputFileUpload{Filename: fileName, Data: bytes.NewReader(videoBytes)}, caption); err != nil {
 				log.Printf("Failed to send video as document: %v", err)
 				b.sendText(chatID, truncate(caption+"\n\nВидео недоступно", 3800))
 			}
@@ -3347,13 +3642,13 @@ func (b *Bot) sendVideoResult(chatID int64, caption, output string) {
 	b.sendText(chatID, truncate(caption+"\n\nВидео: "+output, 3800))
 }
 
-func (b *Bot) handleCallback(callback *tgbotapi.CallbackQuery) {
+func (b *Bot) handleCallback(callback *tgmodels.CallbackQuery) {
 	data := callback.Data
-	chatID := callback.Message.Chat.ID
+	chatID := getCallbackChatID(callback)
 	userID := callback.From.ID
 
 	// Мгновенно отвечаем, чтобы убрать индикатор ожидания
-	_, _ = b.api.Request(tgbotapi.NewCallback(callback.ID, ""))
+	_ = b.answerCallback(callback.ID, "")
 
 	// Кулдаун на любые запросы (кроме настроек Suno)
 	if !strings.HasPrefix(data, "suno_instr") && !strings.HasPrefix(data, "suno_voice") {
@@ -3379,7 +3674,7 @@ func (b *Bot) handleCallback(callback *tgbotapi.CallbackQuery) {
 	case "suno_instr_toggle":
 		cur := b.getSunoInstrumental(userID)
 		b.setSunoInstrumental(userID, !cur)
-		b.sendModelMenu(chatID, userID, ModelCategoryMusic, callback.Message.MessageID)
+		b.sendModelMenu(chatID, userID, ModelCategoryMusic, getCallbackMessageID(callback))
 	case "suno_voice_toggle":
 		cur := b.getSunoVoice(userID)
 		if cur == "f" {
@@ -3387,7 +3682,7 @@ func (b *Bot) handleCallback(callback *tgbotapi.CallbackQuery) {
 		} else {
 			b.setSunoVoice(userID, "f")
 		}
-		b.sendModelMenu(chatID, userID, ModelCategoryMusic, callback.Message.MessageID)
+		b.sendModelMenu(chatID, userID, ModelCategoryMusic, getCallbackMessageID(callback))
 	case "buy:extras":
 		if !b.ensurePaymentsEnabled(chatID) {
 			return
@@ -3660,14 +3955,15 @@ func (b *Bot) handleCallback(callback *tgbotapi.CallbackQuery) {
 		b.sendChatStyleMenu(chatID, userID)
 	case "animate_photo":
 		// Open Kling 2.6 filter menu instead of direct generation
-		b.sendKlingAnimateMenu(chatID, userID, callback.Message.MessageID)
+		b.sendKlingAnimateMenu(chatID, userID, getCallbackMessageID(callback))
 	case "kling_animate_start":
 		b.handleKlingAnimateStart(chatID, userID, callback)
 	case "invite":
 		b.sendInviteInfo(chatID, userID)
 	case "models_menu":
-		msgID := callback.Message.MessageID
-		if callback.Message != nil && callback.Message.Photo != nil && len(callback.Message.Photo) > 0 {
+		msgID := getCallbackMessageID(callback)
+		cbMsg := getCallbackMessage(callback)
+		if cbMsg != nil && cbMsg.Photo != nil && len(cbMsg.Photo) > 0 {
 			msgID = 0 // не редактируем фото-превью, отправляем новое меню без картинки
 		}
 		b.sendModelMenu(chatID, userID, ModelCategoryPhoto, msgID)
@@ -3685,69 +3981,69 @@ func (b *Bot) handleCallback(callback *tgbotapi.CallbackQuery) {
 				return
 			}
 			b.setUserAspectRatio(userID, ratio)
-			b.sendAspectRatioMenu(chatID, userID, callback.Message.MessageID)
+			b.sendAspectRatioMenu(chatID, userID, getCallbackMessageID(callback))
 		} else if strings.HasPrefix(data, "duration_set:") {
 			duration := strings.TrimPrefix(data, "duration_set:")
 			if b.getUserVideoDuration(userID) == duration {
 				return
 			}
 			b.setUserVideoDuration(userID, duration)
-			b.sendVideoDurationMenu(chatID, userID, callback.Message.MessageID)
+			b.sendVideoDurationMenu(chatID, userID, getCallbackMessageID(callback))
 		} else if strings.HasPrefix(data, "resolution_set:") {
 			resolution := strings.TrimPrefix(data, "resolution_set:")
 			if b.getUserVideoResolution(userID) == resolution {
 				return
 			}
 			b.setUserVideoResolution(userID, resolution)
-			b.sendVideoResolutionMenu(chatID, userID, callback.Message.MessageID)
+			b.sendVideoResolutionMenu(chatID, userID, getCallbackMessageID(callback))
 		} else if strings.HasPrefix(data, "sound_set:") {
 			sound := strings.TrimPrefix(data, "sound_set:")
 			if b.getUserVideoSound(userID) == sound {
 				return
 			}
 			b.setUserVideoSound(userID, sound)
-			b.sendVideoSoundMenu(chatID, userID, callback.Message.MessageID)
+			b.sendVideoSoundMenu(chatID, userID, getCallbackMessageID(callback))
 		} else if strings.HasPrefix(data, "sound_toggle:") {
 			sound := strings.TrimPrefix(data, "sound_toggle:")
 			b.setUserVideoSound(userID, sound)
-			b.sendModelMenu(chatID, userID, ModelCategoryVideo, callback.Message.MessageID)
+			b.sendModelMenu(chatID, userID, ModelCategoryVideo, getCallbackMessageID(callback))
 		} else if strings.HasPrefix(data, "kling_animate_duration:") {
 			duration := strings.TrimPrefix(data, "kling_animate_duration:")
 			if b.getUserVideoDuration(userID) == duration {
 				return
 			}
 			b.setUserVideoDuration(userID, duration)
-			b.sendKlingAnimateMenu(chatID, userID, callback.Message.MessageID)
+			b.sendKlingAnimateMenu(chatID, userID, getCallbackMessageID(callback))
 		} else if strings.HasPrefix(data, "kling_animate_sound:") {
 			sound := strings.TrimPrefix(data, "kling_animate_sound:")
 			if b.getUserVideoSound(userID) == sound {
 				return
 			}
 			b.setUserVideoSound(userID, sound)
-			b.sendKlingAnimateMenu(chatID, userID, callback.Message.MessageID)
+			b.sendKlingAnimateMenu(chatID, userID, getCallbackMessageID(callback))
 		} else if strings.HasPrefix(data, "duration_toggle:") {
 			duration := strings.TrimPrefix(data, "duration_toggle:")
 			b.setUserVideoDuration(userID, duration)
-			b.sendModelMenu(chatID, userID, ModelCategoryVideo, callback.Message.MessageID)
+			b.sendModelMenu(chatID, userID, ModelCategoryVideo, getCallbackMessageID(callback))
 		} else if strings.HasPrefix(data, "duration_toggle_kling:") {
 			duration := strings.TrimPrefix(data, "duration_toggle_kling:")
 			b.setUserVideoDuration(userID, duration)
-			b.sendModelMenu(chatID, userID, ModelCategoryVideo, callback.Message.MessageID)
+			b.sendModelMenu(chatID, userID, ModelCategoryVideo, getCallbackMessageID(callback))
 		} else if strings.HasPrefix(data, "resolution_toggle:") {
 			resolution := strings.TrimPrefix(data, "resolution_toggle:")
 			b.setUserVideoResolution(userID, resolution)
-			b.sendModelMenu(chatID, userID, ModelCategoryVideo, callback.Message.MessageID)
+			b.sendModelMenu(chatID, userID, ModelCategoryVideo, getCallbackMessageID(callback))
 		} else if strings.HasPrefix(data, "photo_resolution_toggle:") {
 			resolution := strings.TrimPrefix(data, "photo_resolution_toggle:")
 			b.setUserPhotoResolution(userID, resolution)
-			b.sendModelMenu(chatID, userID, ModelCategoryPhoto, callback.Message.MessageID)
+			b.sendModelMenu(chatID, userID, ModelCategoryPhoto, getCallbackMessageID(callback))
 		} else if strings.HasPrefix(data, "google_search_toggle:") {
 			val := strings.TrimPrefix(data, "google_search_toggle:")
 			b.setUserGoogleSearch(userID, val)
-			b.sendModelMenu(chatID, userID, ModelCategoryPhoto, callback.Message.MessageID)
+			b.sendModelMenu(chatID, userID, ModelCategoryPhoto, getCallbackMessageID(callback))
 		} else if strings.HasPrefix(data, "models_menu:") {
 			cat := ModelCategory(strings.TrimPrefix(data, "models_menu:"))
-			b.sendModelMenu(chatID, userID, cat, callback.Message.MessageID)
+			b.sendModelMenu(chatID, userID, cat, getCallbackMessageID(callback))
 		} else if strings.HasPrefix(data, "video_total:") {
 			modelID := strings.TrimPrefix(data, "video_total:")
 			b.sendVideoTotalInfo(chatID, userID, modelID)
@@ -3791,7 +4087,7 @@ func (b *Bot) handleCallback(callback *tgbotapi.CallbackQuery) {
 			b.setUserModel(userID, model)
 
 			// Обновляем меню моделей в том же сообщении
-			b.sendModelMenu(chatID, userID, opt.Category, callback.Message.MessageID)
+			b.sendModelMenu(chatID, userID, opt.Category, getCallbackMessageID(callback))
 		}
 	}
 
@@ -3800,31 +4096,34 @@ func (b *Bot) handleCallback(callback *tgbotapi.CallbackQuery) {
 }
 
 func (b *Bot) isChannelMember(userID int64) (bool, error) {
-	member, err := b.api.GetChatMember(tgbotapi.GetChatMemberConfig{
-		ChatConfigWithUser: tgbotapi.ChatConfigWithUser{
-			SuperGroupUsername: requiredChannelUsername,
-			UserID:             userID,
-		},
+	member, err := b.api.GetChatMember(b.ctx, &tgbot.GetChatMemberParams{
+		ChatID: requiredChannelUsername,
+		UserID: userID,
 	})
 	if err != nil {
 		return false, err
 	}
-	status := member.Status
-	if status == "creator" || status == "administrator" || status == "member" || (status == "restricted" && member.IsMember) {
+	// Check member type
+	switch member.Type {
+	case tgmodels.ChatMemberTypeOwner, tgmodels.ChatMemberTypeAdministrator, tgmodels.ChatMemberTypeMember:
 		return true, nil
+	case tgmodels.ChatMemberTypeRestricted:
+		if member.Restricted != nil && member.Restricted.IsMember {
+			return true, nil
+		}
 	}
 	return false, nil
 }
 
 func (b *Bot) sendChannelTrialMenu(chatID int64) {
-	checkBtn := tgbotapi.NewInlineKeyboardButtonData("Проверить подписку", "trial:check")
-	kb := tgbotapi.NewInlineKeyboardMarkup(
-		tgbotapi.NewInlineKeyboardRow(checkBtn),
+	checkBtn := newInlineKeyboardButtonData("Проверить подписку", "trial:check")
+	kb := newInlineKeyboardMarkup(
+		newInlineKeyboardRow(checkBtn),
 	)
 	text := "Подпишитесь на канал t.me/AIFaceApps, чтобы получить 1 пробную генерацию фото.\nПосле подписки нажмите «Проверить подписку» и попробуйте снова."
-	msg := tgbotapi.NewMessage(chatID, text)
+	msg := newMessageConfig(chatID, text)
 	msg.ReplyMarkup = kb
-	if _, err := b.api.Send(msg); err != nil {
+	if _, err := b.sendMsg(msg); err != nil {
 		log.Printf("sendChannelTrialMenu send message error: %v", err)
 	}
 }
@@ -3908,18 +4207,18 @@ func (b *Bot) sendTrialReminders() {
 Подписывайся на канал, выбирай образ, выбирай модель Nano Banana и загрузи фото — это бесплатно 👇
 https://t.me/aifaceapps`
 
-		kb := tgbotapi.NewInlineKeyboardMarkup(
-			tgbotapi.NewInlineKeyboardRow(
-				tgbotapi.NewInlineKeyboardButtonURL("Выбрать образ", "https://t.me/aifaceapps"),
+		kb := newInlineKeyboardMarkup(
+			newInlineKeyboardRow(
+				newInlineKeyboardButtonURL("Выбрать образ", "https://t.me/aifaceapps"),
 			),
 		)
 
-		msg := tgbotapi.NewMessage(user.TelegramID, text)
+		msg := newMessageConfig(user.TelegramID, text)
 		msg.ReplyMarkup = kb
 		msg.DisableWebPagePreview = true
-		msg.ParseMode = tgbotapi.ModeHTML
+		msg.ParseMode = "HTML"
 
-		if _, err := b.api.Send(msg); err != nil {
+		if _, err := b.sendMsg(msg); err != nil {
 			log.Printf("Failed to send trial reminder to %d: %v", user.TelegramID, err)
 		} else {
 			log.Printf("Sent trial reminder to user %d", user.TelegramID)
@@ -4076,8 +4375,8 @@ func (b *Bot) processGeneration(chatID int64, userID int64, photoURLs []string, 
 
 	// Отправляем сообщение о начале генерации
 	text := fmt.Sprintf("🔄 Генерация запущена! ID запроса: %d\n\nОжидайте результат...", req.ID)
-	msg := tgbotapi.NewMessage(chatID, text)
-	_, err = b.api.Send(msg)
+	msg := newMessageConfig(chatID, text)
+	_, err = b.sendMsg(msg)
 	if err != nil {
 		log.Printf("Failed to send generation start message: %v", err)
 	}
@@ -4106,7 +4405,7 @@ func (b *Bot) confirmGeneration(chatID int64, userID int64, requestIDStr string)
 	b.sendGenerationStatus(chatID, req)
 }
 
-func (b *Bot) handleTextMessage(msg *tgbotapi.Message) {
+func (b *Bot) handleTextMessage(msg *tgmodels.Message) {
 	userText := strings.TrimSpace(msg.Text)
 	loc := b.getLocalization(msg.From.ID)
 	ruLoc := GetLocalization("ru")
@@ -4202,8 +4501,8 @@ func (b *Bot) handleTextMessage(msg *tgbotapi.Message) {
 		if apiModel == "" {
 			apiModel = modelOpt.ID
 		}
-		reply := tgbotapi.NewMessage(msg.Chat.ID, loc.Thinking)
-		if _, err := b.api.Send(reply); err != nil {
+		reply := newMessageConfig(msg.Chat.ID, loc.Thinking)
+		if _, err := b.sendMsg(reply); err != nil {
 			log.Printf("Failed to send typing message: %v", err)
 		}
 
@@ -4266,8 +4565,8 @@ func (b *Bot) handleTextMessage(msg *tgbotapi.Message) {
 
 	// Для всех остальных категорий показываем инструкцию конкретной модели
 	instruction := instructionForModel(modelOpt)
-	reply := tgbotapi.NewMessage(msg.Chat.ID, instruction)
-	_, _ = b.api.Send(reply)
+	reply := newMessageConfig(msg.Chat.ID, instruction)
+	_, _ = b.sendMsg(reply)
 }
 
 // saveMessageToContext добавляет сообщение в контекст пользователя (максимум 5)
@@ -4310,7 +4609,7 @@ func (b *Bot) startPromoText(loc *Localization) string {
 }
 
 // handleStart обрабатывает команду /start
-func (b *Bot) handleStart(msg *tgbotapi.Message) {
+func (b *Bot) handleStart(msg *tgmodels.Message) {
 	if isAdmin, err := b.userService.IsUserAdmin(msg.From.ID); err == nil {
 		b.setChatCommands(msg.Chat.ID, isAdmin)
 	}
@@ -4319,7 +4618,19 @@ func (b *Bot) handleStart(msg *tgbotapi.Message) {
 	if promo := b.startPromoText(loc); promo != "" {
 		text += "\n\n" + promo
 	}
-	b.sendText(msg.Chat.ID, text)
+
+	// Отправляем приветствие с кнопкой меню
+	keyboard := newInlineKeyboardMarkup(
+		newInlineKeyboardRow(
+			newInlineKeyboardButtonDataStyledWithEmoji(loc.MenuBtn, "menu","success", EmojiIDMenu),
+		),
+	)
+	reply := newMessageConfig(msg.Chat.ID, text)
+	reply.ReplyMarkup = keyboard
+	if _, err := b.sendMsg(reply); err != nil {
+		log.Printf("Failed to send start message: %v", err)
+	}
+
 	claimed, err := b.userService.HasClaimedChannelTrial(msg.From.ID)
 	if err != nil {
 		log.Printf("trial claimed check error: %v", err)
@@ -4332,11 +4643,11 @@ func (b *Bot) handleStart(msg *tgbotapi.Message) {
 }
 
 // handleStartWithReferral обрабатывает /start с реферальным кодом
-func (b *Bot) handleStartWithReferral(msg *tgbotapi.Message, referralCode string) {
+func (b *Bot) handleStartWithReferral(msg *tgmodels.Message, referralCode string) {
 	user := msg.From
 	_, err := b.userService.GetOrCreateUserWithReferrer(
 		user.ID,
-		user.UserName,
+		user.Username,
 		user.FirstName,
 		user.LastName,
 		user.LanguageCode,
@@ -4412,36 +4723,36 @@ func (b *Bot) sendMainMenu(chatID int64, userID int64) {
 	)
 
 	// reply-клавиатура
-	replyKB := tgbotapi.NewReplyKeyboard(
-		tgbotapi.NewKeyboardButtonRow(
-			tgbotapi.NewKeyboardButton(loc.MenuGenPhotoBtn),
-			tgbotapi.NewKeyboardButton(loc.MenuGenMusicBtn),
+	replyKB := newReplyKeyboard(
+		newKeyboardButtonRow(
+			newKeyboardButtonEmoji(loc.MenuGenPhotoBtn, "5235837920081887219"),
+			newKeyboardButtonEmoji(loc.MenuGenMusicBtn, "5463107823946717464"),
 		),
-		tgbotapi.NewKeyboardButtonRow(
-			tgbotapi.NewKeyboardButton(loc.MenuGenVideoBtn),
-			tgbotapi.NewKeyboardButton(loc.MenuBuyBtn),
+		newKeyboardButtonRow(
+			newKeyboardButton(loc.MenuGenVideoBtn),
+			newKeyboardButtonEmoji(loc.MenuBuyBtn, "5224257782013769471"),
 		),
-		tgbotapi.NewKeyboardButtonRow(
-			tgbotapi.NewKeyboardButton(loc.MenuInviteFriendBtn),
+		newKeyboardButtonRow(
+			newKeyboardButton(loc.MenuInviteFriendBtn),
 		),
-		tgbotapi.NewKeyboardButtonRow(
-			tgbotapi.NewKeyboardButton(loc.MenuAccountBtn),
-			tgbotapi.NewKeyboardButton(loc.MenuSettingsBtn),
+		newKeyboardButtonRow(
+			newKeyboardButtonEmoji(loc.MenuAccountBtn, "5231200819986047254"),
+			newKeyboardButtonEmoji(loc.MenuSettingsBtn, "5341715473882955310"),
 		),
-		tgbotapi.NewKeyboardButtonRow(
-			tgbotapi.NewKeyboardButton(loc.MenuHelpBtn),
+		newKeyboardButtonRow(
+			newKeyboardButton(loc.MenuHelpBtn),
 		),
 	)
 	replyKB.ResizeKeyboard = true
 
-	// инлайн-кнопки
-	inlineKB := tgbotapi.NewInlineKeyboardMarkup(
-		tgbotapi.NewInlineKeyboardRow(
-			tgbotapi.NewInlineKeyboardButtonData(loc.MenuBuyBtn, "buy"),
-			tgbotapi.NewInlineKeyboardButtonData(loc.MenuInviteFriendBtn, "invite"),
+	// инлайн-кнопки (без обычных эмодзи - используем только custom emoji)
+	inlineKB := newInlineKeyboardMarkup(
+		newInlineKeyboardRow(
+			newInlineKeyboardButtonDataStyledWithEmoji("Покупка", "buy", "success",EmojiIDBuy),
+			newInlineKeyboardButtonDataStyledWithEmoji("Пригласить друга", "invite", "success", EmojiIDGift),
 		),
-		tgbotapi.NewInlineKeyboardRow(
-			tgbotapi.NewInlineKeyboardButtonData(loc.MenuSelectModelBtn, "models_menu"),
+		newInlineKeyboardRow(
+			newInlineKeyboardButtonDataStyledWithEmoji(loc.MenuSelectModelBtn, "models_menu", "success",EmojiIDSelectModel),
 		),
 	)
 
@@ -4451,18 +4762,18 @@ func (b *Bot) sendMainMenu(chatID int64, userID int64) {
 	}
 
 	// Сообщение для установки reply-клавиатуры (краткий текст)
-	reply := tgbotapi.NewMessage(chatID, loc.MenuBtn)
+	reply := newMessageConfig(chatID, loc.MenuBtn)
 	reply.ReplyMarkup = replyKB
 	reply.DisableNotification = true
-	if _, err := b.api.Send(reply); err != nil {
+	if _, err := b.sendMsg(reply); err != nil {
 		log.Printf("Failed to send main menu reply keyboard: %v", err)
 	}
 
 	// Сообщение с основным текстом и инлайн-кнопками
-	inlineMsg := tgbotapi.NewMessage(chatID, htmlText)
-	inlineMsg.ParseMode = tgbotapi.ModeHTML
+	inlineMsg := newMessageConfig(chatID, htmlText)
+	inlineMsg.ParseMode = "HTML"
 	inlineMsg.ReplyMarkup = inlineKB
-	if _, err := b.api.Send(inlineMsg); err != nil {
+	if _, err := b.sendMsg(inlineMsg); err != nil {
 		log.Printf("Failed to send inline main menu: %v", err)
 	}
 }
@@ -4515,9 +4826,17 @@ func (b *Bot) sendAccount(chatID int64, userID int64) {
 		html.EscapeString(fmt.Sprintf("%d", videoExtra)),
 	)
 
-	msg := tgbotapi.NewMessage(chatID, accountText)
-	msg.ParseMode = tgbotapi.ModeHTML
-	if _, err := b.api.Send(msg); err != nil {
+	// Добавляем кнопку покупки
+	keyboard := newInlineKeyboardMarkup(
+		newInlineKeyboardRow(
+			newInlineKeyboardButtonDataStyledWithEmoji("Покупка", "buy", "success", EmojiIDBuy),
+		),
+	)
+
+	msg := newMessageConfig(chatID, accountText)
+	msg.ParseMode = "HTML"
+	msg.ReplyMarkup = keyboard
+	if _, err := b.sendMsg(msg); err != nil {
 		log.Printf("Failed to send account card: %v", err)
 	}
 }
@@ -4533,23 +4852,23 @@ func (b *Bot) sendBuyMenu(chatID int64, userID int64) {
 
 	text := loc.BuyTitle + "\n\n" + loc.BuySelectAction + "\n" + loc.BuyConsentNote
 
-	rows := [][]tgbotapi.InlineKeyboardButton{}
-	row := []tgbotapi.InlineKeyboardButton{}
+	rows := [][]tgmodels.InlineKeyboardButton{}
+	row := []tgmodels.InlineKeyboardButton{}
 	if subsEnabled {
-		row = append(row, tgbotapi.NewInlineKeyboardButtonData(loc.BuySubscriptionBtn, "buy:sub"))
+		row = append(row, newInlineKeyboardButtonDataStyledWithEmoji(loc.BuySubscriptionBtn, "buy:sub", "success","5215420556089776398"))
 	}
-	row = append(row, tgbotapi.NewInlineKeyboardButtonData(loc.BuyExtrasBtn, "buy:extras"))
-	rows = append(rows, tgbotapi.NewInlineKeyboardRow(row...))
-	rows = append(rows, tgbotapi.NewInlineKeyboardRow(
-		tgbotapi.NewInlineKeyboardButtonData(loc.BackBtn+" "+loc.MenuBtn, "menu"),
+	row = append(row, newInlineKeyboardButtonDataStyledWithEmoji(loc.BuyExtrasBtn, "buy:extras", "success", EmojiIDBuy))
+	rows = append(rows, newInlineKeyboardRow(row...))
+	rows = append(rows, newInlineKeyboardRow(
+		newBackButton(loc.BackBtn+" "+loc.MenuBtn, "menu"),
 	))
 
-	keyboard := tgbotapi.NewInlineKeyboardMarkup(rows...)
+	keyboard := newInlineKeyboardMarkup(rows...)
 
-	reply := tgbotapi.NewMessage(chatID, text)
+	reply := newMessageConfig(chatID, text)
 	reply.ReplyMarkup = keyboard
 
-	_, err := b.api.Send(reply)
+	_, err := b.sendMsg(reply)
 	if err != nil {
 		log.Printf("Failed to send buy menu: %v", err)
 	}
@@ -4568,32 +4887,31 @@ func (b *Bot) sendBuyExtrasMenu(chatID int64, userID int64) {
 		return
 	}
 
-	rows := [][]tgbotapi.InlineKeyboardButton{}
+	rows := [][]tgmodels.InlineKeyboardButton{}
 	for _, cat := range enabled {
 		switch cat {
 		case ModelCategoryChat:
-			rows = append(rows, tgbotapi.NewInlineKeyboardRow(tgbotapi.NewInlineKeyboardButtonData(loc.ExtrasTexts, "buy:text")))
+			rows = append(rows, newInlineKeyboardRow(newInlineKeyboardButtonDataStyledWithEmoji(loc.ExtrasTexts, "buy:text", "success", "5429273196870254885")))
 		case ModelCategoryPhoto:
-			rows = append(rows, tgbotapi.NewInlineKeyboardRow(tgbotapi.NewInlineKeyboardButtonData(loc.ExtrasImage, "buy:image")))
+			rows = append(rows, newInlineKeyboardRow(newInlineKeyboardButtonDataStyledWithEmoji(loc.ExtrasImage, "buy:image", "success", "5429200581858182504")))
 		case ModelCategoryMusic:
-			rows = append(rows, tgbotapi.NewInlineKeyboardRow(tgbotapi.NewInlineKeyboardButtonData(loc.ExtrasMusico, "buy:music")))
+			rows = append(rows, newInlineKeyboardRow(newInlineKeyboardButtonDataStyledWithEmoji(loc.ExtrasMusico, "buy:music", "success", "5429372861586359061")))
 		case ModelCategoryVideo:
-			rows = append(rows, tgbotapi.NewInlineKeyboardRow(tgbotapi.NewInlineKeyboardButtonData(loc.ExtrasVideos, "buy:video")))
+			rows = append(rows, newInlineKeyboardRow(newInlineKeyboardButtonDataStyled(loc.ExtrasVideos, "buy:video", "success")))
 		}
 	}
-	rows = append(rows, tgbotapi.NewInlineKeyboardRow(
-		tgbotapi.NewInlineKeyboardButtonData(loc.BackBtn, "buy"),
-		tgbotapi.NewInlineKeyboardButtonData(loc.MenuBtn, "menu"),
+	rows = append(rows, newInlineKeyboardRow(
+		newBackButton(loc.BackBtn, "buy"),
 	))
 
 	text := loc.ExtrasTitle + "\n\n" + loc.ExtrasSelectCat + "\n" + loc.BuyConsentNote
 
-	keyboard := tgbotapi.NewInlineKeyboardMarkup(rows...)
+	keyboard := newInlineKeyboardMarkup(rows...)
 
-	reply := tgbotapi.NewMessage(chatID, text)
+	reply := newMessageConfig(chatID, text)
 	reply.ReplyMarkup = keyboard
 
-	if _, err := b.api.Send(reply); err != nil {
+	if _, err := b.sendMsg(reply); err != nil {
 		log.Printf("Failed to send buy extras menu: %v", err)
 	}
 }
@@ -4624,23 +4942,22 @@ func (b *Bot) sendBuySubscription(chatID int64, userID int64) {
 		proPrice, loc.SubsPerWeek, loc.SubsTextDaily, proImg, loc.SubsImages, proVid, loc.SubsVideos, proMus, loc.SubsSongs, loc.SubsTextModelsHi, fmt.Sprintf(loc.SubsChatStyles, 6), fmt.Sprintf(loc.SubsContext, 3), loc.SubsNoAds, fmt.Sprintf(loc.SubsDiscount, 20),
 	)
 
-	keyboard := tgbotapi.NewInlineKeyboardMarkup(
-		tgbotapi.NewInlineKeyboardRow(
-			tgbotapi.NewInlineKeyboardButtonData("⭐ Mini", "buy_sub:mini"),
-			tgbotapi.NewInlineKeyboardButtonData("🚀 Start", "buy_sub:start"),
+	keyboard := newInlineKeyboardMarkup(
+		newInlineKeyboardRow(
+			newInlineKeyboardButtonDataStyled("⭐ Mini", "buy_sub:mini", "success"),
+			newInlineKeyboardButtonDataStyled("🚀 Start", "buy_sub:start", "success"),
 		),
-		tgbotapi.NewInlineKeyboardRow(
-			tgbotapi.NewInlineKeyboardButtonData("👑 Pro", "buy_sub:pro"),
+		newInlineKeyboardRow(
+			newInlineKeyboardButtonDataStyled("👑 Pro", "buy_sub:pro", "success"),
 		),
-		tgbotapi.NewInlineKeyboardRow(
-			tgbotapi.NewInlineKeyboardButtonData(loc.BackBtn, "buy"),
-			tgbotapi.NewInlineKeyboardButtonData(loc.MenuBtn, "menu"),
+		newInlineKeyboardRow(
+			newBackButton(loc.BackBtn, "buy"),
 		),
 	)
 
-	msg := tgbotapi.NewMessage(chatID, text)
+	msg := newMessageConfig(chatID, text)
 	msg.ReplyMarkup = keyboard
-	if _, err := b.api.Send(msg); err != nil {
+	if _, err := b.sendMsg(msg); err != nil {
 		log.Printf("Failed to send buy subscription: %v", err)
 	}
 }
@@ -4677,18 +4994,18 @@ func (b *Bot) sendBuySubscriptionPayment(chatID int64, userID int64, plan string
 
 	label := strings.Title(plan)
 	text := fmt.Sprintf(loc.SubsPaymentCreated, label, resp.CheckoutURL) + "\n\n" + loc.BuyConsentNote
-	keyboard := tgbotapi.NewInlineKeyboardMarkup(
-		tgbotapi.NewInlineKeyboardRow(
-			tgbotapi.NewInlineKeyboardButtonData(loc.SubsBackToSubs, "buy:sub"),
+	keyboard := newInlineKeyboardMarkup(
+		newInlineKeyboardRow(
+			newInlineKeyboardButtonData(loc.SubsBackToSubs, "buy:sub"),
 		),
-		tgbotapi.NewInlineKeyboardRow(
-			tgbotapi.NewInlineKeyboardButtonData(loc.MenuBtn, "menu"),
+		newInlineKeyboardRow(
+			newInlineKeyboardButtonData(loc.MenuBtn, "menu"),
 		),
 	)
 
-	msg := tgbotapi.NewMessage(chatID, text)
+	msg := newMessageConfig(chatID, text)
 	msg.ReplyMarkup = keyboard
-	if _, err := b.api.Send(msg); err != nil {
+	if _, err := b.sendMsg(msg); err != nil {
 		log.Printf("Failed to send buy subscription payment: %v", err)
 	}
 }
@@ -4702,7 +5019,13 @@ func (b *Bot) sendInviteInfo(chatID int64, userID int64) {
 		return
 	}
 
-	botUsername := b.api.Self.UserName
+	botInfo, err := b.api.GetMe(b.ctx)
+	if err != nil {
+		log.Printf("Failed to get bot info: %v", err)
+		b.sendErrorMessage(chatID, loc.ErrGetStats)
+		return
+	}
+	botUsername := botInfo.Username
 	referralLink := fmt.Sprintf("`https://t.me/%s?start=%s`", botUsername, user.ReferralCode)
 
 	text := fmt.Sprintf("%s\n%s\n\n%s\n%s\n%s\n\n%s %d",
@@ -4717,20 +5040,20 @@ func (b *Bot) sendInviteInfo(chatID int64, userID int64) {
 
 	// Кнопка вставляет ссылку в строку ввода (можно быстро скопировать или отправить)
 	copyQuery := referralLink
-	keyboard := tgbotapi.NewInlineKeyboardMarkup(
-		tgbotapi.NewInlineKeyboardRow(
-			tgbotapi.InlineKeyboardButton{Text: loc.InviteCopyHint, SwitchInlineQueryCurrentChat: &copyQuery},
+	keyboard := newInlineKeyboardMarkup(
+		newInlineKeyboardRow(
+			tgmodels.InlineKeyboardButton{Text: loc.InviteCopyHint, SwitchInlineQueryCurrentChat: copyQuery, IconCustomEmojiID: "5203996991054432397"},
 		),
-		tgbotapi.NewInlineKeyboardRow(
-			tgbotapi.NewInlineKeyboardButtonData(loc.BackBtn+" "+loc.MenuBtn, "menu"),
+		newInlineKeyboardRow(
+			newBackButton(loc.BackBtn+" "+loc.MenuBtn, "menu"),
 		),
 	)
 
-	reply := tgbotapi.NewMessage(chatID, text)
+	reply := newMessageConfig(chatID, text)
 	reply.ReplyMarkup = keyboard
 	reply.ParseMode = "Markdown"
 
-	_, err = b.api.Send(reply)
+	_, err = b.sendMsg(reply)
 	if err != nil {
 		log.Printf("Failed to send invite info: %v", err)
 	}
@@ -4779,22 +5102,28 @@ func (b *Bot) sendModelMenu(chatID int64, userID int64, category ModelCategory, 
 		}
 	}
 
-	rows := [][]tgbotapi.InlineKeyboardButton{}
+	rows := [][]tgmodels.InlineKeyboardButton{}
 
-	// Ряд с категориями (только включённые)
-	catButtons := []tgbotapi.InlineKeyboardButton{}
+	// Ряд с категориями (только включённые) - синий стиль
+	catButtons := []tgmodels.InlineKeyboardButton{}
 	for _, cat := range enabledCats {
 		label := b.categoryLabelLoc(cat, loc)
-		if cat == category {
-			label = "✅ " + label
+		isSelected := cat == category
+		if isSelected {
+			label = "✔️ " + label
 		}
-		catButtons = append(catButtons, tgbotapi.NewInlineKeyboardButtonData(label, "models_menu:"+string(cat)))
+		// Custom emoji for photo category
+		if cat == ModelCategoryPhoto {
+			catButtons = append(catButtons, newInlineKeyboardButtonDataStyledWithEmoji(label, "models_menu:"+string(cat), ButtonStylePrimary, EmojiIDPhotoCategory))
+		} else {
+			catButtons = append(catButtons, newInlineKeyboardButtonDataStyled(label, "models_menu:"+string(cat), ButtonStylePrimary))
+		}
 	}
 	rows = append(rows, catButtons)
 
-	// Ряды с моделями выбранной категории
+	// Ряды с моделями выбранной категории - зелёный стиль
 	options := modelOptionsByCategory(category)
-	row := []tgbotapi.InlineKeyboardButton{}
+	row := []tgmodels.InlineKeyboardButton{}
 	for i, m := range options {
 		if !b.isModelVisibleToUser(userID, m) {
 			continue
@@ -4803,25 +5132,31 @@ func (b *Bot) sendModelMenu(chatID int64, userID int64, category ModelCategory, 
 		if m.Category == ModelCategoryChat && !b.isChatModelAllowed(userID, m) {
 			label = "🔒 " + label
 		}
-		if m.ID == current {
-			label = "✅ " + label
+		isSelected := m.ID == current
+		if isSelected {
+			label = "✔️ " + label
 		}
-		row = append(row, tgbotapi.NewInlineKeyboardButtonData(label, "model_set:"+m.ID))
+		// Use custom emoji if available
+		if m.EmojiID != "" {
+			row = append(row, newInlineKeyboardButtonDataStyledWithEmoji(label, "model_set:"+m.ID, ButtonStyleSuccess, m.EmojiID))
+		} else {
+			row = append(row, newInlineKeyboardButtonDataStyled(label, "model_set:"+m.ID, ButtonStyleSuccess))
+		}
 		if len(row) == 2 || i == len(options)-1 {
 			rows = append(rows, row)
-			row = []tgbotapi.InlineKeyboardButton{}
+			row = []tgmodels.InlineKeyboardButton{}
 		}
 	}
 
-	rows = append(rows, tgbotapi.NewInlineKeyboardRow(
-		tgbotapi.NewInlineKeyboardButtonData(loc.BackBtn, "menu"),
+	rows = append(rows, newInlineKeyboardRow(
+		newBackButton(loc.BackBtn, "menu"),
 	))
 
 	text := "<b>" + fmt.Sprintf(loc.ModelsCat, b.categoryLabelLoc(category, loc)) + "</b>\n\n"
 	currentDesc := strings.TrimSpace(b.modelDescriptionLoc(current, loc))
 	text += loc.ModelsCurrentLabel + " " + html.EscapeString(b.modelLabelLoc(current, loc))
 	if currentDesc != "" {
-		text += " — " + html.EscapeString(currentDesc)
+		text += " — " + currentDesc
 	}
 	if current == "google/nano-banana-pro" {
 		minCost := 4
@@ -4836,7 +5171,7 @@ func (b *Bot) sendModelMenu(chatID int64, userID int64, category ModelCategory, 
 		minCost := 1
 		text += "\n<b>" + fmt.Sprintf(loc.ModelsCostFromSingular, minCost) + "</b>"
 	} else if cost := modelRequestCost(current); cost > 0 {
-		text += "\n<b>Расход:</b> " + fmt.Sprintf("%d %s", cost, html.EscapeString(requestWord(cost, loc)))
+		text += "\n<b>Расход:</b> " + fmt.Sprintf("%d %s", cost, requestWord(cost, loc))
 	}
 	if current == "google/nano-banana" {
 		text += "\nМаксимум фото: 2\n"
@@ -4844,7 +5179,7 @@ func (b *Bot) sendModelMenu(chatID int64, userID int64, category ModelCategory, 
 		text += "\nМаксимум фото: 4\n"
 	}
 	if instr := b.modelInstructionLoc(current, loc); instr != "" {
-		text += "\n" + html.EscapeString(instr)
+		text += "\n" + instr
 	}
 	if category == ModelCategoryMusic {
 		if opt, ok := findModelOption(current); ok && (opt.ID == "music-suno" || strings.Contains(strings.ToLower(opt.ApiModel), "suno")) {
@@ -4853,8 +5188,8 @@ func (b *Bot) sendModelMenu(chatID int64, userID int64, category ModelCategory, 
 			if instrOn {
 				instrBtn = "🎹 " + loc.MusicMode + " " + loc.MusicModeInstr
 			}
-			rows = append(rows, tgbotapi.NewInlineKeyboardRow(
-				tgbotapi.NewInlineKeyboardButtonData(instrBtn, "suno_instr_toggle"),
+			rows = append(rows, newInlineKeyboardRow(
+				newInlineKeyboardButtonData(instrBtn, "suno_instr_toggle"),
 			))
 			if !instrOn {
 				voice := b.getSunoVoice(userID)
@@ -4862,8 +5197,8 @@ func (b *Bot) sendModelMenu(chatID int64, userID int64, category ModelCategory, 
 				if voice == "f" {
 					voiceBtn = "🗣️ " + loc.MusicVoice + " " + loc.MusicVoiceFemale
 				}
-				rows = append(rows, tgbotapi.NewInlineKeyboardRow(
-					tgbotapi.NewInlineKeyboardButtonData(voiceBtn, "suno_voice_toggle"),
+				rows = append(rows, newInlineKeyboardRow(
+					newInlineKeyboardButtonData(voiceBtn, "suno_voice_toggle"),
 				))
 			}
 		}
@@ -4871,8 +5206,8 @@ func (b *Bot) sendModelMenu(chatID int64, userID int64, category ModelCategory, 
 	if (category == ModelCategoryPhoto && (current == "google/nano-banana" || current == "google/nano-banana-pro" || current == "nano-banana-2" || current == "kie/nano-banana-edit" || current == "kie/nano-banana-pro" || current == "seedream/4.5-edit")) || (category == ModelCategoryVideo && current == "veo3_fast") {
 		ratio := b.getAspectRatioForModel(userID, current)
 		label := loc.AspectTitle + ": " + ratio
-		rows = append(rows, tgbotapi.NewInlineKeyboardRow(
-			tgbotapi.NewInlineKeyboardButtonData(label, "aspect_menu"),
+		rows = append(rows, newInlineKeyboardRow(
+			newInlineKeyboardButtonData(label, "aspect_menu"),
 		))
 	}
 	if category == ModelCategoryPhoto && current == "google/nano-banana-pro" {
@@ -4884,8 +5219,8 @@ func (b *Bot) sendModelMenu(chatID int64, userID int64, category ModelCategory, 
 		}
 		dynCost := b.getPhotoResolutionCost(userID, current)
 		resLabel := fmt.Sprintf("📐 Разрешение: %s (%d ген.)", resolution, dynCost)
-		rows = append(rows, tgbotapi.NewInlineKeyboardRow(
-			tgbotapi.NewInlineKeyboardButtonData(resLabel, "photo_resolution_toggle:"+nextRes),
+		rows = append(rows, newInlineKeyboardRow(
+			newInlineKeyboardButtonData(resLabel, "photo_resolution_toggle:"+nextRes),
 		))
 	}
 	if category == ModelCategoryPhoto && current == "nano-banana-2" {
@@ -4899,8 +5234,8 @@ func (b *Bot) sendModelMenu(chatID int64, userID int64, category ModelCategory, 
 		}
 		dynCost := b.getPhotoResolutionCost(userID, current)
 		resLabel := fmt.Sprintf("📐 Разрешение: %s (%d ген.)", resolution, dynCost)
-		rows = append(rows, tgbotapi.NewInlineKeyboardRow(
-			tgbotapi.NewInlineKeyboardButtonData(resLabel, "photo_resolution_toggle:"+nextRes),
+		rows = append(rows, newInlineKeyboardRow(
+			newInlineKeyboardButtonData(resLabel, "photo_resolution_toggle:"+nextRes),
 		))
 	}
 	if category == ModelCategoryPhoto && current == "nano-banana-2" {
@@ -4911,8 +5246,8 @@ func (b *Bot) sendModelMenu(chatID int64, userID int64, category ModelCategory, 
 			gsLabel = "🔍 Google Поиск: вкл"
 			nextGS = "false"
 		}
-		rows = append(rows, tgbotapi.NewInlineKeyboardRow(
-			tgbotapi.NewInlineKeyboardButtonData(gsLabel, "google_search_toggle:"+nextGS),
+		rows = append(rows, newInlineKeyboardRow(
+			newInlineKeyboardButtonData(gsLabel, "google_search_toggle:"+nextGS),
 		))
 	}
 	if category == ModelCategoryVideo && current == "wan/2-6-image-to-video" {
@@ -4927,8 +5262,8 @@ func (b *Bot) sendModelMenu(chatID int64, userID int64, category ModelCategory, 
 			nextDuration = "5"
 		}
 		label := fmt.Sprintf("⏱️ Длительность: %s сек (%d ген.)", duration, cost)
-		rows = append(rows, tgbotapi.NewInlineKeyboardRow(
-			tgbotapi.NewInlineKeyboardButtonData(label, "duration_toggle:"+nextDuration),
+		rows = append(rows, newInlineKeyboardRow(
+			newInlineKeyboardButtonData(label, "duration_toggle:"+nextDuration),
 		))
 		resolution := b.getUserVideoResolution(userID)
 		// Toggle: 720p <-> 1080p
@@ -4937,8 +5272,8 @@ func (b *Bot) sendModelMenu(chatID int64, userID int64, category ModelCategory, 
 			nextResolution = "720p"
 		}
 		resLabel := fmt.Sprintf("📺 Разрешение: %s", resolution)
-		rows = append(rows, tgbotapi.NewInlineKeyboardRow(
-			tgbotapi.NewInlineKeyboardButtonData(resLabel, "resolution_toggle:"+nextResolution),
+		rows = append(rows, newInlineKeyboardRow(
+			newInlineKeyboardButtonData(resLabel, "resolution_toggle:"+nextResolution),
 		))
 	}
 	if category == ModelCategoryVideo && current == "kling-2.6/image-to-video" {
@@ -4954,8 +5289,8 @@ func (b *Bot) sendModelMenu(chatID int64, userID int64, category ModelCategory, 
 			nextDuration = "5"
 		}
 		label := fmt.Sprintf("⏱️ Длительность: %s сек", duration)
-		rows = append(rows, tgbotapi.NewInlineKeyboardRow(
-			tgbotapi.NewInlineKeyboardButtonData(label, "duration_toggle_kling:"+nextDuration),
+		rows = append(rows, newInlineKeyboardRow(
+			newInlineKeyboardButtonData(label, "duration_toggle_kling:"+nextDuration),
 		))
 		soundLabel := "🔇 Без звука"
 		nextSound := "true"
@@ -4963,16 +5298,16 @@ func (b *Bot) sendModelMenu(chatID int64, userID int64, category ModelCategory, 
 			soundLabel = "🔊 Со звуком (x2)"
 			nextSound = "false"
 		}
-		rows = append(rows, tgbotapi.NewInlineKeyboardRow(
-			tgbotapi.NewInlineKeyboardButtonData(soundLabel, "sound_toggle:"+nextSound),
+		rows = append(rows, newInlineKeyboardRow(
+			newInlineKeyboardButtonData(soundLabel, "sound_toggle:"+nextSound),
 		))
 	}
 	if category == ModelCategoryVideo {
 		totalCost := b.getVideoTotalCost(userID, current)
 		if totalCost > 0 {
 			costLabel := fmt.Sprintf("💰 Итого: %d ген.", totalCost)
-			rows = append(rows, tgbotapi.NewInlineKeyboardRow(
-				tgbotapi.NewInlineKeyboardButtonData(costLabel, "video_total:"+current),
+			rows = append(rows, newInlineKeyboardRow(
+				newInlineKeyboardButtonData(costLabel, "video_total:"+current),
 			))
 		}
 	}
@@ -4980,7 +5315,7 @@ func (b *Bot) sendModelMenu(chatID int64, userID int64, category ModelCategory, 
 		text += "\n\n" + desc
 	}
 
-	keyboard := tgbotapi.NewInlineKeyboardMarkup(rows...)
+	keyboard := newInlineKeyboardMarkup(rows...)
 
 	if messageID > 0 {
 		if err := b.editMessageTextOrCaption(chatID, messageID, text, keyboard); err != nil {
@@ -4989,10 +5324,10 @@ func (b *Bot) sendModelMenu(chatID int64, userID int64, category ModelCategory, 
 		return
 	}
 
-	msg := tgbotapi.NewMessage(chatID, text)
+	msg := newMessageConfig(chatID, text)
 	msg.ReplyMarkup = keyboard
-	msg.ParseMode = tgbotapi.ModeHTML
-	if _, err := b.api.Send(msg); err != nil {
+	msg.ParseMode = "HTML"
+	if _, err := b.sendMsg(msg); err != nil {
 		log.Printf("Failed to send model menu: %v", err)
 	}
 }
@@ -5000,11 +5335,55 @@ func (b *Bot) sendModelMenu(chatID int64, userID int64, category ModelCategory, 
 func (b *Bot) sendHelpMessage(chatID int64) {
 	text := `Тех поддержка: @wwqeew52`
 
-	msg := tgbotapi.NewMessage(chatID, text)
-	_, err := b.api.Send(msg)
+	msg := newMessageConfig(chatID, text)
+	_, err := b.sendMsg(msg)
 	if err != nil {
 		log.Printf("Failed to send help message: %v", err)
 	}
+}
+
+// handleEmojiCommand extracts custom_emoji_id from message entities (for admins)
+func (b *Bot) handleEmojiCommand(msg *tgmodels.Message) {
+	chatID := msg.Chat.ID
+	userID := msg.From.ID
+
+	// Check if admin
+	isAdmin, _ := b.userService.IsUserAdmin(userID)
+	if !isAdmin {
+		b.sendText(chatID, "Эта команда доступна только администраторам.")
+		return
+	}
+
+	// Check entities for custom emoji
+	var result strings.Builder
+	result.WriteString("🔍 Custom Emoji IDs:\n\n")
+
+	found := false
+	if msg.Entities != nil {
+		for _, entity := range msg.Entities {
+			if entity.Type == "custom_emoji" && entity.CustomEmojiID != "" {
+				found = true
+				// Extract the emoji text
+				emojiText := ""
+				if entity.Offset >= 0 && entity.Offset+entity.Length <= len(msg.Text) {
+					runes := []rune(msg.Text)
+					if entity.Offset+entity.Length <= len(runes) {
+						emojiText = string(runes[entity.Offset : entity.Offset+entity.Length])
+					}
+				}
+				result.WriteString(fmt.Sprintf("Emoji: %s\nID: %s\n\n", emojiText, entity.CustomEmojiID))
+			}
+		}
+	}
+
+	if !found {
+		result.WriteString("Не найдено custom emoji в сообщении.\n\n")
+		result.WriteString("Отправьте сообщение с кастомными эмодзи (из Premium стикерпаков) после команды /emoji, например:\n")
+		result.WriteString("/emoji 🍌\n\n")
+		result.WriteString("Или ответьте на сообщение с кастомными эмодзи командой /emoji")
+	}
+
+	b.sendText(chatID, result.String())
 }
 
 func (b *Bot) sendAspectRatioMenu(chatID int64, userID int64, messageID int) {
@@ -5014,68 +5393,62 @@ func (b *Bot) sendAspectRatioMenu(chatID int64, userID int64, messageID int) {
 	isVideo := modelOpt.Category == ModelCategoryVideo
 	current := b.getAspectRatioForModel(userID, modelID)
 
-	var rows [][]tgbotapi.InlineKeyboardButton
-	rows = append(rows, []tgbotapi.InlineKeyboardButton{
+	var rows [][]tgmodels.InlineKeyboardButton
+	rows = append(rows, []tgmodels.InlineKeyboardButton{
 		aspectOptionButton(loc.AspectLandscape, "16:9", current),
 		aspectOptionButton(loc.AspectPortrait, "9:16", current),
 	})
 	if isVideo {
 		// Видео: 16:9, 9:16, Auto
-		rows = append(rows, []tgbotapi.InlineKeyboardButton{
+		rows = append(rows, []tgmodels.InlineKeyboardButton{
 			aspectOptionButton(loc.AspectAuto, "auto", current),
 		})
 	} else {
 		// Фото: 16:9, 9:16, 1:1
-		rows = append(rows, []tgbotapi.InlineKeyboardButton{
+		rows = append(rows, []tgmodels.InlineKeyboardButton{
 			aspectOptionButton(loc.AspectSquare, "1:1", current),
 		})
 	}
 	// Кнопка назад ведёт в меню моделей нужной категории
 	backCallback := "models_menu:" + string(modelOpt.Category)
-	rows = append(rows, []tgbotapi.InlineKeyboardButton{
-		tgbotapi.NewInlineKeyboardButtonData(loc.BackBtn, backCallback),
+	rows = append(rows, []tgmodels.InlineKeyboardButton{
+		newBackButton(loc.BackBtn, backCallback),
 	})
 	text := loc.AspectTitle + ": " + current
-	markup := tgbotapi.NewInlineKeyboardMarkup(rows...)
+	markup := newInlineKeyboardMarkup(rows...)
 
 	if previewURL := aspectPreviewURL(current); previewURL != "" {
-		media := tgbotapi.NewInputMediaPhoto(tgbotapi.FileURL(previewURL))
-		media.Caption = text
 		if messageID > 0 {
-			edited := tgbotapi.EditMessageMediaConfig{
-				BaseEdit: tgbotapi.BaseEdit{ChatID: chatID, MessageID: messageID, ReplyMarkup: &markup},
-				Media:    media,
+			// Edit media (photo) with new preview
+			media := &tgmodels.InputMediaPhoto{
+				Media:   previewURL,
+				Caption: text,
 			}
-			if _, err := b.api.Send(edited); err != nil {
+			if err := b.editMessageMedia(chatID, messageID, media, &markup); err != nil {
 				if !strings.Contains(err.Error(), "message is not modified") {
 					log.Printf("Failed to edit aspect ratio media: %v", err)
 				}
 			}
 			return
 		}
-		msg := tgbotapi.NewPhoto(chatID, tgbotapi.FileURL(previewURL))
-		msg.Caption = text
-		msg.ReplyMarkup = markup
-		if _, err := b.api.Send(msg); err != nil {
+		if _, err := b.sendPhoto(chatID, &tgmodels.InputFileString{Data: previewURL}, text, "", markup); err != nil {
 			log.Printf("Failed to send aspect ratio photo: %v", err)
 		}
 		return
 	}
 
 	if messageID > 0 {
-		edited := tgbotapi.NewEditMessageTextAndMarkup(chatID, messageID, text, markup)
-		if _, err := b.api.Send(edited); err != nil {
+		if err := b.editMessageText(chatID, messageID, text, &markup); err != nil {
 			errStr := err.Error()
 			if strings.Contains(errStr, "message is not modified") {
 				return
 			}
 			// Если старое сообщение — фото, удаляем и отправляем новое текстовое
 			if strings.Contains(errStr, "there is no text in the message") {
-				del := tgbotapi.NewDeleteMessage(chatID, messageID)
-				_, _ = b.api.Send(del)
-				newMsg := tgbotapi.NewMessage(chatID, text)
+				_ = b.deleteMessage(chatID, messageID)
+				newMsg := newMessageConfig(chatID, text)
 				newMsg.ReplyMarkup = markup
-				if _, err2 := b.api.Send(newMsg); err2 != nil {
+				if _, err2 := b.sendMsg(newMsg); err2 != nil {
 					log.Printf("Failed to send aspect ratio menu after delete: %v", err2)
 				}
 				return
@@ -5084,18 +5457,18 @@ func (b *Bot) sendAspectRatioMenu(chatID int64, userID int64, messageID int) {
 		}
 		return
 	}
-	msg := tgbotapi.NewMessage(chatID, text)
+	msg := newMessageConfig(chatID, text)
 	msg.ReplyMarkup = markup
-	if _, err := b.api.Send(msg); err != nil {
+	if _, err := b.sendMsg(msg); err != nil {
 		log.Printf("Failed to send aspect ratio menu: %v", err)
 	}
 }
 
-func aspectOptionButton(label, ratio, current string) tgbotapi.InlineKeyboardButton {
+func aspectOptionButton(label, ratio, current string) tgmodels.InlineKeyboardButton {
 	if ratio == current {
 		label = "✅ " + label
 	}
-	return tgbotapi.NewInlineKeyboardButtonData(label, "aspect_set:"+ratio)
+	return newInlineKeyboardButtonData(label, "aspect_set:"+ratio)
 }
 
 func aspectPreviewURL(ratio string) string {
@@ -5111,10 +5484,9 @@ func aspectPreviewURL(ratio string) string {
 	}
 }
 
-func (b *Bot) editMessageTextOrCaption(chatID int64, messageID int, text string, markup tgbotapi.InlineKeyboardMarkup) error {
-	editText := tgbotapi.NewEditMessageTextAndMarkup(chatID, messageID, text, markup)
-	editText.ParseMode = tgbotapi.ModeHTML
-	if _, err := b.api.Send(editText); err == nil {
+func (b *Bot) editMessageTextOrCaption(chatID int64, messageID int, text string, markup tgmodels.InlineKeyboardMarkup) error {
+	// Try editing text first
+	if err := b.editMessageText(chatID, messageID, text, &markup); err == nil {
 		return nil
 	} else {
 		errText := err.Error()
@@ -5122,10 +5494,8 @@ func (b *Bot) editMessageTextOrCaption(chatID int64, messageID int, text string,
 			return nil
 		}
 		if strings.Contains(errText, "there is no text in the message to edit") || strings.Contains(errText, "message to edit not found") {
-			editCaption := tgbotapi.NewEditMessageCaption(chatID, messageID, text)
-			editCaption.ReplyMarkup = &markup
-			editCaption.ParseMode = tgbotapi.ModeHTML
-			if _, errCap := b.api.Send(editCaption); errCap == nil {
+			// Try editing caption instead
+			if errCap := b.editMessageCaption(chatID, messageID, text, &markup); errCap == nil {
 				return nil
 			} else {
 				if strings.Contains(errCap.Error(), "message is not modified") {
@@ -5141,8 +5511,8 @@ func (b *Bot) editMessageTextOrCaption(chatID int64, messageID int, text string,
 func (b *Bot) sendPrivacyMessage(chatID int64, userID int64) {
 	loc := b.getLocalization(userID)
 	text := loc.PrivacyPolicy + " https://telegra.ph/Politika-Konfidencialnosti-01-14-87\n\n" + loc.PrivacyTerms + " https://telegra.ph/Polzovatelskoe-soglashenie-Usloviya-EHkspluatacii-i-Obsluzhivaniya-01-14"
-	msg := tgbotapi.NewMessage(chatID, text)
-	if _, err := b.api.Send(msg); err != nil {
+	msg := newMessageConfig(chatID, text)
+	if _, err := b.sendMsg(msg); err != nil {
 		log.Printf("Failed to send privacy message: %v", err)
 	}
 }
@@ -5150,8 +5520,8 @@ func (b *Bot) sendPrivacyMessage(chatID int64, userID int64) {
 func (b *Bot) sendRulesMessage(chatID int64, userID int64) {
 	loc := b.getLocalization(userID)
 	text := loc.RulesTitle + "\n\n" + loc.RulesContent
-	msg := tgbotapi.NewMessage(chatID, text)
-	if _, err := b.api.Send(msg); err != nil {
+	msg := newMessageConfig(chatID, text)
+	if _, err := b.sendMsg(msg); err != nil {
 		log.Printf("Failed to send rules message: %v", err)
 	}
 }
@@ -5175,15 +5545,15 @@ func (b *Bot) sendUserStats(chatID int64, userID int64) {
 		stats["referrals_count"],
 	)
 
-	keyboard := tgbotapi.NewInlineKeyboardMarkup(
-		tgbotapi.NewInlineKeyboardRow(
-			tgbotapi.NewInlineKeyboardButtonData("◀️ Меню", "menu"),
+	keyboard := newInlineKeyboardMarkup(
+		newInlineKeyboardRow(
+			newInlineKeyboardButtonData("◀️ Меню", "menu"),
 		),
 	)
 
-	msg := tgbotapi.NewMessage(chatID, text)
+	msg := newMessageConfig(chatID, text)
 	msg.ReplyMarkup = keyboard
-	_, err = b.api.Send(msg)
+	_, err = b.sendMsg(msg)
 	if err != nil {
 		log.Printf("Failed to send user stats: %v", err)
 	}
@@ -5207,23 +5577,23 @@ func (b *Bot) sendInsufficientQuotaMessage(chatID int64, category models.QuotaCa
 
 	text := fmt.Sprintf("❌ Недостаточно %s. Нужно %d.\n%s\n\nИспользуйте /buy чтобы докупить генерации.", label, need, friendlyGenerationError(cause))
 
-	keyboard := tgbotapi.NewInlineKeyboardMarkup(
-		tgbotapi.NewInlineKeyboardRow(
-			tgbotapi.NewInlineKeyboardButtonData("💰 Купить генерации", "buy"),
+	keyboard := newInlineKeyboardMarkup(
+		newInlineKeyboardRow(
+			newInlineKeyboardButtonDataStyledWithEmoji("Купить генерации", "buy", "success",EmojiIDBuy),
 		),
 	)
 
-	msg := tgbotapi.NewMessage(chatID, text)
+	msg := newMessageConfig(chatID, text)
 	msg.ReplyMarkup = keyboard
-	if _, err := b.api.Send(msg); err != nil {
+	if _, err := b.sendMsg(msg); err != nil {
 		log.Printf("Failed to send insufficient quota message: %v", err)
 	}
 }
 
 func (b *Bot) sendErrorMessage(chatID int64, errorText string) {
 	text := fmt.Sprintf("❌ Ошибка: %s", errorText)
-	msg := tgbotapi.NewMessage(chatID, text)
-	_, err := b.api.Send(msg)
+	msg := newMessageConfig(chatID, text)
+	_, err := b.sendMsg(msg)
 	if err != nil {
 		log.Printf("Failed to send error message: %v", err)
 	}
@@ -5256,14 +5626,14 @@ func friendlyGenerationError(err error) string {
 
 func (b *Bot) sendUnknownCommand(chatID int64) {
 	text := "❓ Неизвестная команда. Используйте /help для получения списка доступных команд."
-	msg := tgbotapi.NewMessage(chatID, text)
-	_, err := b.api.Send(msg)
+	msg := newMessageConfig(chatID, text)
+	_, err := b.sendMsg(msg)
 	if err != nil {
 		log.Printf("Failed to send unknown command message: %v", err)
 	}
 }
 
-func (b *Bot) handleAdminCommand(msg *tgbotapi.Message) {
+func (b *Bot) handleAdminCommand(msg *tgmodels.Message) {
 	userID := msg.From.ID
 
 	isAdmin, err := b.userService.IsUserAdmin(userID)
@@ -5281,7 +5651,7 @@ func (b *Bot) handleAdminCommand(msg *tgbotapi.Message) {
 	if cmdText == "" {
 		cmdText = strings.TrimSpace(msg.Caption)
 	}
-	cmdName := strings.TrimSpace(msg.Command())
+	cmdName := strings.TrimSpace(getCommand(msg))
 	if cmdName != "" {
 		cmdPrefix := "/" + cmdName
 		if strings.HasPrefix(cmdText, cmdPrefix) {
@@ -5600,21 +5970,21 @@ func (b *Bot) sendAdminStatsMessage(chatID int64, periodLabel string, stats map[
 		text += fmt.Sprintf("\n⏱️ Среднее время: %.1f сек", avgTime)
 	}
 
-	keyboard := tgbotapi.NewInlineKeyboardMarkup(
-		tgbotapi.NewInlineKeyboardRow(
-			tgbotapi.NewInlineKeyboardButtonData("📅 День", "admin:stats:day"),
-			tgbotapi.NewInlineKeyboardButtonData("📆 Неделя", "admin:stats:week"),
-			tgbotapi.NewInlineKeyboardButtonData("🗓️ Месяц", "admin:stats:month"),
+	keyboard := newInlineKeyboardMarkup(
+		newInlineKeyboardRow(
+			newInlineKeyboardButtonData("📅 День", "admin:stats:day"),
+			newInlineKeyboardButtonData("📆 Неделя", "admin:stats:week"),
+			newInlineKeyboardButtonData("🗓️ Месяц", "admin:stats:month"),
 		),
-		tgbotapi.NewInlineKeyboardRow(
-			tgbotapi.NewInlineKeyboardButtonData("♾️ Всё время", "admin:stats:all"),
-			tgbotapi.NewInlineKeyboardButtonData("◀️ Назад", "admin:menu"),
+		newInlineKeyboardRow(
+			newInlineKeyboardButtonData("♾️ Всё время", "admin:stats:all"),
+			newBackButton("Назад", "admin:menu"),
 		),
 	)
 
-	msg := tgbotapi.NewMessage(chatID, text)
+	msg := newMessageConfig(chatID, text)
 	msg.ReplyMarkup = keyboard
-	_, err := b.api.Send(msg)
+	_, err := b.sendMsg(msg)
 	if err != nil {
 		log.Printf("Failed to send admin stats: %v", err)
 	}
@@ -5630,8 +6000,8 @@ func (b *Bot) handleAdminUsers(chatID int64) {
 
 	if len(users) == 0 {
 		text := "👥 Пользователей не найдено"
-		msg := tgbotapi.NewMessage(chatID, text)
-		b.api.Send(msg)
+		msg := newMessageConfig(chatID, text)
+		b.sendMsg(msg)
 		return
 	}
 
@@ -5666,8 +6036,8 @@ func (b *Bot) handleAdminUsers(chatID int64) {
 		)
 	}
 
-	msg := tgbotapi.NewMessage(chatID, text)
-	_, err = b.api.Send(msg)
+	msg := newMessageConfig(chatID, text)
+	_, err = b.sendMsg(msg)
 	if err != nil {
 		log.Printf("Failed to send admin users: %v", err)
 	}
@@ -5721,15 +6091,15 @@ func (b *Bot) handleAdminTopUsers(chatID int64) {
 		text.WriteString("\n")
 	}
 
-	keyboard := tgbotapi.NewInlineKeyboardMarkup(
-		tgbotapi.NewInlineKeyboardRow(
-			tgbotapi.NewInlineKeyboardButtonData("◀️ Назад", "admin:menu"),
+	keyboard := newInlineKeyboardMarkup(
+		newInlineKeyboardRow(
+			newBackButton("Назад", "admin:menu"),
 		),
 	)
 
-	msg := tgbotapi.NewMessage(chatID, text.String())
+	msg := newMessageConfig(chatID, text.String())
 	msg.ReplyMarkup = keyboard
-	if _, err := b.api.Send(msg); err != nil {
+	if _, err := b.sendMsg(msg); err != nil {
 		log.Printf("Failed to send top users: %v", err)
 	}
 }
@@ -5755,8 +6125,8 @@ func (b *Bot) handleAdminHelp(chatID int64) {
 /admin photo_discount                 # Статус скидки
 `
 
-	msg := tgbotapi.NewMessage(chatID, text)
-	_, err := b.api.Send(msg)
+	msg := newMessageConfig(chatID, text)
+	_, err := b.sendMsg(msg)
 	if err != nil {
 		log.Printf("Failed to send admin help: %v", err)
 	}
@@ -5850,13 +6220,13 @@ func (b *Bot) sendGenerationStatus(chatID int64, req *models.GenerationRequest) 
 		caption := truncate(baseText, 900) // подпись к фото
 
 		// Кнопка "Оживить фото" для nano-banana, nano-banana-pro и nano-banana-2
-		var animateMarkup *tgbotapi.InlineKeyboardMarkup
+		var animateMarkup *tgmodels.InlineKeyboardMarkup
 		if req.Model == "google/nano-banana" || req.Model == "google/nano-banana-pro" ||
 			req.Model == "nano-banana" || req.Model == "kie/nano-banana-edit" || req.Model == "kie/nano-banana-pro" ||
 			req.Model == "nano-banana-2" {
-			kb := tgbotapi.NewInlineKeyboardMarkup(
-				tgbotapi.NewInlineKeyboardRow(
-					tgbotapi.NewInlineKeyboardButtonData("🎬 Оживить фото", "animate_photo"),
+			kb := newInlineKeyboardMarkup(
+				newInlineKeyboardRow(
+					newInlineKeyboardButtonData("🎬 Оживить фото", "animate_photo"),
 				),
 			)
 			animateMarkup = &kb
@@ -5870,15 +6240,7 @@ func (b *Bot) sendGenerationStatus(chatID int64, req *models.GenerationRequest) 
 				b.sendText(chatID, truncate(baseText+"\n\n🖼️ Результат недоступен", 3800))
 				return
 			}
-			msg := tgbotapi.NewPhoto(chatID, tgbotapi.FileBytes{
-				Name:  fileName,
-				Bytes: photoBytes,
-			})
-			msg.Caption = caption
-			if animateMarkup != nil {
-				msg.ReplyMarkup = *animateMarkup
-			}
-			if _, err := b.api.Send(msg); err != nil {
+			if _, err := b.sendPhoto(chatID, &tgmodels.InputFileUpload{Filename: fileName, Data: bytes.NewReader(photoBytes)}, caption, "", animateMarkup); err != nil {
 				log.Printf("Failed to send generation photo: %v", err)
 				b.sendText(chatID, truncate(baseText+"\n\n🖼️ Результат недоступен", 3800))
 			}
@@ -5894,17 +6256,10 @@ func (b *Bot) sendGenerationStatus(chatID int64, req *models.GenerationRequest) 
 				}
 			}
 			if isVideo {
-				vidMsg := tgbotapi.NewVideo(chatID, tgbotapi.FileURL(output))
-				vidMsg.Caption = caption
-				if _, err := b.api.Send(vidMsg); err != nil {
+				if _, err := b.sendVideo(chatID, &tgmodels.InputFileString{Data: output}, caption); err != nil {
 					log.Printf("Failed to send generation video by URL: %v", err)
 					if videoBytes, fileName, dlErr := downloadFileToBytes(output, "mp4"); dlErr == nil {
-						docMsg := tgbotapi.NewDocument(chatID, tgbotapi.FileBytes{
-							Name:  fileName,
-							Bytes: videoBytes,
-						})
-						docMsg.Caption = caption
-						if _, sendErr := b.api.Send(docMsg); sendErr != nil {
+						if _, sendErr := b.sendDocument(chatID, &tgmodels.InputFileUpload{Filename: fileName, Data: bytes.NewReader(videoBytes)}, caption); sendErr != nil {
 							log.Printf("Failed to send generation video bytes: %v", sendErr)
 							b.sendText(chatID, truncate(baseText+"\n\n🎬 Видео: "+output, 3800))
 						}
@@ -5916,23 +6271,10 @@ func (b *Bot) sendGenerationStatus(chatID int64, req *models.GenerationRequest) 
 				return
 			}
 
-			msg := tgbotapi.NewPhoto(chatID, tgbotapi.FileURL(output))
-			msg.Caption = caption
-			if animateMarkup != nil {
-				msg.ReplyMarkup = *animateMarkup
-			}
-			if _, err := b.api.Send(msg); err != nil {
+			if _, err := b.sendPhoto(chatID, &tgmodels.InputFileString{Data: output}, caption, "", animateMarkup); err != nil {
 				log.Printf("Failed to send generation photo by URL: %v", err)
 				if photoBytes, fileName, dlErr := downloadFileToBytes(output, "png"); dlErr == nil {
-					photoMsg := tgbotapi.NewPhoto(chatID, tgbotapi.FileBytes{
-						Name:  fileName,
-						Bytes: photoBytes,
-					})
-					photoMsg.Caption = caption
-					if animateMarkup != nil {
-						photoMsg.ReplyMarkup = *animateMarkup
-					}
-					if _, sendErr := b.api.Send(photoMsg); sendErr != nil {
+					if _, sendErr := b.sendPhoto(chatID, &tgmodels.InputFileUpload{Filename: fileName, Data: bytes.NewReader(photoBytes)}, caption, "", animateMarkup); sendErr != nil {
 						log.Printf("Failed to send generation photo bytes: %v", sendErr)
 						b.sendText(chatID, truncate(baseText+"\n\n🖼️ Результат недоступен", 3800))
 					}
@@ -5970,8 +6312,8 @@ func (b *Bot) sendGenerationStatus(chatID int64, req *models.GenerationRequest) 
 
 // sendText отправляет сообщение и логирует ошибку, если она случилась
 func (b *Bot) sendText(chatID int64, text string) {
-	msg := tgbotapi.NewMessage(chatID, text)
-	if _, err := b.api.Send(msg); err != nil {
+	msg := newMessageConfig(chatID, text)
+	if _, err := b.sendMsg(msg); err != nil {
 		log.Printf("Failed to send message: %v", err)
 	}
 }
@@ -5982,8 +6324,8 @@ func (b *Bot) sendLongText(chatID int64, text string) {
 	text = strings.TrimSpace(text)
 	for len(text) > 0 {
 		if len(text) <= maxChunkBytes {
-			msg := tgbotapi.NewMessage(chatID, text)
-			if _, err := b.api.Send(msg); err != nil {
+			msg := newMessageConfig(chatID, text)
+			if _, err := b.sendMsg(msg); err != nil {
 				log.Printf("Failed to send long message chunk: %v", err)
 			}
 			return
@@ -6019,8 +6361,8 @@ func (b *Bot) sendLongText(chatID int64, text string) {
 		if chunk == "" {
 			continue
 		}
-		msg := tgbotapi.NewMessage(chatID, chunk)
-		if _, err := b.api.Send(msg); err != nil {
+		msg := newMessageConfig(chatID, chunk)
+		if _, err := b.sendMsg(msg); err != nil {
 			log.Printf("Failed to send long message chunk: %v", err)
 		}
 	}
@@ -6094,14 +6436,14 @@ func (b *Bot) sendSubscriptionInfo(chatID int64, userID int64) {
 		endStr = subEnd.In(msk).Format("02.01.2006 15:04")
 	}
 	text := fmt.Sprintf("🪄 Подписка: %s\n📅 Действует до: %s", lbl, endStr)
-	kb := tgbotapi.NewInlineKeyboardMarkup(
-		tgbotapi.NewInlineKeyboardRow(
-			tgbotapi.NewInlineKeyboardButtonData("🏠 Меню", "menu"),
+	kb := newInlineKeyboardMarkup(
+		newInlineKeyboardRow(
+			newInlineKeyboardButtonData("🏠 Меню", "menu"),
 		),
 	)
-	msg := tgbotapi.NewMessage(chatID, text)
+	msg := newMessageConfig(chatID, text)
 	msg.ReplyMarkup = kb
-	b.api.Send(msg)
+	b.sendMsg(msg)
 }
 
 // statusInfo возвращает emoji и текст статуса

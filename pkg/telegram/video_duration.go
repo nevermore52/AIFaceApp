@@ -6,7 +6,7 @@ import (
 	"strconv"
 	"strings"
 
-	tgbotapi "github.com/go-telegram-bot-api/telegram-bot-api/v5"
+	tgmodels "github.com/go-telegram/bot/models"
 )
 
 func (b *Bot) getUserVideoDuration(userID int64) string {
@@ -40,28 +40,27 @@ func (b *Bot) setUserVideoDuration(userID int64, duration string) {
 func (b *Bot) sendVideoDurationMenu(chatID int64, userID int64, messageID int) {
 	current := b.getUserVideoDuration(userID)
 
-	var rows [][]tgbotapi.InlineKeyboardButton
-	rows = append(rows, []tgbotapi.InlineKeyboardButton{
+	var rows [][]tgmodels.InlineKeyboardButton
+	rows = append(rows, []tgmodels.InlineKeyboardButton{
 		durationOptionButton("⚡ 5 сек (2 ген.)", "5", current),
 		durationOptionButton("🎬 10 сек (4 ген.)", "10", current),
 	})
-	rows = append(rows, []tgbotapi.InlineKeyboardButton{
+	rows = append(rows, []tgmodels.InlineKeyboardButton{
 		durationOptionButton("🎥 15 сек (6 ген.)", "15", current),
 	})
 
 	backCallback := "models_menu:video"
-	rows = append(rows, []tgbotapi.InlineKeyboardButton{
-		tgbotapi.NewInlineKeyboardButtonData("◀️ Назад", backCallback),
+	rows = append(rows, []tgmodels.InlineKeyboardButton{
+		newInlineKeyboardButtonData("◀️ Назад", backCallback),
 	})
 
 	costMap := map[string]int{"5": 2, "10": 4, "15": 6}
 	cost := costMap[current]
 	text := fmt.Sprintf("⏱️ Длительность видео: %s сек\n💰 Стоимость: %d генераций", current, cost)
-	markup := tgbotapi.NewInlineKeyboardMarkup(rows...)
+	markup := newInlineKeyboardMarkup(rows...)
 
 	if messageID > 0 {
-		edited := tgbotapi.NewEditMessageTextAndMarkup(chatID, messageID, text, markup)
-		if _, err := b.api.Send(edited); err != nil {
+		if err := b.editMessageText(chatID, messageID, text, &markup); err != nil {
 			errStr := err.Error()
 			if strings.Contains(errStr, "message is not modified") {
 				return
@@ -70,18 +69,18 @@ func (b *Bot) sendVideoDurationMenu(chatID int64, userID int64, messageID int) {
 		}
 		return
 	}
-	msg := tgbotapi.NewMessage(chatID, text)
+	msg := newMessageConfig(chatID, text)
 	msg.ReplyMarkup = markup
-	if _, err := b.api.Send(msg); err != nil {
+	if _, err := b.sendMsg(msg); err != nil {
 		log.Printf("Failed to send video duration menu: %v", err)
 	}
 }
 
-func durationOptionButton(label, duration, current string) tgbotapi.InlineKeyboardButton {
+func durationOptionButton(label, duration, current string) tgmodels.InlineKeyboardButton {
 	if duration == current {
 		label = "✅ " + label
 	}
-	return tgbotapi.NewInlineKeyboardButtonData(label, "duration_set:"+duration)
+	return newInlineKeyboardButtonData(label, "duration_set:"+duration)
 }
 
 func (b *Bot) sendVideoDurationMenuKling(chatID int64, userID int64, messageID int) {
@@ -91,15 +90,15 @@ func (b *Bot) sendVideoDurationMenuKling(chatID int64, userID int64, messageID i
 		current = "5"
 	}
 
-	var rows [][]tgbotapi.InlineKeyboardButton
-	rows = append(rows, []tgbotapi.InlineKeyboardButton{
+	var rows [][]tgmodels.InlineKeyboardButton
+	rows = append(rows, []tgmodels.InlineKeyboardButton{
 		durationOptionButtonKling("⚡ 5 сек (1 ген.)", "5", current),
 		durationOptionButtonKling("🎬 10 сек (2 ген.)", "10", current),
 	})
 
 	backCallback := "models_menu:video"
-	rows = append(rows, []tgbotapi.InlineKeyboardButton{
-		tgbotapi.NewInlineKeyboardButtonData("◀️ Назад", backCallback),
+	rows = append(rows, []tgmodels.InlineKeyboardButton{
+		newInlineKeyboardButtonData("◀️ Назад", backCallback),
 	})
 
 	// Kling: 5s = 1 gen, 10s = 2 gen
@@ -115,11 +114,10 @@ func (b *Bot) sendVideoDurationMenuKling(chatID int64, userID int64, messageID i
 		soundNote = " (со звуком x2)"
 	}
 	text := fmt.Sprintf("⏱️ Длительность видео: %s сек\n💰 Стоимость: %d генераций%s", current, cost, soundNote)
-	markup := tgbotapi.NewInlineKeyboardMarkup(rows...)
+	markup := newInlineKeyboardMarkup(rows...)
 
 	if messageID > 0 {
-		edited := tgbotapi.NewEditMessageTextAndMarkup(chatID, messageID, text, markup)
-		if _, err := b.api.Send(edited); err != nil {
+		if err := b.editMessageText(chatID, messageID, text, &markup); err != nil {
 			errStr := err.Error()
 			if strings.Contains(errStr, "message is not modified") {
 				return
@@ -128,18 +126,18 @@ func (b *Bot) sendVideoDurationMenuKling(chatID int64, userID int64, messageID i
 		}
 		return
 	}
-	msg := tgbotapi.NewMessage(chatID, text)
+	msg := newMessageConfig(chatID, text)
 	msg.ReplyMarkup = markup
-	if _, err := b.api.Send(msg); err != nil {
+	if _, err := b.sendMsg(msg); err != nil {
 		log.Printf("Failed to send video duration menu kling: %v", err)
 	}
 }
 
-func durationOptionButtonKling(label, duration, current string) tgbotapi.InlineKeyboardButton {
+func durationOptionButtonKling(label, duration, current string) tgmodels.InlineKeyboardButton {
 	if duration == current {
 		label = "✅ " + label
 	}
-	return tgbotapi.NewInlineKeyboardButtonData(label, "duration_set:"+duration)
+	return newInlineKeyboardButtonData(label, "duration_set:"+duration)
 }
 
 func (b *Bot) getVideoDurationCost(userID int64) int {
@@ -216,23 +214,22 @@ func (b *Bot) setUserVideoResolution(userID int64, resolution string) {
 func (b *Bot) sendVideoResolutionMenu(chatID int64, userID int64, messageID int) {
 	current := b.getUserVideoResolution(userID)
 
-	var rows [][]tgbotapi.InlineKeyboardButton
-	rows = append(rows, []tgbotapi.InlineKeyboardButton{
+	var rows [][]tgmodels.InlineKeyboardButton
+	rows = append(rows, []tgmodels.InlineKeyboardButton{
 		resolutionOptionButton("📺 720p", "720p", current),
 		resolutionOptionButton("🎬 1080p", "1080p", current),
 	})
 
 	backCallback := "models_menu:video"
-	rows = append(rows, []tgbotapi.InlineKeyboardButton{
-		tgbotapi.NewInlineKeyboardButtonData("◀️ Назад", backCallback),
+	rows = append(rows, []tgmodels.InlineKeyboardButton{
+		newInlineKeyboardButtonData("◀️ Назад", backCallback),
 	})
 
 	text := fmt.Sprintf("📺 Разрешение видео: %s", current)
-	markup := tgbotapi.NewInlineKeyboardMarkup(rows...)
+	markup := newInlineKeyboardMarkup(rows...)
 
 	if messageID > 0 {
-		edited := tgbotapi.NewEditMessageTextAndMarkup(chatID, messageID, text, markup)
-		if _, err := b.api.Send(edited); err != nil {
+		if err := b.editMessageText(chatID, messageID, text, &markup); err != nil {
 			errStr := err.Error()
 			if strings.Contains(errStr, "message is not modified") {
 				return
@@ -241,18 +238,18 @@ func (b *Bot) sendVideoResolutionMenu(chatID int64, userID int64, messageID int)
 		}
 		return
 	}
-	msg := tgbotapi.NewMessage(chatID, text)
+	msg := newMessageConfig(chatID, text)
 	msg.ReplyMarkup = markup
-	if _, err := b.api.Send(msg); err != nil {
+	if _, err := b.sendMsg(msg); err != nil {
 		log.Printf("Failed to send video resolution menu: %v", err)
 	}
 }
 
-func resolutionOptionButton(label, resolution, current string) tgbotapi.InlineKeyboardButton {
+func resolutionOptionButton(label, resolution, current string) tgmodels.InlineKeyboardButton {
 	if resolution == current {
 		label = "✅ " + label
 	}
-	return tgbotapi.NewInlineKeyboardButtonData(label, "resolution_set:"+resolution)
+	return newInlineKeyboardButtonData(label, "resolution_set:"+resolution)
 }
 
 func (b *Bot) getUserVideoSound(userID int64) string {
@@ -286,15 +283,15 @@ func (b *Bot) setUserVideoSound(userID int64, sound string) {
 func (b *Bot) sendVideoSoundMenu(chatID int64, userID int64, messageID int) {
 	current := b.getUserVideoSound(userID)
 
-	var rows [][]tgbotapi.InlineKeyboardButton
-	rows = append(rows, []tgbotapi.InlineKeyboardButton{
+	var rows [][]tgmodels.InlineKeyboardButton
+	rows = append(rows, []tgmodels.InlineKeyboardButton{
 		soundOptionButton("🔊 Со звуком", "true", current),
 		soundOptionButton("🔇 Без звука", "false", current),
 	})
 
 	backCallback := "models_menu:video"
-	rows = append(rows, []tgbotapi.InlineKeyboardButton{
-		tgbotapi.NewInlineKeyboardButtonData("◀️ Назад", backCallback),
+	rows = append(rows, []tgmodels.InlineKeyboardButton{
+		newInlineKeyboardButtonData("◀️ Назад", backCallback),
 	})
 
 	soundLabel := "Без звука"
@@ -302,11 +299,10 @@ func (b *Bot) sendVideoSoundMenu(chatID int64, userID int64, messageID int) {
 		soundLabel = "Со звуком"
 	}
 	text := fmt.Sprintf("🔊 Звук в видео: %s", soundLabel)
-	markup := tgbotapi.NewInlineKeyboardMarkup(rows...)
+	markup := newInlineKeyboardMarkup(rows...)
 
 	if messageID > 0 {
-		edited := tgbotapi.NewEditMessageTextAndMarkup(chatID, messageID, text, markup)
-		if _, err := b.api.Send(edited); err != nil {
+		if err := b.editMessageText(chatID, messageID, text, &markup); err != nil {
 			errStr := err.Error()
 			if strings.Contains(errStr, "message is not modified") {
 				return
@@ -315,18 +311,18 @@ func (b *Bot) sendVideoSoundMenu(chatID int64, userID int64, messageID int) {
 		}
 		return
 	}
-	msg := tgbotapi.NewMessage(chatID, text)
+	msg := newMessageConfig(chatID, text)
 	msg.ReplyMarkup = markup
-	if _, err := b.api.Send(msg); err != nil {
+	if _, err := b.sendMsg(msg); err != nil {
 		log.Printf("Failed to send video sound menu: %v", err)
 	}
 }
 
-func soundOptionButton(label, sound, current string) tgbotapi.InlineKeyboardButton {
+func soundOptionButton(label, sound, current string) tgmodels.InlineKeyboardButton {
 	if sound == current {
 		label = "✅ " + label
 	}
-	return tgbotapi.NewInlineKeyboardButtonData(label, "sound_set:"+sound)
+	return newInlineKeyboardButtonData(label, "sound_set:"+sound)
 }
 
 // Photo resolution helpers (for nano-banana-pro and nano-banana-2)

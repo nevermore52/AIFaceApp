@@ -6,12 +6,13 @@ import (
 	"sync"
 	"time"
 
-	tgbotapi "github.com/go-telegram-bot-api/telegram-bot-api/v5"
+	tgbot "github.com/go-telegram/bot"
+	tgmodels "github.com/go-telegram/bot/models"
 )
 
 type broadcastAlbumBuffer struct {
 	chatID  int64
-	photos  []tgbotapi.FileID
+	photos  []string
 	caption string
 	timer   *time.Timer
 	mu      sync.Mutex
@@ -22,7 +23,7 @@ var (
 	broadcastAlbumMu      sync.Mutex
 )
 
-func (b *Bot) handleAdminBroadcastAlbum(msg *tgbotapi.Message) {
+func (b *Bot) handleAdminBroadcastAlbum(msg *tgmodels.Message) {
 	mediaID := msg.MediaGroupID
 	if mediaID == "" {
 		return
@@ -33,7 +34,7 @@ func (b *Bot) handleAdminBroadcastAlbum(msg *tgbotapi.Message) {
 	if buf == nil {
 		buf = &broadcastAlbumBuffer{
 			chatID:  msg.Chat.ID,
-			photos:  []tgbotapi.FileID{},
+			photos:  []string{},
 			caption: "",
 		}
 		broadcastAlbumBuffers[mediaID] = buf
@@ -45,7 +46,7 @@ func (b *Bot) handleAdminBroadcastAlbum(msg *tgbotapi.Message) {
 
 	if msg.Photo != nil && len(msg.Photo) > 0 {
 		photo := msg.Photo[len(msg.Photo)-1]
-		buf.photos = append(buf.photos, tgbotapi.FileID(photo.FileID))
+		buf.photos = append(buf.photos, photo.FileID)
 	}
 
 	if msg.Caption != "" {
@@ -131,18 +132,23 @@ func (b *Bot) processBroadcastAlbum(mediaID string) {
 			go func() {
 				defer wg.Done()
 				for userID := range jobs {
-					var mediaGroup []interface{}
+					var mediaGroup []tgmodels.InputMedia
 					for i, photoID := range photos {
-						media := tgbotapi.NewInputMediaPhoto(photoID)
+						media := &tgmodels.InputMediaPhoto{
+							Media: photoID,
+						}
 						if i == 0 && caption != "" {
 							media.Caption = convertBroadcastMarkupToHTML(caption)
-							media.ParseMode = tgbotapi.ModeHTML
+							media.ParseMode = tgmodels.ParseModeHTML
 						}
 						mediaGroup = append(mediaGroup, media)
 					}
 
-					config := tgbotapi.NewMediaGroup(userID, mediaGroup)
-					if _, err := b.api.Send(config); err != nil {
+					_, err := b.api.SendMediaGroup(b.ctx, &tgbot.SendMediaGroupParams{
+						ChatID: userID,
+						Media:  mediaGroup,
+					})
+					if err != nil {
 						log.Printf("broadcast album send to %d failed: %v", userID, err)
 						results <- false
 					} else {

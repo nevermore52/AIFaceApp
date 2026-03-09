@@ -4,7 +4,8 @@ import (
 	"fmt"
 	"log"
 
-	tgbotapi "github.com/go-telegram-bot-api/telegram-bot-api/v5"
+	tgbot "github.com/go-telegram/bot"
+	tgmodels "github.com/go-telegram/bot/models"
 )
 
 // sendKlingAnimateMenu отправляет меню с фильтрами Kling 2.6 для оживления фото
@@ -22,16 +23,16 @@ func (b *Bot) sendKlingAnimateMenu(chatID int64, userID int64, messageID int) {
 		b.setUserVideoSound(userID, "false")
 	}
 
-	var rows [][]tgbotapi.InlineKeyboardButton
+	var rows [][]tgmodels.InlineKeyboardButton
 
 	// Duration buttons
-	rows = append(rows, []tgbotapi.InlineKeyboardButton{
+	rows = append(rows, []tgmodels.InlineKeyboardButton{
 		klingAnimateDurationButton("⚡ 5 сек", "5", duration),
 		klingAnimateDurationButton("🎬 10 сек", "10", duration),
 	})
 
 	// Sound buttons
-	rows = append(rows, []tgbotapi.InlineKeyboardButton{
+	rows = append(rows, []tgmodels.InlineKeyboardButton{
 		klingAnimateSoundButton("🔊 Со звуком", "true", sound),
 		klingAnimateSoundButton("🔇 Без звука", "false", sound),
 	})
@@ -41,12 +42,12 @@ func (b *Bot) sendKlingAnimateMenu(chatID int64, userID int64, messageID int) {
 
 	// Animate button with total cost
 	animateLabel := fmt.Sprintf("💰 Оживить (%d ген.)", totalCost)
-	rows = append(rows, []tgbotapi.InlineKeyboardButton{
-		tgbotapi.NewInlineKeyboardButtonData(animateLabel, "kling_animate_start"),
+	rows = append(rows, []tgmodels.InlineKeyboardButton{
+		newInlineKeyboardButtonData(animateLabel, "kling_animate_start"),
 	})
 
 	text := "🎬 Настройки оживления фото (Kling 2.6)\n\nВыберите параметры:"
-	markup := tgbotapi.NewInlineKeyboardMarkup(rows...)
+	markup := newInlineKeyboardMarkup(rows...)
 
 	if messageID > 0 {
 		// Use editMessageTextOrCaption to handle both text and photo messages
@@ -56,43 +57,44 @@ func (b *Bot) sendKlingAnimateMenu(chatID int64, userID int64, messageID int) {
 		return
 	}
 
-	msg := tgbotapi.NewMessage(chatID, text)
+	msg := newMessageConfig(chatID, text)
 	msg.ReplyMarkup = markup
-	if _, err := b.api.Send(msg); err != nil {
+	if _, err := b.sendMsg(msg); err != nil {
 		log.Printf("Failed to send kling animate menu: %v", err)
 	}
 }
 
-func klingAnimateDurationButton(label, duration, current string) tgbotapi.InlineKeyboardButton {
+func klingAnimateDurationButton(label, duration, current string) tgmodels.InlineKeyboardButton {
 	if duration == current {
 		label = "✅ " + label
 	}
-	return tgbotapi.NewInlineKeyboardButtonData(label, "kling_animate_duration:"+duration)
+	return newInlineKeyboardButtonData(label, "kling_animate_duration:"+duration)
 }
 
-func klingAnimateSoundButton(label, sound, current string) tgbotapi.InlineKeyboardButton {
+func klingAnimateSoundButton(label, sound, current string) tgmodels.InlineKeyboardButton {
 	if sound == current {
 		label = "✅ " + label
 	}
-	return tgbotapi.NewInlineKeyboardButtonData(label, "kling_animate_sound:"+sound)
+	return newInlineKeyboardButtonData(label, "kling_animate_sound:"+sound)
 }
 
 // handleKlingAnimateStart обрабатывает нажатие кнопки "Оживить" в меню Kling 2.6
-func (b *Bot) handleKlingAnimateStart(chatID int64, userID int64, callback *tgbotapi.CallbackQuery) {
-	if callback.Message == nil || callback.Message.Photo == nil || len(callback.Message.Photo) == 0 {
+func (b *Bot) handleKlingAnimateStart(chatID int64, userID int64, callback *tgmodels.CallbackQuery) {
+	cbMsg := getCallbackMessage(callback)
+	if cbMsg == nil || cbMsg.Photo == nil || len(cbMsg.Photo) == 0 {
 		b.sendErrorMessage(chatID, "Не удалось найти фото в сообщении.")
 		return
 	}
 
 	// Берём самое большое фото из сообщения
-	photo := callback.Message.Photo[len(callback.Message.Photo)-1]
-	file, err := b.api.GetFile(tgbotapi.FileConfig{FileID: photo.FileID})
+	photo := cbMsg.Photo[len(cbMsg.Photo)-1]
+	file, err := b.api.GetFile(b.ctx, &tgbot.GetFileParams{FileID: photo.FileID})
 	if err != nil {
 		log.Printf("kling_animate_start: failed to get file: %v", err)
 		b.sendErrorMessage(chatID, "Не удалось получить фото для оживления.")
 		return
 	}
-	photoURL := file.Link(b.cfg.TelegramToken)
+	photoURL := b.getFileURL(file)
 
 	klingOpt, ok := findModelOption("kling-2.6/image-to-video")
 	if !ok {
