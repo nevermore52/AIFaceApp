@@ -6200,7 +6200,7 @@ func (b *Bot) sendGenerationStatus(chatID int64, req *models.GenerationRequest) 
 	}
 	baseText := fmt.Sprintf(`%s Статус генерации:
 
-🤖 Модель: %s
+<tg-emoji emoji-id=\"5271912827869737544\">📸</tg-emoji> Модель: %s
 🔄 Статус: %s
 %s`,
 		statusEmoji,
@@ -6454,7 +6454,7 @@ func (b *Bot) statusInfo(status string) (string, string) {
 	case "processing":
 		return "🔄", "Генерируется"
 	case "completed":
-		return "✅", "Завершено"
+		return "<tg-emoji emoji-id=\"5206607081334906820\">✔️</tg-emoji>", "Завершено"
 	case "failed":
 		return "❌", "Ошибка"
 	default:
