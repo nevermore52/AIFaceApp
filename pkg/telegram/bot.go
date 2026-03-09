@@ -6233,7 +6233,7 @@ func (b *Bot) sendGenerationStatus(chatID int64, req *models.GenerationRequest) 
 				b.sendText(chatID, truncate(baseText+"\n\n🖼️ Результат недоступен", 3800))
 				return
 			}
-			if _, err := b.sendPhoto(chatID, &tgmodels.InputFileUpload{Filename: fileName, Data: bytes.NewReader(photoBytes)}, caption, "", animateMarkup); err != nil {
+			if _, err := b.sendPhoto(chatID, &tgmodels.InputFileUpload{Filename: fileName, Data: bytes.NewReader(photoBytes)}, caption, "HTML", animateMarkup); err != nil {
 				log.Printf("Failed to send generation photo: %v", err)
 				b.sendText(chatID, truncate(baseText+"\n\n🖼️ Результат недоступен", 3800))
 			}
@@ -6264,10 +6264,10 @@ func (b *Bot) sendGenerationStatus(chatID int64, req *models.GenerationRequest) 
 				return
 			}
 
-			if _, err := b.sendPhoto(chatID, &tgmodels.InputFileString{Data: output}, caption, "", animateMarkup); err != nil {
+			if _, err := b.sendPhoto(chatID, &tgmodels.InputFileString{Data: output}, caption, "HTML", animateMarkup); err != nil {
 				log.Printf("Failed to send generation photo by URL: %v", err)
 				if photoBytes, fileName, dlErr := downloadFileToBytes(output, "png"); dlErr == nil {
-					if _, sendErr := b.sendPhoto(chatID, &tgmodels.InputFileUpload{Filename: fileName, Data: bytes.NewReader(photoBytes)}, caption, "", animateMarkup); sendErr != nil {
+					if _, sendErr := b.sendPhoto(chatID, &tgmodels.InputFileUpload{Filename: fileName, Data: bytes.NewReader(photoBytes)}, caption, "HTML", animateMarkup); sendErr != nil {
 						log.Printf("Failed to send generation photo bytes: %v", sendErr)
 						b.sendText(chatID, truncate(baseText+"\n\n🖼️ Результат недоступен", 3800))
 					}
