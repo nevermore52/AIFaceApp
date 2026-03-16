@@ -340,9 +340,12 @@ type PhotoDiscount struct {
 
 // SetPhotoDiscount sets a temporary discount for photo category
 func (c *Client) SetPhotoDiscount(percent int, endTime time.Time) error {
+	// Convert to MSK timezone for consistent storage
+	msk := time.FixedZone("MSK", 3*3600)
+	endTimeMSK := endTime.In(msk)
 	discount := PhotoDiscount{
 		Percent: percent,
-		EndTime: endTime.Unix(),
+		EndTime: endTimeMSK.Unix(),
 	}
 	data, err := json.Marshal(discount)
 	if err != nil {
@@ -368,10 +371,13 @@ func (c *Client) GetPhotoDiscount() (*PhotoDiscount, error) {
 	if err := json.Unmarshal([]byte(data), &discount); err != nil {
 		return nil, err
 	}
-	// Check if discount is still active
-	if time.Now().Unix() >= discount.EndTime {
+	// Check if discount is still active (using MSK timezone +3)
+	msk := time.FixedZone("MSK", 3*3600)
+	now := time.Now().In(msk).Unix()
+	if now >= discount.EndTime {
 		// Clean up expired key to prevent stale data
 		_ = c.rdb.Del(c.ctx, "global:photo_discount").Err()
+		fmt.Printf("[DISCOUNT] Expired: now=%d endTime=%d diff=%d sec\n", now, discount.EndTime, now-discount.EndTime)
 		return nil, nil
 	}
 	return &discount, nil

@@ -5757,9 +5757,9 @@ func (b *Bot) handleAdminCommand(msg *tgmodels.Message) {
 	case "photo_discount":
 		b.handleAdminPhotoDiscountStatus(msg.Chat.ID)
 	case "photo_discount_set":
-		// Usage: /admin photo_discount_set <percent> <duration_seconds>
+		// Usage: /admin photo_discount_set <percent> <hours>
 		if len(parts) < 3 {
-			b.sendErrorMessage(msg.Chat.ID, "Использование: /admin photo_discount_set <percent> <duration_seconds>\nПример: /admin photo_discount_set 50 3600 (50% скидка на 1 час)")
+			b.sendErrorMessage(msg.Chat.ID, "Использование: /admin photo_discount_set <percent> <hours>\nПример: /admin photo_discount_set 50 24 (50% скидка на 24 часа)")
 			return
 		}
 		percent, err := strconv.Atoi(parts[1])
@@ -5767,17 +5767,18 @@ func (b *Bot) handleAdminCommand(msg *tgmodels.Message) {
 			b.sendErrorMessage(msg.Chat.ID, "Процент скидки должен быть от 1 до 99")
 			return
 		}
-		durationSec, err := strconv.ParseInt(parts[2], 10, 64)
-		if err != nil || durationSec <= 0 {
-			b.sendErrorMessage(msg.Chat.ID, "Длительность должна быть положительным числом секунд")
+		durationHours, err := strconv.ParseInt(parts[2], 10, 64)
+		if err != nil || durationHours <= 0 {
+			b.sendErrorMessage(msg.Chat.ID, "Длительность должна быть положительным числом часов")
 			return
 		}
-		endTime := time.Now().Add(time.Duration(durationSec) * time.Second)
+		endTime := time.Now().Add(time.Duration(durationHours) * time.Hour)
 		if err := b.redisClient.SetPhotoDiscount(percent, endTime); err != nil {
 			b.sendErrorMessage(msg.Chat.ID, fmt.Sprintf("Ошибка установки скидки: %v", err))
 			return
 		}
-		b.sendText(msg.Chat.ID, fmt.Sprintf("✅ Скидка %d%% на фото установлена до %s", percent, endTime.Format("02.01.2006 15:04:05")))
+		msk := time.FixedZone("MSK", 3*3600)
+		b.sendText(msg.Chat.ID, fmt.Sprintf("✅ Скидка %d%% на фото установлена на %d ч. (до %s МСК)", percent, durationHours, endTime.In(msk).Format("02.01.2006 15:04:05")))
 	case "photo_discount_remove":
 		if err := b.redisClient.RemovePhotoDiscount(); err != nil {
 			b.sendErrorMessage(msg.Chat.ID, fmt.Sprintf("Ошибка удаления скидки: %v", err))
@@ -5803,10 +5804,11 @@ func (b *Bot) handleAdminPhotoDiscountStatus(chatID int64) {
 	}
 	endTime := time.Unix(discount.EndTime, 0)
 	remaining := time.Until(endTime)
-	b.sendText(chatID, fmt.Sprintf("📊 Скидка на фото: %d%%\n⏱️ До окончания: %s\n📅 Окончание: %s",
+	msk := time.FixedZone("MSK", 3*3600)
+	b.sendText(chatID, fmt.Sprintf("📊 Скидка на фото: %d%%\n⏱️ До окончания: %s\n📅 Окончание: %s МСК",
 		discount.Percent,
 		formatDuration(remaining),
-		endTime.Format("02.01.2006 15:04:05")))
+		endTime.In(msk).Format("02.01.2006 15:04:05")))
 }
 
 func formatDuration(d time.Duration) string {
