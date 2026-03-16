@@ -4045,7 +4045,12 @@ func (b *Bot) handleCallback(callback *tgmodels.CallbackQuery) {
 			b.sendModelMenu(chatID, userID, ModelCategoryPhoto, getCallbackMessageID(callback))
 		} else if strings.HasPrefix(data, "models_menu:") {
 			cat := ModelCategory(strings.TrimPrefix(data, "models_menu:"))
-			b.sendModelMenu(chatID, userID, cat, getCallbackMessageID(callback))
+			msgID := getCallbackMessageID(callback)
+			cbMsg := getCallbackMessage(callback)
+			if cbMsg != nil && cbMsg.Photo != nil && len(cbMsg.Photo) > 0 {
+				msgID = 0 // не редактируем фото-превью, отправляем новое меню без картинки
+			}
+			b.sendModelMenu(chatID, userID, cat, msgID)
 		} else if strings.HasPrefix(data, "video_total:") {
 			modelID := strings.TrimPrefix(data, "video_total:")
 			b.sendVideoTotalInfo(chatID, userID, modelID)
