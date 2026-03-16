@@ -1762,9 +1762,7 @@ func (b *Bot) flushAlbum(mediaGroupID string) {
 
 	// Ограничения по количеству фото в зависимости от модели
 	maxPhotos := 1
-	if modelOpt.ID == "google/nano-banana" {
-		maxPhotos = 2
-	} else if modelOpt.ID == "google/nano-banana-pro" || modelOpt.ID == "nano-banana-2" || modelOpt.ID == "seedream/4.5-edit" {
+	if modelOpt.ID == "google/nano-banana-pro" || modelOpt.ID == "nano-banana-2" || modelOpt.ID == "seedream/4.5-edit" {
 		maxPhotos = 4
 	} else if modelOpt.ID == "wan/2-6-image-to-video" {
 		maxPhotos = 4 // wan 2.6 supports up to 4 photos
@@ -3867,15 +3865,15 @@ func (b *Bot) handleCallback(callback *tgmodels.CallbackQuery) {
 			b.sendText(chatID, "Не удалось проверить подписку, попробуйте еще раз")
 			return
 		}
-		if err := b.userService.AddExtraQuota(userID, models.QuotaCategoryImage, 1); err != nil {
+		if err := b.userService.AddExtraQuota(userID, models.QuotaCategoryImage, 2); err != nil {
 			log.Printf("trial grant quota error: %v", err)
-			b.sendErrorMessage(chatID, "Не удалось выдать пробный запрос")
+			b.sendErrorMessage(chatID, "Не удалось выдать пробные запросы")
 			return
 		}
 		if err := b.userService.MarkChannelTrialClaimed(userID); err != nil {
 			log.Printf("trial mark claimed error: %v", err)
 		}
-		b.sendText(chatID, "Пробный запрос успешно выдан")
+		b.sendText(chatID, "Спасибо за подписку! \n2 пробных запроса успешно выдано)")
 		b.sendMainMenu(chatID, userID)
 	case "settings":
 		b.sendSettingsMenu(chatID, userID)
@@ -4423,7 +4421,7 @@ func (b *Bot) handleTextMessage(msg *tgmodels.Message) {
 		if !b.ensureCategoryEnabled(msg.Chat.ID, ModelCategoryPhoto) {
 			return
 		}
-		b.setUserModel(msg.From.ID, "google/nano-banana")
+		b.setUserModel(msg.From.ID, "nano-banana-2")
 		b.sendModelMenu(msg.Chat.ID, msg.From.ID, ModelCategoryPhoto, 0)
 		return
 	case loc.MenuGenMusicBtn, ruLoc.MenuGenMusicBtn, enLoc.MenuGenMusicBtn:
@@ -5142,10 +5140,12 @@ func (b *Bot) sendModelMenu(chatID int64, userID int64, category ModelCategory, 
 			label = "✔️ " + label
 		}
 		// Use custom emoji if available
+		// Use danger style for google/nano-banana, success for others
+		buttonStyle := ButtonStyleSuccess
 		if m.EmojiID != "" {
-			row = append(row, newInlineKeyboardButtonDataStyledWithEmoji(label, "model_set:"+m.ID, ButtonStyleSuccess, m.EmojiID))
+			row = append(row, newInlineKeyboardButtonDataStyledWithEmoji(label, "model_set:"+m.ID, buttonStyle, m.EmojiID))
 		} else {
-			row = append(row, newInlineKeyboardButtonDataStyled(label, "model_set:"+m.ID, ButtonStyleSuccess))
+			row = append(row, newInlineKeyboardButtonDataStyled(label, "model_set:"+m.ID, buttonStyle))
 		}
 		if len(row) == 2 || i == len(options)-1 {
 			rows = append(rows, row)
@@ -5179,7 +5179,7 @@ func (b *Bot) sendModelMenu(chatID int64, userID int64, category ModelCategory, 
 		text += "\n<b>Расход:</b> " + fmt.Sprintf("%d %s", cost, requestWord(cost, loc))
 	}
 	if current == "google/nano-banana" {
-		text += "\nМаксимум фото: 2\n"
+		text += "\nМаксимум фото: 1\n"
 	} else if current == "google/nano-banana-pro" || current == "seedream/4.5-edit" || current == "nano-banana-2" {
 		text += "\nМаксимум фото: 4\n"
 	}

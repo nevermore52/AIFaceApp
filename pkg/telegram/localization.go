@@ -356,8 +356,8 @@ var locRU = Localization{
 	CmdPrivacy:          "Политика конфиденциальности",
 	CmdSettings:         "Настройки",
 	CmdAdmin:            "Админ",
-	MenuTitle:           "🍌  Ваш айди: %d\n⭐  Тип подписки: %s\n🧠  Текущая ИИ модель: %s %s %s",
-	MenuMainHTML:        "<tg-emoji emoji-id=\"5188481279963715781\">🍌</tg-emoji>  <b>Ваш айди:</b> %s\n<tg-emoji emoji-id=\"5368324170671202286\">⭐</tg-emoji>  <b>Тип подписки:</b> %s\n<tg-emoji emoji-id=\"5271912827869737544\">🧠</tg-emoji>  <b>Текущая ИИ модель:</b> %s %s",
+	MenuTitle:           "🍌  Ваш айди: %d\n⭐  Тип подписки: %s\n🧠  Текущая нейросеть: %s %s %s",
+	MenuMainHTML:        "<tg-emoji emoji-id=\"5188481279963715781\">🍌</tg-emoji>  <b>Ваш айди:</b> %s\n<tg-emoji emoji-id=\"5368324170671202286\">⭐</tg-emoji>  <b>Тип подписки:</b> %s\n<tg-emoji emoji-id=\"5271912827869737544\">🧠</tg-emoji>  <b>Текущая нейросеть:</b> %s %s",
 	MenuYourID:          "Ваш айди: %d",
 	MenuSubscription:    "Тип подписки: %s",
 	MenuCurrentModel:    "Текущая ИИ модель: %s",
@@ -365,7 +365,7 @@ var locRU = Localization{
 	MenuLimitFormat:     "Лимит: %d (%d доп)",
 	MenuBuyBtn:          "Покупка",
 	MenuInviteBtn:       "👥 Пригласить друзей",
-	MenuSelectModelBtn:  "Выбрать модель",
+	MenuSelectModelBtn:  "Выбрать нейросеть",
 	MenuGenPhotoBtn:     "Генерация фото",
 	MenuGenMusicBtn:     "Генерация песни",
 	MenuGenVideoBtn:     "🎥 Генерация видео",
@@ -483,7 +483,7 @@ var locRU = Localization{
 	ChatStyleProOnly:      "Стили общения доступны только с подпиской Pro и выше.",
 
 	ModelsCurrent:          "Текущая",
-	ModelsCurrentLabel:     "<tg-emoji emoji-id=\"5271912827869737544\">🧠</tg-emoji> <b>Текущая модель:</b>",
+	ModelsCurrentLabel:     "<tg-emoji emoji-id=\"5271912827869737544\">🧠</tg-emoji> <b>Текущая нейросеть:</b>",
 	ModelsCategory:         "%s",
 	ModelsSelect:           "",
 	ModelsCost:             "<b>Расход: %d %s</b>",
@@ -509,7 +509,7 @@ var locRU = Localization{
 	AspectAuto:      "Auto",
 
 	// Photo models descriptions
-	ModelNanoBanana:    "Среднее качество. \n<tg-emoji emoji-id=\"5382194935057372936\">⏱</tg-emoji> Среднее время: 20 сек.",
+	ModelNanoBanana:    "Устаревшая нейросеть. \n<tg-emoji emoji-id=\"5382194935057372936\">⏱</tg-emoji> Среднее время: 20 сек. \n<tg-emoji emoji-id=\"5274099962655816924\">❗️</tg-emoji> Данная нейросеть устарела, лучше использовать Nano Banana 2",
 	ModelNanoBananaPro: "Отличное качество. \n<tg-emoji emoji-id=\"5382194935057372936\">⏱</tg-emoji> Среднее время: 1-2 мин.",
 	ModelNanoBanana2:   "Новейшая модель. Поддержка текста без фото. \n<tg-emoji emoji-id=\"5382194935057372936\">⏱</tg-emoji> Среднее время: 30сек-2 мин.",
 	ModelSeedream:      "Хорошо работает с купальниками и другими фото. \n<tg-emoji emoji-id=\"5382194935057372936\">⏱</tg-emoji> Среднее время: 1-2 мин.",
@@ -529,7 +529,7 @@ var locRU = Localization{
 
 	// Generation
 	GenStarted:     "🔄 Генерация запущена",
-	GenModel:       "Модель: %s",
+	GenModel:       "Нейросеть: %s",
 	GenDeducted:    "Списано: %d запрос(ов)",
 	GenWaiting:     "Ожидание до %s",
 	GenReady:       "✅ Готово!",
@@ -614,7 +614,7 @@ var locRU = Localization{
 	SubsDisableBtn:        "Выключить подписки",
 
 	// Common
-	WelcomeText:         "Добро пожаловать! Используйте /menu, чтобы выбрать модель и начать.",
+	WelcomeText:         "Добро пожаловать! Используйте /menu, чтобы выбрать нейросеть и начать.",
 	StartPromoTitle:     "🔥 В данный момент действует скидка %d%% на фото генерации",
 	StartPromoCountdown: "⏳ До конца акции: %dд %dч %dм %dс",
 	BackBtn:             "Назад",
@@ -638,7 +638,7 @@ var locRU = Localization{
 	ErrSetSubscription:           "Не удалось выдать подписку: %v",
 	ErrRemoveSubscription:        "Не удалось убрать подписку: %v",
 	ErrUnknownAdminCommand:       "Неизвестная админ-команда. Используйте /admin help",
-	ErrModelSubscriptionRequired: "Модель доступна только с подпиской Mini или выше",
+	ErrModelSubscriptionRequired: "Данная нейросеть доступна только с подпиской Mini или выше",
 	ErrChatResponse:              "Не удалось ответить: %s",
 	AdminSubSetUsage:             "Использование: /admin sub_set <user_id> <mini|start|pro> <days>",
 	AdminSubRemoveUsage:          "Использование: /admin sub_remove <user_id>",
@@ -651,10 +651,10 @@ var locRU = Localization{
 	AdminStatsProcessing:         "🔄 В процессе: %d",
 	AdminStatsSuccessRate:        "📈 Успешность: %.1f%%",
 	AdminStatsAvgTime:            "⏱️ Среднее время: %.1f сек",
-	ModelSelected:                "Модель выбрана: %s",
+	ModelSelected:                "Нейросеть выбрана: %s",
 	ModelCategory:                "Категория: %s",
 	ModelCost:                    "Стоимость: %d запрос(ов) за 1 %s",
-	ModelsTitle:                  "🤖 Текущая модель: %s\n\nВыберите категорию:",
+	ModelsTitle:                  "🤖 Текущая нейросеть: %s\n\nВыберите категорию:",
 	ModelsNotSelected:            "Не выбрана",
 	SubscribeBtn:                 "Подписаться",
 	SubscribeRequired:            "Чтобы пользоваться ботом, нужно подписаться на @AIFaceApps.\nНажмите \"Подписаться\", затем вернитесь и повторите команду.",
