@@ -264,12 +264,16 @@ func (b *Bot) sendPhoto(chatID int64, photo tgmodels.InputFile, caption string, 
 }
 
 // sendVideo sends a video message
-func (b *Bot) sendVideo(chatID int64, video tgmodels.InputFile, caption string) (*tgmodels.Message, error) {
-	return b.api.SendVideo(b.ctx, &tgbot.SendVideoParams{
+func (b *Bot) sendVideo(chatID int64, video tgmodels.InputFile, caption string, parseMode string) (*tgmodels.Message, error) {
+	params := &tgbot.SendVideoParams{
 		ChatID:  chatID,
 		Video:   video,
 		Caption: caption,
-	})
+	}
+	if parseMode != "" {
+		params.ParseMode = tgmodels.ParseMode(parseMode)
+	}
+	return b.api.SendVideo(b.ctx, params)
 }
 
 // sendAudio sends an audio message
@@ -3629,7 +3633,7 @@ func (b *Bot) sendVideoResult(chatID int64, caption, output string) {
 			return
 		}
 
-		if _, err := b.sendVideo(chatID, &tgmodels.InputFileUpload{Filename: fileName, Data: bytes.NewReader(videoBytes)}, caption); err != nil {
+		if _, err := b.sendVideo(chatID, &tgmodels.InputFileUpload{Filename: fileName, Data: bytes.NewReader(videoBytes)}, caption, ""); err != nil {
 			log.Printf("Failed to send video: %v, trying as document", err)
 			if _, err := b.sendDocument(chatID, &tgmodels.InputFileUpload{Filename: fileName, Data: bytes.NewReader(videoBytes)}, caption); err != nil {
 				log.Printf("Failed to send video as document: %v", err)
@@ -6251,7 +6255,7 @@ func (b *Bot) sendGenerationStatus(chatID int64, req *models.GenerationRequest) 
 				}
 			}
 			if isVideo {
-				if _, err := b.sendVideo(chatID, &tgmodels.InputFileString{Data: output}, caption); err != nil {
+				if _, err := b.sendVideo(chatID, &tgmodels.InputFileString{Data: output}, caption, "HTML"); err != nil {
 					log.Printf("Failed to send generation video by URL: %v", err)
 					if videoBytes, fileName, dlErr := downloadFileToBytes(output, "mp4"); dlErr == nil {
 						if _, sendErr := b.sendDocument(chatID, &tgmodels.InputFileUpload{Filename: fileName, Data: bytes.NewReader(videoBytes)}, caption); sendErr != nil {
