@@ -71,9 +71,9 @@ func (s *PaymentService) CreateExtrasPayment(userID int64, category string, qty 
 		return nil, err
 	}
 
-	// Apply photo discount from Redis for image category
-	if category == "image" && s.redisClient != nil {
-		if photoDiscount, err := s.redisClient.GetPhotoDiscount(); err == nil && photoDiscount != nil && photoDiscount.Percent > 0 {
+	// Apply photo discount from database for image category
+	if category == "image" {
+		if photoDiscount, err := s.userService.GetPhotoDiscount(); err == nil && photoDiscount != nil && photoDiscount.Percent > 0 {
 			price = price * (100 - photoDiscount.Percent) / 100
 		}
 	} else {

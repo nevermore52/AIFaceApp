@@ -4593,10 +4593,7 @@ func (b *Bot) saveMessageToContext(userID int64, message string) {
 }
 
 func (b *Bot) startPromoText(loc *Localization) string {
-	if b.redisClient == nil {
-		return ""
-	}
-	discount, err := b.redisClient.GetPhotoDiscount()
+	discount, err := b.userService.GetPhotoDiscount()
 	if err != nil || discount == nil || discount.Percent <= 0 {
 		return ""
 	}
@@ -5773,14 +5770,14 @@ func (b *Bot) handleAdminCommand(msg *tgmodels.Message) {
 			return
 		}
 		endTime := time.Now().Add(time.Duration(durationHours) * time.Hour)
-		if err := b.redisClient.SetPhotoDiscount(percent, endTime); err != nil {
+		if err := b.userService.SetPhotoDiscount(percent, endTime); err != nil {
 			b.sendErrorMessage(msg.Chat.ID, fmt.Sprintf("Ошибка установки скидки: %v", err))
 			return
 		}
 		msk := time.FixedZone("MSK", 3*3600)
 		b.sendText(msg.Chat.ID, fmt.Sprintf("✅ Скидка %d%% на фото установлена на %d ч. (до %s МСК)", percent, durationHours, endTime.In(msk).Format("02.01.2006 15:04:05")))
 	case "photo_discount_remove":
-		if err := b.redisClient.RemovePhotoDiscount(); err != nil {
+		if err := b.userService.RemovePhotoDiscount(); err != nil {
 			b.sendErrorMessage(msg.Chat.ID, fmt.Sprintf("Ошибка удаления скидки: %v", err))
 			return
 		}
@@ -5794,27 +5791,24 @@ func (b *Bot) handleAdminCommand(msg *tgmodels.Message) {
 
 func (b *Bot) handleAdminPhotoDiscountStatus(chatID int64) {
 	msk := time.FixedZone("MSK", 3*3600)
-	nowUnix := time.Now().Unix()
 	nowMSK := time.Now().In(msk).Format("02.01.2006 15:04:05")
 
-	discount, err := b.redisClient.GetPhotoDiscount()
+	discount, err := b.userService.GetPhotoDiscount()
 	if err != nil {
 		b.sendErrorMessage(chatID, fmt.Sprintf("Ошибка получения скидки: %v", err))
 		return
 	}
 	if discount == nil || discount.Percent <= 0 {
-		b.sendText(chatID, fmt.Sprintf("📊 Скидка на фото: не установлена\n\n🕐 Сервер: %s МСК\n⏱️ Unix: %d", nowMSK, nowUnix))
+		b.sendText(chatID, fmt.Sprintf("📊 Скидка на фото: не установлена\n\n🕐 Сервер: %s МСК", nowMSK))
 		return
 	}
 	endTime := time.Unix(discount.EndTime, 0)
 	remaining := time.Until(endTime)
-	b.sendText(chatID, fmt.Sprintf("📊 Скидка на фото: %d%%\n⏱️ До окончания: %s\n📅 Окончание: %s МСК\n\n🕐 Сервер: %s МСК\n⏱️ Unix now: %d\n⏱️ Unix end: %d",
+	b.sendText(chatID, fmt.Sprintf("📊 Скидка на фото: %d%%\n⏱️ До окончания: %s\n📅 Окончание: %s МСК\n\n🕐 Сервер: %s МСК",
 		discount.Percent,
 		formatDuration(remaining),
 		endTime.In(msk).Format("02.01.2006 15:04:05"),
-		nowMSK,
-		nowUnix,
-		discount.EndTime))
+		nowMSK))
 }
 
 func formatDuration(d time.Duration) string {

@@ -1240,3 +1240,69 @@ func (s *UserService) GetUserStats(telegramID int64) (map[string]any, error) {
 		"completed_generations": completedGenerations,
 	}, nil
 }
+
+// PhotoDiscount represents a photo discount stored in database
+type PhotoDiscount struct {
+	Percent int   `json:"percent"`
+	EndTime int64 `json:"end_time"` // Unix timestamp
+}
+
+// SetPhotoDiscount sets a temporary discount for photo category in database
+func (s *UserService) SetPhotoDiscount(percent int, endTime time.Time) error {
+	if err := s.ensureAppSettings(); err != nil {
+		return err
+	}
+	if time.Until(endTime) <= 0 {
+		return fmt.Errorf("end time must be in the future")
+	}
+	// Store as "percent:unix_timestamp"
+	value := fmt.Sprintf("%d:%d", percent, endTime.Unix())
+	_, err := s.db.Exec(`INSERT INTO app_settings (key, value) VALUES ('photo_discount', $1)
+		ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value`, value)
+	return err
+}
+
+// GetPhotoDiscount returns current photo discount settings if active
+func (s *UserService) GetPhotoDiscount() (*PhotoDiscount, error) {
+	if err := s.ensureAppSettings(); err != nil {
+		return nil, err
+	}
+	var raw string
+	err := s.db.QueryRow(`SELECT value FROM app_settings WHERE key = 'photo_discount'`).Scan(&raw)
+	if err == sql.ErrNoRows {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+	if raw == "" {
+		return nil, nil
+	}
+
+	// Parse "percent:unix_timestamp"
+	var percent int
+	var endTimeUnix int64
+	_, err = fmt.Sscanf(raw, "%d:%d", &percent, &endTimeUnix)
+	if err != nil {
+		return nil, nil
+	}
+
+	// Check if discount is still active
+	now := time.Now().Unix()
+	if now >= endTimeUnix {
+		// Clean up expired discount
+		_, _ = s.db.Exec(`DELETE FROM app_settings WHERE key = 'photo_discount'`)
+		return nil, nil
+	}
+
+	return &PhotoDiscount{
+		Percent: percent,
+		EndTime: endTimeUnix,
+	}, nil
+}
+
+// RemovePhotoDiscount removes the photo discount from database
+func (s *UserService) RemovePhotoDiscount() error {
+	_, err := s.db.Exec(`DELETE FROM app_settings WHERE key = 'photo_discount'`)
+	return err
+}
