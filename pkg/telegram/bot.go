@@ -504,10 +504,7 @@ func (b *Bot) extrasPrice(category string, qty int) (int, bool) {
 }
 
 func (b *Bot) getPhotoDiscountPercent() int {
-	if b.redisClient == nil {
-		return 0
-	}
-	discount, err := b.redisClient.GetPhotoDiscount()
+	discount, err := b.userService.GetPhotoDiscount()
 	if err != nil || discount == nil {
 		return 0
 	}
