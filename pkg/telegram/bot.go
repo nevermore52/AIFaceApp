@@ -5793,22 +5793,28 @@ func (b *Bot) handleAdminCommand(msg *tgmodels.Message) {
 }
 
 func (b *Bot) handleAdminPhotoDiscountStatus(chatID int64) {
+	msk := time.FixedZone("MSK", 3*3600)
+	nowUnix := time.Now().Unix()
+	nowMSK := time.Now().In(msk).Format("02.01.2006 15:04:05")
+
 	discount, err := b.redisClient.GetPhotoDiscount()
 	if err != nil {
 		b.sendErrorMessage(chatID, fmt.Sprintf("Ошибка получения скидки: %v", err))
 		return
 	}
 	if discount == nil || discount.Percent <= 0 {
-		b.sendText(chatID, "📊 Скидка на фото: не установлена")
+		b.sendText(chatID, fmt.Sprintf("📊 Скидка на фото: не установлена\n\n🕐 Сервер: %s МСК\n⏱️ Unix: %d", nowMSK, nowUnix))
 		return
 	}
 	endTime := time.Unix(discount.EndTime, 0)
 	remaining := time.Until(endTime)
-	msk := time.FixedZone("MSK", 3*3600)
-	b.sendText(chatID, fmt.Sprintf("📊 Скидка на фото: %d%%\n⏱️ До окончания: %s\n📅 Окончание: %s МСК",
+	b.sendText(chatID, fmt.Sprintf("📊 Скидка на фото: %d%%\n⏱️ До окончания: %s\n📅 Окончание: %s МСК\n\n🕐 Сервер: %s МСК\n⏱️ Unix now: %d\n⏱️ Unix end: %d",
 		discount.Percent,
 		formatDuration(remaining),
-		endTime.In(msk).Format("02.01.2006 15:04:05")))
+		endTime.In(msk).Format("02.01.2006 15:04:05"),
+		nowMSK,
+		nowUnix,
+		discount.EndTime))
 }
 
 func formatDuration(d time.Duration) string {
