@@ -6307,7 +6307,11 @@ func (b *Bot) sendGenerationStatus(chatID int64, req *models.GenerationRequest) 
 		baseText += fmt.Sprintf("\n\n❌ Ошибка: %s", friendly)
 	}
 
-	b.sendText(chatID, truncate(baseText, 3800))
+	msg := newMessageConfig(chatID, truncate(baseText, 3800))
+	msg.ParseMode = "HTML"
+	if _, err := b.sendMsg(msg); err != nil {
+		log.Printf("Failed to send generation status: %v", err)
+	}
 }
 
 // sendText отправляет сообщение и логирует ошибку, если она случилась
