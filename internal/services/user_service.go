@@ -1306,3 +1306,22 @@ func (s *UserService) RemovePhotoDiscount() error {
 	_, err := s.db.Exec(`DELETE FROM app_settings WHERE key = 'photo_discount'`)
 	return err
 }
+
+// GetUserSelectedModel returns the selected model for a user from database
+func (s *UserService) GetUserSelectedModel(telegramID int64) (string, error) {
+	var model sql.NullString
+	err := s.db.QueryRow(`SELECT selected_model FROM users WHERE telegram_id = $1`, telegramID).Scan(&model)
+	if err != nil {
+		return "", err
+	}
+	if !model.Valid {
+		return "", nil
+	}
+	return model.String, nil
+}
+
+// SetUserSelectedModel sets the selected model for a user in database
+func (s *UserService) SetUserSelectedModel(telegramID int64, model string) error {
+	_, err := s.db.Exec(`UPDATE users SET selected_model = $1 WHERE telegram_id = $2`, model, telegramID)
+	return err
+}

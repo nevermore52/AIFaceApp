@@ -1845,11 +1845,23 @@ func (b *Bot) detectGenerationType(description string) string {
 }
 
 func (b *Bot) getUserModel(userID int64) string {
-	model, err := b.redisClient.GetUserModel(userID)
+	// Сначала пробуем получить из БД (постоянное хранение)
+	model, err := b.userService.GetUserSelectedModel(userID)
+	if err != nil && err.Error() != "sql: no rows in result set" {
+		log.Printf("getUserModel db error: %v", err)
+	}
+	if opt, ok := findModelOption(model); ok {
+		return opt.ID
+	}
+
+	// Фолбек на Redis (для обратной совместимости)
+	model, err = b.redisClient.GetUserModel(userID)
 	if err != nil {
 		log.Printf("getUserModel redis error: %v", err)
 	}
 	if opt, ok := findModelOption(model); ok {
+		// Мигрируем из Redis в БД
+		_ = b.userService.SetUserSelectedModel(userID, opt.ID)
 		return opt.ID
 	}
 
@@ -1881,8 +1893,13 @@ func (b *Bot) setUserModel(userID int64, model string) {
 		log.Printf("setUserModel: unknown model %s", model)
 		return
 	}
+	// Сохраняем в БД (постоянное хранение)
+	if err := b.userService.SetUserSelectedModel(userID, model); err != nil {
+		log.Printf("setUserModel db error: %v", err)
+	}
+	// Также сохраняем в Redis для обратной совместимости
 	if err := b.redisClient.SetUserModel(userID, model); err != nil {
-		log.Printf("setUserModel error: %v", err)
+		log.Printf("setUserModel redis error: %v", err)
 	}
 }
 

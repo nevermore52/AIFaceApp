@@ -167,6 +167,9 @@ func RunMigrations(db *sql.DB) error {
 	ALTER TABLE completed_payments ADD COLUMN IF NOT EXISTS first_name VARCHAR(255) DEFAULT '';
 	ALTER TABLE completed_payments ADD COLUMN IF NOT EXISTS last_name VARCHAR(255) DEFAULT '';`
 
+	selectedModelSQL := `
+	ALTER TABLE users ADD COLUMN IF NOT EXISTS selected_model VARCHAR(100) DEFAULT '';`
+
 	indexesSQL := `
 	CREATE INDEX IF NOT EXISTS idx_users_telegram_id ON users(telegram_id);
 	CREATE INDEX IF NOT EXISTS idx_users_is_admin ON users(is_admin);
@@ -195,6 +198,7 @@ func RunMigrations(db *sql.DB) error {
 		subscriptionSQL,
 		completedPaymentsSQL,
 		completedPaymentsColumnsSQL,
+		selectedModelSQL,
 		indexesSQL,
 	}
 
