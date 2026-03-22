@@ -68,7 +68,7 @@ services:
       REDIS_URL: redis:6379
       WEB_SERVER_HOST: 0.0.0.0
       WEB_SERVER_PORT: 3000
-      FRONTEND_URL: http://localhost:5173
+      FRONTEND_URL: https://app.aifaceapp.ru
       ENVIRONMENT: production
     depends_on:
       postgres:
@@ -85,9 +85,9 @@ services:
       dockerfile: Dockerfile
     container_name: aifacebot_web_frontend
     ports:
-      - "80:80"
+      - "127.0.0.1:8081:80"
     environment:
-      VITE_API_URL: http://localhost:3000/api
+      VITE_API_URL: /api
       VITE_TELEGRAM_BOT_NAME: ${TELEGRAM_BOT_NAME:-AIFaceApps}
     depends_on:
       - web-backend
