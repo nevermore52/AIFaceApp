@@ -54,6 +54,47 @@ services:
       - aifacebot_network
     restart: unless-stopped
 
+  web-backend:
+    build:
+      context: ./web
+      dockerfile: Dockerfile
+    container_name: aifacebot_web_backend
+    ports:
+      - "3000:3000"
+    env_file:
+      - .env
+    environment:
+      DATABASE_URL: "postgres://aifacebot_user:aifacebot_password@postgres:5432/aifacebot?sslmode=disable"
+      REDIS_URL: redis:6379
+      WEB_SERVER_HOST: 0.0.0.0
+      WEB_SERVER_PORT: 3000
+      FRONTEND_URL: http://localhost:5173
+      ENVIRONMENT: production
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_started
+    networks:
+      - aifacebot_network
+    restart: unless-stopped
+
+  web-frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: aifacebot_web_frontend
+    ports:
+      - "80:80"
+    environment:
+      VITE_API_URL: http://localhost:3000/api
+      VITE_TELEGRAM_BOT_NAME: ${TELEGRAM_BOT_NAME:-AIFaceApps}
+    depends_on:
+      - web-backend
+    networks:
+      - aifacebot_network
+    restart: unless-stopped
+
 volumes:
   postgres_data:
   redis_data:
