@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { generationApi } from '../lib/api'
-import { Card, CardContent, CardHeader, CardTitle } from '../components/ui/card'
+import { Card, CardContent } from '../components/ui/card'
 import { Button } from '../components/ui/button'
 import { formatDate } from '../lib/utils'
 import { Image, Music, Video, MessageSquare, ChevronLeft, ChevronRight } from 'lucide-react'
@@ -114,7 +114,7 @@ export function HistoryPage() {
       ) : (
         <>
           <div className="space-y-4">
-            {generations.map((gen) => {
+            {generations.map((gen: Generation) => {
               const Icon = getIcon(gen.model_type)
               return (
                 <Card key={gen.id}>
@@ -151,7 +151,7 @@ export function HistoryPage() {
               <Button
                 variant="outline"
                 size="sm"
-                onClick={() => setPage((p) => Math.max(0, p - 1))}
+                onClick={() => setPage((p: number) => Math.max(0, p - 1))}
                 disabled={page === 0}
               >
                 <ChevronLeft className="h-4 w-4" />
@@ -162,7 +162,7 @@ export function HistoryPage() {
               <Button
                 variant="outline"
                 size="sm"
-                onClick={() => setPage((p) => Math.min(totalPages - 1, p + 1))}
+                onClick={() => setPage((p: number) => Math.min(totalPages - 1, p + 1))}
                 disabled={page >= totalPages - 1}
               >
                 <ChevronRight className="h-4 w-4" />
