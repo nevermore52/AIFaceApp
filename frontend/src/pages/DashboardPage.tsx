@@ -75,8 +75,7 @@ export function DashboardPage() {
       return
     }
 
-    const botName = (import.meta.env.VITE_TELEGRAM_BOT_NAME || 'aifaceappbot').replace('@', '')
-    window.open(`https://t.me/${botName}?startapp=web_generate`, '_blank', 'noopener,noreferrer')
+    window.location.href = '/generate'
   }
 
   return (
@@ -180,17 +179,12 @@ export function DashboardPage() {
           </CardHeader>
           <CardContent className="space-y-2">
             <p className="text-sm text-muted-foreground">
-              Генерация контента доступна через Telegram бота.
-              Откройте бота для создания изображений, видео и музыки.
+              Создавайте изображения и видео прямо на сайте!
+              Используйте ИИ для генерации уникального контента.
             </p>
-            <a
-              href={`https://t.me/${import.meta.env.VITE_TELEGRAM_BOT_NAME || 'aifaceappbot'}`}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="inline-flex items-center text-primary hover:underline"
-            >
-              Открыть бота →
-            </a>
+            <Button onClick={handleModelClick} className="w-full">
+              Начать генерацию →
+            </Button>
           </CardContent>
         </Card>
       </div>

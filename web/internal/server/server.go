@@ -8,6 +8,7 @@ import (
 
 	"telegram-ai-face-bot/web/internal/config"
 	"telegram-ai-face-bot/web/internal/handlers"
+	"telegram-ai-face-bot/web/internal/kieapi"
 	"telegram-ai-face-bot/web/internal/middleware"
 	"telegram-ai-face-bot/web/internal/repository"
 	"telegram-ai-face-bot/web/internal/services"
@@ -49,11 +50,24 @@ func New(cfg *config.Config, db *sql.DB) *Server {
 	generationService := services.NewGenerationService(generationRepo)
 	paymentService := services.NewPaymentService(paymentRepo, userRepo, quotaRepo)
 
+	// Web generation service (KieAPI)
+	var webGenerationService *services.WebGenerationService
+	if cfg.KieAPIKey != "" {
+		kieClient := kieapi.NewClient(cfg.KieAPIKey, cfg.KieAPIBaseURL)
+		webGenerationService = services.NewWebGenerationService(db, kieClient, cfg.KieCallbackURL)
+	}
+
+	// Web payment service (YooKassa)
+	var webPaymentService *services.WebPaymentService
+	if cfg.YooKassaShopID != "" && cfg.YooKassaSecretKey != "" {
+		webPaymentService = services.NewWebPaymentService(db, cfg.YooKassaShopID, cfg.YooKassaSecretKey, cfg.YooKassaReturnURL)
+	}
+
 	authTokenRepo := repository.NewAuthTokenRepository(db)
 	authHandler := handlers.NewAuthHandler(authService, cfg, authTokenRepo)
 	userHandler := handlers.NewUserHandler(userService)
-	generationHandler := handlers.NewGenerationHandler(generationService)
-	paymentHandler := handlers.NewPaymentHandler(paymentService)
+	generationHandler := handlers.NewGenerationHandler(generationService, webGenerationService)
+	paymentHandler := handlers.NewPaymentHandler(paymentService, webPaymentService)
 	adminHandler := handlers.NewAdminHandler(userService, generationService, paymentService)
 
 	authMiddleware := middleware.NewAuthMiddleware(authService)
@@ -63,6 +77,10 @@ func New(cfg *config.Config, db *sql.DB) *Server {
 		api.GET("/health", func(c *gin.Context) {
 			c.JSON(http.StatusOK, gin.H{"status": "ok"})
 		})
+
+		// Public callback endpoints
+		api.POST("/callbacks/kieapi", generationHandler.HandleKieAPICallback)
+		api.POST("/callbacks/yookassa", paymentHandler.HandleYooKassaWebhook)
 
 		auth := api.Group("/auth")
 		{
@@ -87,6 +105,10 @@ func New(cfg *config.Config, db *sql.DB) *Server {
 
 			protected.GET("/generations", generationHandler.GetUserGenerations)
 			protected.GET("/generations/:id", generationHandler.GetGeneration)
+			protected.POST("/generations", generationHandler.CreateGeneration)
+			protected.GET("/generations/:id/status", generationHandler.GetGenerationStatus)
+
+			protected.GET("/models", generationHandler.GetModels)
 
 			protected.GET("/payments/packages", paymentHandler.GetPackages)
 			protected.GET("/payments/subscriptions", paymentHandler.GetSubscriptions)

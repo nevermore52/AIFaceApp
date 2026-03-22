@@ -14,11 +14,11 @@ type Config struct {
 	RedisPass   string
 	RedisDB     int
 
-	JWTSecret     string
+	JWTSecret      string
 	JWTExpireHours int
 
-	TelegramBotToken  string
-	TelegramBotName   string
+	TelegramBotToken string
+	TelegramBotName  string
 
 	GoogleClientID     string
 	GoogleClientSecret string
@@ -26,6 +26,16 @@ type Config struct {
 
 	FrontendURL string
 	Environment string
+
+	// KieAPI for image/video generation
+	KieAPIKey      string
+	KieAPIBaseURL  string
+	KieCallbackURL string
+
+	// YooKassa payments
+	YooKassaShopID    string
+	YooKassaSecretKey string
+	YooKassaReturnURL string
 }
 
 func Load() (*Config, error) {
@@ -49,6 +59,14 @@ func Load() (*Config, error) {
 
 		FrontendURL: getEnv("FRONTEND_URL", "http://localhost:5173"),
 		Environment: getEnv("ENVIRONMENT", "development"),
+
+		KieAPIKey:      getEnv("KIEAPI_API_KEY", ""),
+		KieAPIBaseURL:  getEnv("KIEAPI_BASE_URL", "https://api.kie.ai"),
+		KieCallbackURL: getEnv("WEB_KIEAPI_CALLBACK_URL", ""),
+
+		YooKassaShopID:    getEnv("YOOKASSA_SHOP_ID", ""),
+		YooKassaSecretKey: getEnv("YOOKASSA_SECRET_KEY", ""),
+		YooKassaReturnURL: getEnv("YOOKASSA_RETURN_URL", ""),
 	}
 
 	if cfg.TelegramBotToken == "" {

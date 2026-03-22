@@ -76,6 +76,12 @@ services:
       GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID:-}
       GOOGLE_CLIENT_SECRET: ${GOOGLE_CLIENT_SECRET:-}
       GOOGLE_REDIRECT_URL: ${GOOGLE_REDIRECT_URL:-https://app.aifaceapp.ru/api/auth/google/callback}
+      KIEAPI_API_KEY: ${KIEAPI_API_KEY:-}
+      KIEAPI_BASE_URL: ${KIEAPI_BASE_URL:-https://api.kie.ai}
+      WEB_KIEAPI_CALLBACK_URL: ${WEB_KIEAPI_CALLBACK_URL:-https://app.aifaceapp.ru/api/callbacks/kieapi}
+      YOOKASSA_SHOP_ID: ${YOOKASSA_SHOP_ID:-}
+      YOOKASSA_SECRET_KEY: ${YOOKASSA_SECRET_KEY:-}
+      YOOKASSA_RETURN_URL: ${YOOKASSA_RETURN_URL:-https://app.aifaceapp.ru/payments}
     depends_on:
       postgres:
         condition: service_healthy

@@ -109,6 +109,10 @@ export const generationApi = {
   getAll: (limit = 20, offset = 0) =>
     api.get(`/generations?limit=${limit}&offset=${offset}`),
   getById: (id: number) => api.get(`/generations/${id}`),
+  getStatus: (id: number) => api.get(`/generations/${id}/status`),
+  getModels: () => api.get<{ id: string; name: string; type: string; description: string; token_cost: number }[]>('/models'),
+  create: (data: { model: string; prompt: string; image_urls?: string[]; aspect_ratio?: string }) =>
+    api.post<{ id: number; status: string }>('/generations', data),
 }
 
 export const paymentApi = {

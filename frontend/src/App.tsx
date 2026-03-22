@@ -3,6 +3,7 @@ import { useAuthStore } from './store/auth'
 import { Layout } from './components/Layout'
 import { LoginPage } from './pages/LoginPage'
 import { DashboardPage } from './pages/DashboardPage'
+import { GeneratePage } from './pages/GeneratePage'
 import { HistoryPage } from './pages/HistoryPage'
 import { PaymentsPage } from './pages/PaymentsPage'
 import { ProfilePage } from './pages/ProfilePage'
@@ -28,6 +29,14 @@ function App() {
         <Route path="/auth/callback" element={<AuthCallbackPage />} />
         <Route path="/" element={<Layout />}>
           <Route index element={<DashboardPage />} />
+          <Route
+            path="generate"
+            element={
+              <ProtectedRoute>
+                <GeneratePage />
+              </ProtectedRoute>
+            }
+          />
           <Route
             path="history"
             element={

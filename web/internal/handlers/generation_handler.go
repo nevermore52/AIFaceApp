@@ -1,9 +1,12 @@
 package handlers
 
 import (
+	"encoding/json"
+	"io"
 	"net/http"
 	"strconv"
 
+	"telegram-ai-face-bot/web/internal/kieapi"
 	"telegram-ai-face-bot/web/internal/models"
 	"telegram-ai-face-bot/web/internal/services"
 
@@ -11,11 +14,15 @@ import (
 )
 
 type GenerationHandler struct {
-	generationService *services.GenerationService
+	generationService    *services.GenerationService
+	webGenerationService *services.WebGenerationService
 }
 
-func NewGenerationHandler(generationService *services.GenerationService) *GenerationHandler {
-	return &GenerationHandler{generationService: generationService}
+func NewGenerationHandler(generationService *services.GenerationService, webGenerationService *services.WebGenerationService) *GenerationHandler {
+	return &GenerationHandler{
+		generationService:    generationService,
+		webGenerationService: webGenerationService,
+	}
 }
 
 func (h *GenerationHandler) GetUserGenerations(c *gin.Context) {
@@ -112,4 +119,100 @@ func (h *GenerationHandler) GetUserHistory(c *gin.Context) {
 		"limit":  limit,
 		"offset": offset,
 	})
+}
+
+func (h *GenerationHandler) GetModels(c *gin.Context) {
+	if h.webGenerationService == nil {
+		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "Generation service not available"})
+		return
+	}
+	models := h.webGenerationService.GetAvailableModels()
+	c.JSON(http.StatusOK, models)
+}
+
+func (h *GenerationHandler) CreateGeneration(c *gin.Context) {
+	if h.webGenerationService == nil {
+		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "Generation service not available"})
+		return
+	}
+
+	user, exists := c.Get("user")
+	if !exists {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "Not authenticated"})
+		return
+	}
+
+	u := user.(*models.User)
+	if u.TelegramID == nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Telegram account not linked"})
+		return
+	}
+
+	var req services.CreateGenerationRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid request"})
+		return
+	}
+
+	genReq, err := h.webGenerationService.CreateGeneration(*u.TelegramID, req)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+
+	c.JSON(http.StatusOK, genReq)
+}
+
+func (h *GenerationHandler) GetGenerationStatus(c *gin.Context) {
+	if h.webGenerationService == nil {
+		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "Generation service not available"})
+		return
+	}
+
+	idStr := c.Param("id")
+	id, err := strconv.ParseInt(idStr, 10, 64)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid ID"})
+		return
+	}
+
+	genReq, err := h.webGenerationService.GetByID(id)
+	if err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "Generation not found"})
+		return
+	}
+
+	c.JSON(http.StatusOK, genReq)
+}
+
+func (h *GenerationHandler) HandleKieAPICallback(c *gin.Context) {
+	if h.webGenerationService == nil {
+		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "Generation service not available"})
+		return
+	}
+
+	body, err := io.ReadAll(c.Request.Body)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Failed to read body"})
+		return
+	}
+
+	var payload kieapi.CallbackPayload
+	if err := c.ShouldBindJSON(&payload); err != nil {
+		// Try to parse raw body
+		c.Request.Body = io.NopCloser(io.Reader(nil))
+	}
+
+	// Re-parse from body
+	if err := json.Unmarshal(body, &payload); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid callback payload"})
+		return
+	}
+
+	if err := h.webGenerationService.HandleCallback(payload); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{"status": "ok"})
 }

@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import { useAuthStore } from '../store/auth'
 import { paymentApi } from '../lib/api'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../components/ui/card'
 import { Button } from '../components/ui/button'
@@ -29,10 +30,12 @@ interface Payment {
 }
 
 export function PaymentsPage() {
+  const { user, isAuthenticated } = useAuthStore()
   const [packages, setPackages] = useState<Package[]>([])
-  const [subscriptions, setSubscriptions] = useState<Subscription[]>([])
-  const [payments, setPayments] = useState<Payment[]>([])
+  const [subscriptions, setSubscriptions] = useState<any[]>([])
+  const [payments, setPayments] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
+  const [purchasing, setPurchasing] = useState<string | null>(null)
 
   useEffect(() => {
     Promise.all([
@@ -64,6 +67,27 @@ export function PaymentsPage() {
     }
   }
 
+  const handlePurchase = async (category: string, qty: number) => {
+    if (!isAuthenticated || !user?.telegram_id) {
+      alert('Для покупки необходимо авторизоваться и привязать Telegram аккаунт')
+      return
+    }
+
+    const key = `${category}-${qty}`
+    setPurchasing(key)
+
+    try {
+      const result = await paymentApi.create(category, qty) as { checkout_url?: string }
+      if (result.checkout_url) {
+        window.open(result.checkout_url, '_blank')
+      }
+    } catch (error: any) {
+      alert(error.message || 'Ошибка при создании платежа')
+    } finally {
+      setPurchasing(null)
+    }
+  }
+
   const groupedPackages = packages.reduce((acc, pkg) => {
     if (!acc[pkg.category]) {
       acc[pkg.category] = []
@@ -74,17 +98,28 @@ export function PaymentsPage() {
 
   if (loading) {
     return (
+      <div className="flex items-center justify-center min-h-[400px]">
+        <div className="h-8 w-8 animate-spin rounded-full border-4 border-primary border-t-transparent" />
+      </div>
+    )
+  }
+
+  if (!user?.telegram_id) {
+    return (
       <div className="space-y-6">
-        <div className="h-8 w-48 bg-muted animate-pulse rounded" />
-        <div className="grid gap-4 md:grid-cols-3">
-          {[...Array(3)].map((_, i) => (
-            <Card key={i}>
-              <CardContent className="p-6">
-                <div className="h-32 bg-muted animate-pulse rounded" />
-              </CardContent>
-            </Card>
-          ))}
+        <div>
+          <h1 className="text-3xl font-bold">Платежи</h1>
+          <p className="text-muted-foreground mt-1">
+            Управляйте подписками и покупайте дополнительные запросы
+          </p>
         </div>
+        <Card className="border-yellow-200 bg-yellow-50 dark:bg-yellow-950 dark:border-yellow-800">
+          <CardContent className="pt-6">
+            <p className="text-yellow-800 dark:text-yellow-200">
+              Для покупки пакетов необходимо привязать Telegram аккаунт.
+            </p>
+          </CardContent>
+        </Card>
       </div>
     )
   }
@@ -157,15 +192,29 @@ export function PaymentsPage() {
                 <div className="space-y-2">
                   {pkgs
                     .sort((a, b) => a.qty - b.qty)
-                    .map((pkg) => (
-                      <div
-                        key={`${pkg.category}-${pkg.qty}`}
-                        className="flex justify-between items-center p-2 rounded-lg hover:bg-muted transition-colors"
-                      >
-                        <span>{pkg.qty} шт.</span>
-                        <span className="font-medium">{formatPrice(pkg.price)}</span>
-                      </div>
-                    ))}
+                    .map((pkg) => {
+                      const key = `${pkg.category}-${pkg.qty}`
+                      const isPurchasing = purchasing === key
+                      return (
+                        <div
+                          key={key}
+                          className="flex justify-between items-center p-2 rounded-lg hover:bg-muted transition-colors"
+                        >
+                          <span>{pkg.qty} шт.</span>
+                          <Button
+                            size="sm"
+                            onClick={() => handlePurchase(pkg.category, pkg.qty)}
+                            disabled={isPurchasing || !user?.telegram_id}
+                          >
+                            {isPurchasing ? (
+                              <span className="h-4 w-4 animate-spin rounded-full border-2 border-current border-t-transparent inline-block" />
+                            ) : (
+                              formatPrice(pkg.price)
+                            )}
+                          </Button>
+                        </div>
+                      )
+                    })}
                 </div>
               </CardContent>
             </Card>
