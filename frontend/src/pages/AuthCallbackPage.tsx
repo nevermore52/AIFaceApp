@@ -11,6 +11,7 @@ export function AuthCallbackPage() {
   useEffect(() => {
     const token = searchParams.get('token')
     const refresh = searchParams.get('refresh')
+    const redirectTo = sessionStorage.getItem('post_login_redirect') || '/'
 
     if (token && refresh) {
       localStorage.setItem('auth-storage', JSON.stringify({
@@ -24,12 +25,15 @@ export function AuthCallbackPage() {
       userApi.getMe()
         .then((user) => {
           setAuth(user as Parameters<typeof setAuth>[0], token, refresh)
-          navigate('/')
+          sessionStorage.removeItem('post_login_redirect')
+          navigate(redirectTo)
         })
         .catch(() => {
+          sessionStorage.removeItem('post_login_redirect')
           navigate('/login')
         })
     } else {
+      sessionStorage.removeItem('post_login_redirect')
       navigate('/login')
     }
   }, [searchParams, setAuth, navigate])

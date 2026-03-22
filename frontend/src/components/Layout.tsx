@@ -2,10 +2,11 @@ import { Outlet, Link, useLocation } from 'react-router-dom'
 import { useAuthStore } from '../store/auth'
 import { Home, History, CreditCard, User, LogOut } from 'lucide-react'
 import { cn } from '../lib/utils'
+import { Button } from './ui/button'
 
 export function Layout() {
   const location = useLocation()
-  const { user, logout } = useAuthStore()
+  const { user, isAuthenticated, logout } = useAuthStore()
 
   const navigation = [
     { name: 'Главная', href: '/', icon: Home },
@@ -43,7 +44,7 @@ export function Layout() {
             ))}
           </nav>
           <div className="flex items-center gap-4">
-            {user && (
+            {isAuthenticated && user && (
               <div className="flex items-center gap-2">
                 {user.avatar_url ? (
                   <img
@@ -61,13 +62,19 @@ export function Layout() {
                 </span>
               </div>
             )}
-            <button
-              onClick={logout}
-              className="flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground transition-colors"
-            >
-              <LogOut className="h-4 w-4" />
-              <span className="hidden sm:inline">Выйти</span>
-            </button>
+            {isAuthenticated ? (
+              <button
+                onClick={logout}
+                className="flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground transition-colors"
+              >
+                <LogOut className="h-4 w-4" />
+                <span className="hidden sm:inline">Выйти</span>
+              </button>
+            ) : (
+              <Button asChild size="sm">
+                <Link to="/login">Войти</Link>
+              </Button>
+            )}
           </div>
         </div>
       </header>

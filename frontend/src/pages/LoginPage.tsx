@@ -1,19 +1,21 @@
 import { useEffect } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useLocation, useNavigate } from 'react-router-dom'
 import { useAuthStore } from '../store/auth'
-import { authApi } from '../lib/api'
+import { authApi, API_BASE_URL } from '../lib/api'
 import { Button } from '../components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../components/ui/card'
 
 export function LoginPage() {
   const navigate = useNavigate()
+  const location = useLocation()
   const { isAuthenticated, setAuth } = useAuthStore()
+  const redirectTo = (location.state as { from?: string } | null)?.from || '/'
 
   useEffect(() => {
     if (isAuthenticated) {
-      navigate('/')
+      navigate(redirectTo)
     }
-  }, [isAuthenticated, navigate])
+  }, [isAuthenticated, navigate, redirectTo])
 
   useEffect(() => {
     const tg = window.Telegram?.WebApp
@@ -32,38 +34,20 @@ export function LoginPage() {
         refresh_token: string
       }
       setAuth(response.user, response.access_token, response.refresh_token)
-      navigate('/')
+      navigate(redirectTo)
     } catch (error) {
       console.error('Mini App login failed:', error)
     }
   }
 
   const handleTelegramLogin = () => {
-    const botName = import.meta.env.VITE_TELEGRAM_BOT_NAME || 'AIFaceApps'
-    const callbackUrl = `${window.location.origin}/auth/callback`
-    
-    const script = document.createElement('script')
-    script.src = 'https://telegram.org/js/telegram-widget.js?22'
-    script.setAttribute('data-telegram-login', botName)
-    script.setAttribute('data-size', 'large')
-    script.setAttribute('data-radius', '8')
-    script.setAttribute('data-auth-url', callbackUrl)
-    script.setAttribute('data-request-access', 'write')
-    script.async = true
-
-    const container = document.getElementById('telegram-login-container')
-    if (container) {
-      container.innerHTML = ''
-      container.appendChild(script)
-    }
+    const botName = (import.meta.env.VITE_TELEGRAM_BOT_NAME || 'AIFaceApps').replace('@', '')
+    window.location.href = `https://t.me/${botName}?startapp=web_login`
   }
 
-  useEffect(() => {
-    handleTelegramLogin()
-  }, [])
-
   const handleGoogleLogin = () => {
-    window.location.href = `${import.meta.env.VITE_API_URL || 'http://localhost:3000/api'}/auth/google`
+    sessionStorage.setItem('post_login_redirect', redirectTo)
+    window.location.href = `${API_BASE_URL}/auth/google`
   }
 
   return (
@@ -78,7 +62,13 @@ export function LoginPage() {
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
-          <div id="telegram-login-container" className="flex justify-center min-h-[44px]" />
+          <Button
+            variant="outline"
+            className="w-full"
+            onClick={handleTelegramLogin}
+          >
+            Войти через Telegram
+          </Button>
           
           <div className="relative">
             <div className="absolute inset-0 flex items-center">
@@ -116,7 +106,8 @@ export function LoginPage() {
           </Button>
 
           <p className="text-center text-sm text-muted-foreground">
-            Авторизуясь, вы соглашаетесь с условиями использования сервиса
+            Авторизуясь, вы соглашаетесь с условиями использования сервиса.
+            Для авто-входа через Telegram откройте Mini App из бота.
           </p>
         </CardContent>
       </Card>

@@ -1,8 +1,10 @@
 import { useEffect, useState } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { useAuthStore } from '../store/auth'
 import { userApi } from '../lib/api'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../components/ui/card'
 import { Image, Music, Video, MessageSquare } from 'lucide-react'
+import { Button } from '../components/ui/button'
 
 interface Quota {
   text_daily: number
@@ -16,7 +18,8 @@ interface Quota {
 }
 
 export function DashboardPage() {
-  const { user } = useAuthStore()
+  const navigate = useNavigate()
+  const { user, isAuthenticated } = useAuthStore()
   const [quota, setQuota] = useState<Quota | null>(null)
   const [loading, setLoading] = useState(true)
 
@@ -66,18 +69,44 @@ export function DashboardPage() {
     },
   ]
 
+  const handleModelClick = () => {
+    if (!isAuthenticated) {
+      navigate('/login', { state: { from: '/' } })
+      return
+    }
+
+    const botName = (import.meta.env.VITE_TELEGRAM_BOT_NAME || 'AIFaceApps').replace('@', '')
+    window.open(`https://t.me/${botName}?startapp=web_generate`, '_blank', 'noopener,noreferrer')
+  }
+
   return (
     <div className="space-y-6">
       <div>
         <h1 className="text-3xl font-bold">
-          Привет, {user?.first_name}! 👋
+          {isAuthenticated ? `Привет, ${user?.first_name}! 👋` : 'AI Face App'}
         </h1>
         <p className="text-muted-foreground mt-1">
-          Добро пожаловать в AI Face App
+          {isAuthenticated
+            ? 'Добро пожаловать в AI Face App'
+            : 'Войдите, чтобы запускать генерации и сохранять историю'}
         </p>
       </div>
 
-      {!user?.telegram_id && (
+      {!isAuthenticated && (
+        <Card className="border-amber-300 bg-amber-50 dark:bg-amber-950/40">
+          <CardContent className="pt-6 text-center space-y-3">
+            <p className="font-medium">Войдите, чтобы создавать генерации</p>
+            <p className="text-sm text-muted-foreground">
+              Авторизуйтесь через Google или Telegram для доступа к генерации.
+            </p>
+            <Button size="sm" onClick={() => navigate('/login', { state: { from: '/' } })}>
+              Войти
+            </Button>
+          </CardContent>
+        </Card>
+      )}
+
+      {isAuthenticated && !user?.telegram_id && (
         <Card className="border-yellow-200 bg-yellow-50 dark:bg-yellow-950 dark:border-yellow-800">
           <CardContent className="pt-6">
             <p className="text-yellow-800 dark:text-yellow-200">
@@ -89,7 +118,11 @@ export function DashboardPage() {
 
       <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
         {quotaCards.map((card) => (
-          <Card key={card.title}>
+          <Card
+            key={card.title}
+            className="cursor-pointer hover:border-primary/40 transition-colors"
+            onClick={handleModelClick}
+          >
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
               <CardTitle className="text-sm font-medium">{card.title}</CardTitle>
               <div className={`p-2 rounded-lg ${card.bgColor}`}>
