@@ -18,6 +18,7 @@ type Config struct {
 	Payment       PaymentConfig
 	Server        ServerConfig
 	DebugLogging  bool
+	WebBackendURL string
 }
 
 type RedisConfig struct {
@@ -102,6 +103,8 @@ func Load() (*Config, error) {
 		Port: getEnv("SERVER_PORT", "8080"),
 		Host: getEnv("SERVER_HOST", "localhost"),
 	}
+
+	cfg.WebBackendURL = getEnv("WEB_BACKEND_URL", "http://web-backend:3000")
 
 	cfg.DebugLogging = getEnvBool("DEBUG_LOGGING", true)
 	if cfg.TelegramToken == "" {

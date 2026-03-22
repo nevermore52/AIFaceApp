@@ -1,4 +1,4 @@
-import { useEffect } from 'react'
+import { useEffect, useState, useRef, useCallback } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
 import { useAuthStore } from '../store/auth'
 import { authApi, API_BASE_URL } from '../lib/api'
@@ -10,6 +10,10 @@ export function LoginPage() {
   const location = useLocation()
   const { isAuthenticated, setAuth } = useAuthStore()
   const redirectTo = (location.state as { from?: string } | null)?.from || '/'
+
+  const [tgStatus, setTgStatus] = useState<'idle' | 'waiting' | 'error' | 'expired'>('idle')
+  const pollRef = useRef<ReturnType<typeof setInterval> | null>(null)
+  const tokenRef = useRef<string | null>(null)
 
   useEffect(() => {
     if (isAuthenticated) {
@@ -23,6 +27,13 @@ export function LoginPage() {
       tg.ready()
       tg.expand()
       handleMiniAppLogin(tg.initData)
+    }
+  }, [])
+
+  // Cleanup polling on unmount
+  useEffect(() => {
+    return () => {
+      if (pollRef.current) clearInterval(pollRef.current)
     }
   }, [])
 
@@ -40,9 +51,77 @@ export function LoginPage() {
     }
   }
 
-  const handleTelegramLogin = () => {
-    const botName = (import.meta.env.VITE_TELEGRAM_BOT_NAME || 'aifaceappbot').replace('@', '')
-    window.location.href = `https://t.me/${botName}?startapp=web_login`
+  const stopPolling = useCallback(() => {
+    if (pollRef.current) {
+      clearInterval(pollRef.current)
+      pollRef.current = null
+    }
+  }, [])
+
+  const handleTelegramLogin = async () => {
+    try {
+      setTgStatus('waiting')
+      stopPolling()
+
+      // 1. Create auth token
+      const { token } = await authApi.createWebToken()
+      tokenRef.current = token
+
+      // 2. Open bot link with auth token
+      const botName = (import.meta.env.VITE_TELEGRAM_BOT_NAME || 'aifaceappbot').replace('@', '')
+      window.open(`https://t.me/${botName}?start=auth-${token}`, '_blank', 'noopener,noreferrer')
+
+      // 3. Poll for confirmation
+      let elapsed = 0
+      pollRef.current = setInterval(async () => {
+        elapsed += 2
+        if (elapsed > 300) { // 5 min timeout
+          stopPolling()
+          setTgStatus('expired')
+          return
+        }
+
+        try {
+          const result = await authApi.getWebTokenStatus(token)
+
+          if (result.status === 'confirmed' && result.access_token && result.refresh_token) {
+            stopPolling()
+            // Fetch user profile with the new token, then set auth
+            try {
+              const resp = await fetch(`${API_BASE_URL}/me`, {
+                headers: { Authorization: `Bearer ${result.access_token}` },
+              })
+              if (resp.ok) {
+                const user = await resp.json()
+                setAuth(user, result.access_token, result.refresh_token)
+              } else {
+                // Fallback: set minimal user object so auth works
+                setAuth(
+                  { id: 0, username: '', first_name: 'User', last_name: '', is_admin: false, subscription_type: '' },
+                  result.access_token,
+                  result.refresh_token,
+                )
+              }
+            } catch {
+              setAuth(
+                { id: 0, username: '', first_name: 'User', last_name: '', is_admin: false, subscription_type: '' },
+                result.access_token,
+                result.refresh_token,
+              )
+            }
+            navigate(redirectTo)
+          } else if (result.status === 'expired') {
+            stopPolling()
+            setTgStatus('expired')
+          }
+        } catch {
+          // Network error — keep polling
+        }
+      }, 2000)
+    } catch (error) {
+      console.error('Telegram web token creation failed:', error)
+      setTgStatus('error')
+    }
   }
 
   const handleGoogleLogin = () => {
@@ -62,13 +141,45 @@ export function LoginPage() {
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
-          <Button
-            variant="outline"
-            className="w-full"
-            onClick={handleTelegramLogin}
-          >
-            Войти через Telegram
-          </Button>
+          {tgStatus === 'waiting' ? (
+            <div className="text-center space-y-3 py-2">
+              <div className="flex items-center justify-center gap-2">
+                <div className="h-4 w-4 animate-spin rounded-full border-2 border-primary border-t-transparent" />
+                <span className="text-sm font-medium">Ожидание подтверждения...</span>
+              </div>
+              <p className="text-xs text-muted-foreground">
+                Нажмите /start в боте Telegram, затем вернитесь сюда.
+                <br />Страница обновится автоматически.
+              </p>
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => { stopPolling(); setTgStatus('idle') }}
+              >
+                Отмена
+              </Button>
+            </div>
+          ) : (
+            <Button
+              variant="outline"
+              className="w-full"
+              onClick={handleTelegramLogin}
+            >
+              Войти через Telegram
+            </Button>
+          )}
+
+          {tgStatus === 'expired' && (
+            <p className="text-center text-sm text-destructive">
+              Время ожидания истекло. Попробуйте ещё раз.
+            </p>
+          )}
+
+          {tgStatus === 'error' && (
+            <p className="text-center text-sm text-destructive">
+              Ошибка создания ссылки. Попробуйте ещё раз.
+            </p>
+          )}
           
           <div className="relative">
             <div className="absolute inset-0 flex items-center">
@@ -107,7 +218,6 @@ export function LoginPage() {
 
           <p className="text-center text-sm text-muted-foreground">
             Авторизуясь, вы соглашаетесь с условиями использования сервиса.
-            Для авто-входа через Telegram откройте Mini App из бота.
           </p>
         </CardContent>
       </Card>

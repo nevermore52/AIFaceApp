@@ -1421,6 +1421,11 @@ func (b *Bot) handleMessage(msg *tgmodels.Message) {
 		cmd := getCommand(msg)
 		args := getCommandArgs(msg)
 		if cmd == "start" && args != "" {
+			// auth-{token} handled separately — skip referrer lookup
+			if strings.HasPrefix(args, "auth-") {
+				b.handleStartWithReferral(msg, args)
+				return
+			}
 			// Сначала создаем/обновляем пользователя с referrer_id, а потом проверяем подписку
 			if _, err := b.userService.GetOrCreateUserWithReferrer(
 				user.ID,
@@ -4660,6 +4665,12 @@ func (b *Bot) handleStart(msg *tgmodels.Message) {
 
 // handleStartWithReferral обрабатывает /start с реферальным кодом
 func (b *Bot) handleStartWithReferral(msg *tgmodels.Message, referralCode string) {
+	// Intercept auth-{token} for web login flow
+	if strings.HasPrefix(referralCode, "auth-") {
+		b.handleWebAuthToken(msg, strings.TrimPrefix(referralCode, "auth-"))
+		return
+	}
+
 	user := msg.From
 	_, err := b.userService.GetOrCreateUserWithReferrer(
 		user.ID,
@@ -4690,6 +4701,55 @@ func (b *Bot) handleStartWithReferral(msg *tgmodels.Message, referralCode string
 	}
 	if !claimed {
 		b.sendStartTrialMenu(msg.Chat.ID)
+	}
+}
+
+// handleWebAuthToken confirms a web login token via the web-backend API
+func (b *Bot) handleWebAuthToken(msg *tgmodels.Message, token string) {
+	user := msg.From
+	chatID := msg.Chat.ID
+
+	// Ensure user exists in DB
+	_, _ = b.userService.GetOrCreateUser(user.ID, user.Username, user.FirstName, user.LastName, user.LanguageCode)
+
+	backendURL := strings.TrimRight(b.cfg.WebBackendURL, "/")
+	confirmURL := backendURL + "/api/auth/telegram/web-token/confirm"
+
+	payload := fmt.Sprintf(`{"token":"%s","telegram_id":%d,"username":"%s","first_name":"%s","last_name":"%s"}`,
+		token, user.ID,
+		strings.ReplaceAll(user.Username, `"`, `\"`),
+		strings.ReplaceAll(user.FirstName, `"`, `\"`),
+		strings.ReplaceAll(user.LastName, `"`, `\"`),
+	)
+
+	req, err := http.NewRequest(http.MethodPost, confirmURL, bytes.NewBufferString(payload))
+	if err != nil {
+		log.Printf("web auth token: failed to create request: %v", err)
+		b.sendText(chatID, "❌ Ошибка авторизации. Попробуйте ещё раз.")
+		return
+	}
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("X-Bot-Secret", b.cfg.TelegramToken)
+
+	client := &http.Client{Timeout: 10 * time.Second}
+	resp, err := client.Do(req)
+	if err != nil {
+		log.Printf("web auth token: request failed: %v", err)
+		b.sendText(chatID, "❌ Не удалось подтвердить авторизацию. Попробуйте ещё раз.")
+		return
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode == http.StatusOK {
+		b.sendText(chatID, "Авторизация прошла успешно! ✅\n\nМожете вернуться на сайт.")
+	} else if resp.StatusCode == http.StatusGone {
+		b.sendText(chatID, "⏰ Ссылка для авторизации истекла. Запросите новую на сайте.")
+	} else if resp.StatusCode == http.StatusConflict {
+		b.sendText(chatID, "✅ Вы уже авторизованы. Можете вернуться на сайт.")
+	} else {
+		body, _ := io.ReadAll(resp.Body)
+		log.Printf("web auth token: unexpected status %d body=%s", resp.StatusCode, string(body))
+		b.sendText(chatID, "❌ Ошибка авторизации. Попробуйте ещё раз.")
 	}
 }
 

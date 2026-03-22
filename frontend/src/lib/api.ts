@@ -82,6 +82,14 @@ export const authApi = {
   miniAppLogin: (initData: string) =>
     api.post('/auth/telegram/miniapp', { init_data: initData }),
 
+  createWebToken: () =>
+    api.post<{ token: string }>('/auth/telegram/web-token'),
+
+  getWebTokenStatus: (token: string) =>
+    api.get<{ status: string; access_token?: string; refresh_token?: string }>(
+      `/auth/telegram/web-token/${token}/status`
+    ),
+
   refresh: (refreshToken: string) =>
     api.post('/auth/refresh', { refresh_token: refreshToken }),
 

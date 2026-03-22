@@ -45,10 +45,13 @@ services:
       REDIS_URL: redis:6379
       SERVER_HOST: 0.0.0.0
       SERVER_PORT: 8080
+      WEB_BACKEND_URL: http://web-backend:3000
     depends_on:
       postgres:
         condition: service_healthy
       redis:
+        condition: service_started
+      web-backend:
         condition: service_started
     networks:
       - aifacebot_network

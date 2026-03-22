@@ -6,6 +6,7 @@ import (
 	"net/http"
 
 	"telegram-ai-face-bot/web/internal/config"
+	"telegram-ai-face-bot/web/internal/repository"
 	"telegram-ai-face-bot/web/internal/services"
 
 	"github.com/gin-gonic/gin"
@@ -14,12 +15,13 @@ import (
 )
 
 type AuthHandler struct {
-	authService *services.AuthService
-	cfg         *config.Config
-	googleOAuth *oauth2.Config
+	authService   *services.AuthService
+	cfg           *config.Config
+	googleOAuth   *oauth2.Config
+	authTokenRepo *repository.AuthTokenRepository
 }
 
-func NewAuthHandler(authService *services.AuthService, cfg *config.Config) *AuthHandler {
+func NewAuthHandler(authService *services.AuthService, cfg *config.Config, authTokenRepo *repository.AuthTokenRepository) *AuthHandler {
 	var googleOAuth *oauth2.Config
 	if cfg.GoogleClientID != "" && cfg.GoogleClientSecret != "" {
 		googleOAuth = &oauth2.Config{
@@ -32,9 +34,10 @@ func NewAuthHandler(authService *services.AuthService, cfg *config.Config) *Auth
 	}
 
 	return &AuthHandler{
-		authService: authService,
-		cfg:         cfg,
-		googleOAuth: googleOAuth,
+		authService:   authService,
+		cfg:           cfg,
+		googleOAuth:   googleOAuth,
+		authTokenRepo: authTokenRepo,
 	}
 }
 
@@ -239,4 +242,125 @@ func (h *AuthHandler) Logout(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusOK, gin.H{"message": "Logged out successfully"})
+}
+
+// CreateWebToken generates a one-time auth token for Telegram deep-link login
+func (h *AuthHandler) CreateWebToken(c *gin.Context) {
+	// Cleanup old expired tokens
+	_ = h.authTokenRepo.CleanupExpired()
+
+	t, err := h.authTokenRepo.Create()
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to create auth token"})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"token": t.Token,
+	})
+}
+
+// GetWebTokenStatus checks if the auth token has been confirmed by the bot
+func (h *AuthHandler) GetWebTokenStatus(c *gin.Context) {
+	token := c.Param("token")
+	if token == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Token is required"})
+		return
+	}
+
+	t, err := h.authTokenRepo.GetByToken(token)
+	if err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "Token not found"})
+		return
+	}
+
+	if h.authTokenRepo.IsExpired(t) {
+		c.JSON(http.StatusOK, gin.H{"status": "expired"})
+		return
+	}
+
+	if t.Status == "confirmed" && t.AccessToken != nil && t.RefreshToken != nil {
+		c.JSON(http.StatusOK, gin.H{
+			"status":        "confirmed",
+			"access_token":  *t.AccessToken,
+			"refresh_token": *t.RefreshToken,
+		})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{"status": "pending"})
+}
+
+// ConfirmWebToken is called by the Telegram bot to confirm login
+type ConfirmWebTokenRequest struct {
+	Token      string `json:"token" binding:"required"`
+	TelegramID int64  `json:"telegram_id" binding:"required"`
+	Username   string `json:"username"`
+	FirstName  string `json:"first_name"`
+	LastName   string `json:"last_name"`
+	PhotoURL   string `json:"photo_url"`
+}
+
+func (h *AuthHandler) ConfirmWebToken(c *gin.Context) {
+	// Verify internal secret
+	secret := c.GetHeader("X-Bot-Secret")
+	if secret == "" || secret != h.cfg.TelegramBotToken {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "Unauthorized"})
+		return
+	}
+
+	var req ConfirmWebTokenRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid request"})
+		return
+	}
+
+	// Check token exists and is pending
+	t, err := h.authTokenRepo.GetByToken(req.Token)
+	if err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "Token not found"})
+		return
+	}
+
+	if h.authTokenRepo.IsExpired(t) {
+		c.JSON(http.StatusGone, gin.H{"error": "Token expired"})
+		return
+	}
+
+	if t.Status != "pending" {
+		c.JSON(http.StatusConflict, gin.H{"error": "Token already used"})
+		return
+	}
+
+	// Create user + session via auth service (reuse Telegram login flow)
+	authData := services.TelegramAuthData{
+		ID:        req.TelegramID,
+		FirstName: req.FirstName,
+		LastName:  req.LastName,
+		Username:  req.Username,
+		PhotoURL:  req.PhotoURL,
+		AuthDate:  0,  // not validated for bot-confirmed flow
+		Hash:      "", // not validated for bot-confirmed flow
+	}
+
+	user, accessToken, refreshToken, err := h.authService.LoginWithTelegram(
+		authData,
+		"telegram-bot",
+		"bot-confirmed",
+	)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Login failed"})
+		return
+	}
+
+	// Store tokens in the auth token record
+	if err := h.authTokenRepo.Confirm(req.Token, req.TelegramID, accessToken, refreshToken); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to confirm token"})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"status": "confirmed",
+		"user":   user,
+	})
 }

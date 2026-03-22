@@ -49,7 +49,8 @@ func New(cfg *config.Config, db *sql.DB) *Server {
 	generationService := services.NewGenerationService(generationRepo)
 	paymentService := services.NewPaymentService(paymentRepo, userRepo, quotaRepo)
 
-	authHandler := handlers.NewAuthHandler(authService, cfg)
+	authTokenRepo := repository.NewAuthTokenRepository(db)
+	authHandler := handlers.NewAuthHandler(authService, cfg, authTokenRepo)
 	userHandler := handlers.NewUserHandler(userService)
 	generationHandler := handlers.NewGenerationHandler(generationService)
 	paymentHandler := handlers.NewPaymentHandler(paymentService)
@@ -67,6 +68,9 @@ func New(cfg *config.Config, db *sql.DB) *Server {
 		{
 			auth.POST("/telegram", authHandler.TelegramLogin)
 			auth.POST("/telegram/miniapp", authHandler.TelegramMiniAppLogin)
+			auth.POST("/telegram/web-token", authHandler.CreateWebToken)
+			auth.GET("/telegram/web-token/:token/status", authHandler.GetWebTokenStatus)
+			auth.POST("/telegram/web-token/confirm", authHandler.ConfirmWebToken)
 			auth.GET("/google", authHandler.GoogleLogin)
 			auth.GET("/google/callback", authHandler.GoogleCallback)
 			auth.POST("/refresh", authHandler.RefreshToken)
