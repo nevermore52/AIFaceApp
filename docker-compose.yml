@@ -70,6 +70,9 @@ services:
       WEB_SERVER_PORT: 3000
       FRONTEND_URL: https://app.aifaceapp.ru
       ENVIRONMENT: production
+      GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID:-}
+      GOOGLE_CLIENT_SECRET: ${GOOGLE_CLIENT_SECRET:-}
+      GOOGLE_REDIRECT_URL: ${GOOGLE_REDIRECT_URL:-https://app.aifaceapp.ru/api/auth/google/callback}
     depends_on:
       postgres:
         condition: service_healthy
@@ -88,7 +91,7 @@ services:
       - "127.0.0.1:8081:80"
     environment:
       VITE_API_URL: /api
-      VITE_TELEGRAM_BOT_NAME: ${TELEGRAM_BOT_NAME:-AIFaceApps}
+      VITE_TELEGRAM_BOT_NAME: ${TELEGRAM_BOT_NAME:-aifaceappbot}
     depends_on:
       - web-backend
     networks:

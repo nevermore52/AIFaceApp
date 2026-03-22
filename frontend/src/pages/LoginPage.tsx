@@ -41,7 +41,7 @@ export function LoginPage() {
   }
 
   const handleTelegramLogin = () => {
-    const botName = (import.meta.env.VITE_TELEGRAM_BOT_NAME || 'AIFaceApps').replace('@', '')
+    const botName = (import.meta.env.VITE_TELEGRAM_BOT_NAME || 'aifaceappbot').replace('@', '')
     window.location.href = `https://t.me/${botName}?startapp=web_login`
   }
 

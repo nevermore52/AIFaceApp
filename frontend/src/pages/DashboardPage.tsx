@@ -75,7 +75,7 @@ export function DashboardPage() {
       return
     }
 
-    const botName = (import.meta.env.VITE_TELEGRAM_BOT_NAME || 'AIFaceApps').replace('@', '')
+    const botName = (import.meta.env.VITE_TELEGRAM_BOT_NAME || 'aifaceappbot').replace('@', '')
     window.open(`https://t.me/${botName}?startapp=web_generate`, '_blank', 'noopener,noreferrer')
   }
 
@@ -184,7 +184,7 @@ export function DashboardPage() {
               Откройте бота для создания изображений, видео и музыки.
             </p>
             <a
-              href={`https://t.me/${import.meta.env.VITE_TELEGRAM_BOT_NAME || 'AIFaceApps'}`}
+              href={`https://t.me/${import.meta.env.VITE_TELEGRAM_BOT_NAME || 'aifaceappbot'}`}
               target="_blank"
               rel="noopener noreferrer"
               className="inline-flex items-center text-primary hover:underline"
