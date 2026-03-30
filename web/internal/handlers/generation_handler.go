@@ -3,7 +3,6 @@ package handlers
 import (
 	"encoding/json"
 	"io"
-	"log"
 	"net/http"
 	"strconv"
 
@@ -104,17 +103,11 @@ func (h *GenerationHandler) GetUserHistory(c *gin.Context) {
 	limit, _ := strconv.Atoi(c.DefaultQuery("limit", "10"))
 	offset, _ := strconv.Atoi(c.DefaultQuery("offset", "0"))
 
-	// Debug logging
-	log.Printf("GetUserHistory: user.ID=%d, telegram_id=%v, email=%v", u.ID, u.TelegramID, u.Email)
-
 	generations, total, err := h.generationService.GetByUserID(u.ID, limit, offset)
 	if err != nil {
-		log.Printf("GetUserHistory error: %v", err)
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to get history"})
 		return
 	}
-
-	log.Printf("GetUserHistory: found %d generations (total: %d)", len(generations), total)
 
 	c.JSON(http.StatusOK, gin.H{
 		"data":   generations,

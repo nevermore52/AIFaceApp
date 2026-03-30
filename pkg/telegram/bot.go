@@ -3412,16 +3412,18 @@ func (b *Bot) processVideoGenerationMultiPhoto(chatID int64, userID int64, photo
 		duration = b.getUserVideoDuration(userID)
 	}
 
-	if err := b.userService.ConsumeQuota(userID, models.QuotaCategoryVideo, requestCost); err != nil {
+	// Get user from DB to use user.ID instead of telegram_id
+	userRec, err := b.userService.GetUserByTelegramID(userID)
+	if err != nil {
+		b.sendErrorMessage(chatID, "Ошибка получения данных пользователя")
+		return
+	}
+
+	if err := b.userService.ConsumeQuota(userRec.ID, models.QuotaCategoryVideo, requestCost); err != nil {
 		b.sendInsufficientQuotaMessage(chatID, models.QuotaCategoryVideo, requestCost, err)
 		return
 	}
 
-	userRec, _ := b.userService.GetUserByTelegramID(userID)
-	username := ""
-	if userRec != nil {
-		username = userRec.Username
-	}
 	resolution := b.getUserVideoResolution(userID)
 	opts := services.GenerationOptions{
 		InputImages:        photoURLs,
@@ -3431,11 +3433,11 @@ func (b *Bot) processVideoGenerationMultiPhoto(chatID int64, userID int64, photo
 		ChatID:             chatID,
 		Model:              modelOpt.ID,
 		ModelType:          string(modelOpt.Category),
-		Username:           username,
+		Username:           userRec.Username,
 		AspectRatio:        duration,   // Pass duration via AspectRatio field
 		NanoBananaProvider: resolution, // Pass resolution via NanoBananaProvider field
 	}
-	req, err := b.generationService.StartGeneration(userID, opts)
+	req, err := b.generationService.StartGeneration(userRec.ID, opts)
 	if err != nil {
 		_ = b.userService.AddExtraQuota(userID, models.QuotaCategoryVideo, requestCost)
 		b.sendErrorMessage(chatID, fmt.Sprintf("Ошибка запуска видео генерации: %v", err))
@@ -3476,18 +3478,20 @@ func (b *Bot) processVideoGeneration(chatID int64, userID int64, photoURL string
 		}
 	}
 
-	if err := b.userService.ConsumeQuota(userID, models.QuotaCategoryVideo, requestCost); err != nil {
-		b.sendInsufficientQuotaMessage(chatID, models.QuotaCategoryVideo, requestCost, err)
+	// Get user from DB to use user.ID instead of telegram_id
+	userRec, err := b.userService.GetUserByTelegramID(userID)
+	if err != nil {
+		b.sendErrorMessage(chatID, "Ошибка получения данных пользователя")
+		return
+	}
+
+	if err := b.userService.ConsumeQuota(userRec.ID, models.QuotaCategoryVideo, requestCost); err != nil {
+		b.sendErrorMessage(chatID, fmt.Sprintf("Недостаточно видео-запросов. Нужно: %d. %s", requestCost, err.Error()))
 		return
 	}
 
 	// kling-2.6/image-to-video — через KieAPI async с duration и sound
 	if modelOpt.ID == "kling-2.6/image-to-video" {
-		userRec, _ := b.userService.GetUserByTelegramID(userID)
-		username := ""
-		if userRec != nil {
-			username = userRec.Username
-		}
 		sound := b.getUserVideoSound(userID)
 		opts := services.GenerationOptions{
 			InputImages:        []string{photoURL},
@@ -3497,13 +3501,13 @@ func (b *Bot) processVideoGeneration(chatID int64, userID int64, photoURL string
 			ChatID:             chatID,
 			Model:              modelOpt.ID,
 			ModelType:          string(modelOpt.Category),
-			Username:           username,
+			Username:           userRec.Username,
 			AspectRatio:        duration, // Pass duration via AspectRatio field
 			NanoBananaProvider: sound,    // Pass sound via NanoBananaProvider field
 		}
-		req, err := b.generationService.StartGeneration(userID, opts)
+		req, err := b.generationService.StartGeneration(userRec.ID, opts)
 		if err != nil {
-			_ = b.userService.AddExtraQuota(userID, models.QuotaCategoryVideo, requestCost)
+			_ = b.userService.AddExtraQuota(userRec.ID, models.QuotaCategoryVideo, requestCost)
 			b.sendErrorMessage(chatID, fmt.Sprintf("Ошибка запуска видео генерации: %v", err))
 			return
 		}
@@ -3517,11 +3521,6 @@ func (b *Bot) processVideoGeneration(chatID int64, userID int64, photoURL string
 
 	// wan/2-6-image-to-video — через KieAPI async с duration
 	if modelOpt.ID == "wan/2-6-image-to-video" {
-		userRec, _ := b.userService.GetUserByTelegramID(userID)
-		username := ""
-		if userRec != nil {
-			username = userRec.Username
-		}
 		resolution := b.getUserVideoResolution(userID)
 		opts := services.GenerationOptions{
 			InputImages:        []string{photoURL},
@@ -3531,11 +3530,11 @@ func (b *Bot) processVideoGeneration(chatID int64, userID int64, photoURL string
 			ChatID:             chatID,
 			Model:              modelOpt.ID,
 			ModelType:          string(modelOpt.Category),
-			Username:           username,
+			Username:           userRec.Username,
 			AspectRatio:        duration,   // Pass duration via AspectRatio field
 			NanoBananaProvider: resolution, // Pass resolution via NanoBananaProvider field
 		}
-		req, err := b.generationService.StartGeneration(userID, opts)
+		req, err := b.generationService.StartGeneration(userRec.ID, opts)
 		if err != nil {
 			_ = b.userService.AddExtraQuota(userID, models.QuotaCategoryVideo, requestCost)
 			b.sendErrorMessage(chatID, fmt.Sprintf("Ошибка запуска видео генерации: %v", err))
@@ -3547,11 +3546,6 @@ func (b *Bot) processVideoGeneration(chatID int64, userID int64, photoURL string
 
 	// veo3_fast — через KieAPI async (StartGeneration + callback)
 	if modelOpt.ID == "veo3_fast" {
-		userRec, _ := b.userService.GetUserByTelegramID(userID)
-		username := ""
-		if userRec != nil {
-			username = userRec.Username
-		}
 		opts := services.GenerationOptions{
 			InputImages: []string{photoURL},
 			InputImage:  photoURL,
@@ -3560,10 +3554,10 @@ func (b *Bot) processVideoGeneration(chatID int64, userID int64, photoURL string
 			ChatID:      chatID,
 			Model:       modelOpt.ID,
 			ModelType:   string(modelOpt.Category),
-			Username:    username,
+			Username:    userRec.Username,
 			AspectRatio: b.getAspectRatioForModel(userID, modelOpt.ID),
 		}
-		req, err := b.generationService.StartGeneration(userID, opts)
+		req, err := b.generationService.StartGeneration(userRec.ID, opts)
 		if err != nil {
 			_ = b.userService.AddExtraQuota(userID, models.QuotaCategoryVideo, requestCost)
 			b.sendErrorMessage(chatID, fmt.Sprintf("Ошибка запуска видео генерации: %v", err))
@@ -4345,11 +4339,12 @@ func (b *Bot) processGeneration(chatID int64, userID int64, photoURLs []string, 
 	imageList := photoURLs
 
 	// Запускаем генерацию через сервис
-	userRec, _ := b.userService.GetUserByTelegramID(userID)
-	username := ""
-	if userRec != nil {
-		username = userRec.Username
+	userRec, err := b.userService.GetUserByTelegramID(userID)
+	if err != nil {
+		b.sendErrorMessage(chatID, "Ошибка получения данных пользователя")
+		return
 	}
+
 	inputImage := ""
 	if len(imageList) > 0 {
 		inputImage = imageList[0]
@@ -4364,7 +4359,7 @@ func (b *Bot) processGeneration(chatID int64, userID int64, photoURLs []string, 
 		ChatID:            chatID,
 		Model:             modelOpt.ID,
 		ModelType:         string(modelOpt.Category),
-		Username:          username,
+		Username:          userRec.Username,
 	}
 	if modelOpt.ID == "google/nano-banana" || modelOpt.ID == "google/nano-banana-pro" || modelOpt.ID == "nano-banana-2" || modelOpt.ID == "seedream/4.5-edit" {
 		opts.AspectRatio = b.getAspectRatioForModel(userID, modelOpt.ID)
@@ -4388,7 +4383,7 @@ func (b *Bot) processGeneration(chatID int64, userID int64, photoURLs []string, 
 		opts.GoogleSearch = b.getUserGoogleSearch(userID)
 	}
 
-	req, err := b.generationService.StartGeneration(userID, opts)
+	req, err := b.generationService.StartGeneration(userRec.ID, opts)
 	if err != nil {
 		// Возвращаем запросы в исходные бакеты при ошибке запуска
 		_ = b.userService.RefundQuota(userID, models.QuotaCategoryImage, primaryUsed, extraUsed)
@@ -4508,16 +4503,16 @@ func (b *Bot) handleTextMessage(msg *tgmodels.Message) {
 			return
 		}
 
+		userRec, err := b.userService.GetUserByTelegramID(msg.From.ID)
+		if err != nil {
+			b.sendErrorMessage(msg.Chat.ID, "Ошибка получения данных пользователя")
+			return
+		}
+
 		primaryUsed, extraUsed, err := b.userService.ConsumeQuotaDetailed(msg.From.ID, models.QuotaCategoryText, requestCost)
 		if err != nil {
 			b.sendInsufficientQuotaMessage(msg.Chat.ID, models.QuotaCategoryText, requestCost, err)
 			return
-		}
-
-		userRec, _ := b.userService.GetUserByTelegramID(msg.From.ID)
-		username := ""
-		if userRec != nil {
-			username = userRec.Username
 		}
 
 		apiModel := modelOpt.ApiModel
@@ -4530,8 +4525,8 @@ func (b *Bot) handleTextMessage(msg *tgmodels.Message) {
 		}
 
 		b.goLimited(func() {
-			req, logErr := b.generationService.LogRequest(msg.From.ID, services.LogRequestOptions{
-				Username:          username,
+			req, logErr := b.generationService.LogRequest(userRec.ID, services.LogRequestOptions{
+				Username:          userRec.Username,
 				ModelType:         string(modelOpt.Category),
 				Model:             apiModel,
 				Prompt:            userText,
