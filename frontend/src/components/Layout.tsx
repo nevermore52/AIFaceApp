@@ -23,7 +23,7 @@ export function Layout() {
           <div className="flex items-center gap-8">
             <Link to="/" className="flex items-center space-x-2">
               <span className="font-bold text-2xl tracking-tight bg-gradient-to-br from-white via-white to-white/50 bg-clip-text text-transparent">
-                AIFACEAPP - Нейросети
+                AIFACEAPP
               </span>
             </Link>
             <nav className="hidden md:flex items-center space-x-1">
