@@ -22,35 +22,12 @@ export function LoginPage() {
     }
   }, [isAuthenticated, navigate, redirectTo])
 
-  useEffect(() => {
-    const tg = window.Telegram?.WebApp
-    if (tg?.initData) {
-      tg.ready()
-      tg.expand()
-      handleMiniAppLogin(tg.initData)
-    }
-  }, [])
-
   // Cleanup polling on unmount
   useEffect(() => {
     return () => {
       if (pollRef.current) clearInterval(pollRef.current)
     }
   }, [])
-
-  const handleMiniAppLogin = async (initData: string) => {
-    try {
-      const response = await authApi.miniAppLogin(initData) as {
-        user: Parameters<typeof setAuth>[0]
-        access_token: string
-        refresh_token: string
-      }
-      setAuth(response.user, response.access_token, response.refresh_token)
-      navigate(redirectTo)
-    } catch (error) {
-      console.error('Mini App login failed:', error)
-    }
-  }
 
   const stopPolling = useCallback(() => {
     if (pollRef.current) {
