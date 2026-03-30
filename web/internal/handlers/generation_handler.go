@@ -99,11 +99,20 @@ func (h *GenerationHandler) GetUserHistory(c *gin.Context) {
 	}
 
 	u := user.(*models.User)
+	if u.TelegramID == nil {
+		c.JSON(http.StatusOK, gin.H{
+			"data":   []interface{}{},
+			"total":  0,
+			"limit":  10,
+			"offset": 0,
+		})
+		return
+	}
 
 	limit, _ := strconv.Atoi(c.DefaultQuery("limit", "10"))
 	offset, _ := strconv.Atoi(c.DefaultQuery("offset", "0"))
 
-	generations, total, err := h.generationService.GetByUserID(u.ID, limit, offset)
+	generations, total, err := h.generationService.GetByUserID(*u.TelegramID, limit, offset)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to get history"})
 		return
