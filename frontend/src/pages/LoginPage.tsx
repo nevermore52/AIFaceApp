@@ -235,8 +235,22 @@ export function LoginPage() {
 
           <p className="text-center text-[10px] text-white/20 px-6 leading-relaxed">
             Авторизуясь в сервисе, вы подтверждаете свое согласие с нашими 
-            <span className="text-white/40 hover:text-primary cursor-pointer transition-colors px-1">Правилами пользования</span> 
-            и <span className="text-white/40 hover:text-primary cursor-pointer transition-colors">Политикой конфиденциальности</span>.
+            <a 
+              href="https://telegra.ph/Polzovatelskoe-soglashenie-Usloviya-EHkspluatacii-i-Obsluzhivaniya-01-14" 
+              target="_blank" 
+              rel="noopener noreferrer"
+              className="text-white/40 hover:text-primary cursor-pointer transition-colors px-1 underline"
+            >
+              Правилами пользования
+            </a> 
+            и <a 
+              href="https://telegra.ph/Politika-Konfidencialnosti-01-14-87" 
+              target="_blank" 
+              rel="noopener noreferrer"
+              className="text-white/40 hover:text-primary cursor-pointer transition-colors underline"
+            >
+              Политикой конфиденциальности
+            </a>.
           </p>
         </CardContent>
       </Card>

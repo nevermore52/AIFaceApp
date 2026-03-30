@@ -12,7 +12,7 @@ type User struct {
 	FirstName             string     `json:"first_name" db:"first_name"`
 	LastName              string     `json:"last_name" db:"last_name"`
 	AvatarURL             *string    `json:"avatar_url,omitempty" db:"avatar_url"`
-	LanguageCode          string     `json:"language_code" db:"language_code"`
+	LanguageCode          *string    `json:"language_code,omitempty" db:"language_code"`
 	IsPremium             bool       `json:"is_premium" db:"is_premium"`
 	IsAdmin               bool       `json:"is_admin" db:"is_admin"`
 	ReferrerID            *int64     `json:"referrer_id,omitempty" db:"referrer_id"`
