@@ -86,21 +86,24 @@ export function GeneratePage() {
 
   useEffect(() => {
     if (filteredModels.length > 0 && !filteredModels.find(m => m.id === selectedModel)) {
-      const newModel = filteredModels[0].id
-      setSelectedModel(newModel)
-      
-      // Проверяем лимит фото для новой модели
-      const maxImagesForNewModel = MAX_IMAGES_PER_MODEL[newModel] || 4
-      if (imageFiles.length > maxImagesForNewModel) {
-        // Удаляем лишние фото
-        const allowedFiles = imageFiles.slice(0, maxImagesForNewModel)
-        const allowedPreviews = imagePreviews.slice(0, maxImagesForNewModel)
-        setImageFiles(allowedFiles)
-        setImagePreviews(allowedPreviews)
-        setError(`Для модели ${filteredModels[0].name} максимум ${maxImagesForNewModel} изображений. Оставлены первые ${maxImagesForNewModel}.`)
-      }
+      setSelectedModel(filteredModels[0].id)
     }
-  }, [selectedCategory, filteredModels, selectedModel, imageFiles, imagePreviews])
+  }, [selectedCategory, filteredModels, selectedModel])
+
+  // Проверяем лимит фото при смене модели
+  useEffect(() => {
+    if (!selectedModel) return
+    
+    const maxImages = MAX_IMAGES_PER_MODEL[selectedModel] || 4
+    if (imageFiles.length > maxImages) {
+      const allowedFiles = imageFiles.slice(0, maxImages)
+      const allowedPreviews = imagePreviews.slice(0, maxImages)
+      setImageFiles(allowedFiles)
+      setImagePreviews(allowedPreviews)
+      const modelInfo = allModels.find(m => m.id === selectedModel)
+      setError(`Для модели ${modelInfo?.name || selectedModel} максимум ${maxImages} изображений. Лишние удалены.`)
+    }
+  }, [selectedModel])
 
   const getMaxImages = (): number => {
     return MAX_IMAGES_PER_MODEL[selectedModel] || 4
