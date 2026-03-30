@@ -58,7 +58,7 @@ func (h *UserHandler) UpdateProfile(c *gin.Context) {
 		u.LastName = req.LastName
 	}
 	if req.LanguageCode != "" {
-		u.LanguageCode = req.LanguageCode
+		u.LanguageCode = &req.LanguageCode
 	}
 
 	if err := h.userService.Update(u); err != nil {
