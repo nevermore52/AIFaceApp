@@ -12,7 +12,9 @@ type WebAuthToken struct {
 	ID           int64      `json:"id"`
 	Token        string     `json:"token"`
 	TelegramID   *int64     `json:"telegram_id"`
-	Status       string     `json:"status"` // pending, confirmed, expired
+	UserID       *int64     `json:"user_id"`
+	ActionType   string     `json:"action_type"` // auth, link
+	Status       string     `json:"status"`      // pending, confirmed, expired
 	AccessToken  *string    `json:"access_token"`
 	RefreshToken *string    `json:"refresh_token"`
 	CreatedAt    time.Time  `json:"created_at"`
@@ -34,16 +36,20 @@ func generateAuthToken() string {
 }
 
 func (r *AuthTokenRepository) Create() (*WebAuthToken, error) {
+	return r.CreateWithAction("auth", nil)
+}
+
+func (r *AuthTokenRepository) CreateWithAction(actionType string, userID *int64) (*WebAuthToken, error) {
 	token := generateAuthToken()
 
 	query := `
-		INSERT INTO web_auth_tokens (token, status)
-		VALUES ($1, 'pending')
-		RETURNING id, token, telegram_id, status, access_token, refresh_token, created_at, confirmed_at`
+		INSERT INTO web_auth_tokens (token, action_type, user_id, status)
+		VALUES ($1, $2, $3, 'pending')
+		RETURNING id, token, telegram_id, user_id, action_type, status, access_token, refresh_token, created_at, confirmed_at`
 
 	t := &WebAuthToken{}
-	err := r.db.QueryRow(query, token).Scan(
-		&t.ID, &t.Token, &t.TelegramID, &t.Status,
+	err := r.db.QueryRow(query, token, actionType, userID).Scan(
+		&t.ID, &t.Token, &t.TelegramID, &t.UserID, &t.ActionType, &t.Status,
 		&t.AccessToken, &t.RefreshToken, &t.CreatedAt, &t.ConfirmedAt,
 	)
 	return t, err
@@ -51,12 +57,12 @@ func (r *AuthTokenRepository) Create() (*WebAuthToken, error) {
 
 func (r *AuthTokenRepository) GetByToken(token string) (*WebAuthToken, error) {
 	query := `
-		SELECT id, token, telegram_id, status, access_token, refresh_token, created_at, confirmed_at
+		SELECT id, token, telegram_id, user_id, action_type, status, access_token, refresh_token, created_at, confirmed_at
 		FROM web_auth_tokens WHERE token = $1`
 
 	t := &WebAuthToken{}
 	err := r.db.QueryRow(query, token).Scan(
-		&t.ID, &t.Token, &t.TelegramID, &t.Status,
+		&t.ID, &t.Token, &t.TelegramID, &t.UserID, &t.ActionType, &t.Status,
 		&t.AccessToken, &t.RefreshToken, &t.CreatedAt, &t.ConfirmedAt,
 	)
 	return t, err

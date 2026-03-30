@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { useAuthStore } from '../store/auth'
-import { userApi, API_BASE_URL, authApi } from '../lib/api'
+import { userApi, authApi } from '../lib/api'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../components/ui/card'
 import { Button } from '../components/ui/button'
 
@@ -24,8 +24,9 @@ export function ProfilePage() {
   }
 
   const handleLinkGoogle = () => {
-    sessionStorage.setItem('post_login_redirect', '/profile')
-    window.location.href = `${API_BASE_URL}/auth/google`
+    // Для связывания Google нужно использовать текущий email из OAuth
+    // Пока что просто показываем сообщение
+    alert('Функция связывания Google аккаунта будет доступна в следующем обновлении. Используйте вход через Google для создания нового аккаунта.')
   }
 
   const handleSubmit = async (e: React.FormEvent) => {

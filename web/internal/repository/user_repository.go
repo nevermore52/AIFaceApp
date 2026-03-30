@@ -149,6 +149,28 @@ func (r *UserRepository) LinkEmail(userID int64, email string) error {
 	return err
 }
 
+func (r *UserRepository) MergeAccounts(keepUserID, deleteUserID int64) error {
+	tx, err := r.db.Begin()
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+
+	// Перенести все генерации с deleteUserID на keepUserID
+	_, err = tx.Exec(`UPDATE generation_requests SET user_id = $1 WHERE user_id = $2`, keepUserID, deleteUserID)
+	if err != nil {
+		return err
+	}
+
+	// Удалить старый аккаунт
+	_, err = tx.Exec(`DELETE FROM users WHERE id = $1`, deleteUserID)
+	if err != nil {
+		return err
+	}
+
+	return tx.Commit()
+}
+
 func (r *UserRepository) IsAdmin(userID int64) (bool, error) {
 	var isAdmin bool
 	err := r.db.QueryRow(`SELECT is_admin FROM users WHERE id = $1`, userID).Scan(&isAdmin)

@@ -33,10 +33,18 @@ func (r *GenerationRepository) GetByID(id int64) (*models.GenerationRequest, err
 
 func (r *GenerationRepository) GetByUserID(userID int64, limit, offset int) ([]*models.GenerationRequest, int, error) {
 	var total int
-	err := r.db.QueryRow(`SELECT COUNT(*) FROM generation_requests WHERE user_id = $1`, userID).Scan(&total)
+	countQuery := `SELECT COUNT(*) FROM generation_requests WHERE user_id = $1`
+	err := r.db.QueryRow(countQuery, userID).Scan(&total)
 	if err != nil {
 		return nil, 0, err
 	}
+
+	// Debug: check total generations in DB
+	var totalAll int
+	r.db.QueryRow(`SELECT COUNT(*) FROM generation_requests`).Scan(&totalAll)
+
+	// Debug logging - always log to help diagnose
+	println("GetByUserID: searching for userID=", userID, "found=", total, "total_in_db=", totalAll)
 
 	query := `
 		SELECT id, user_id, username, model_type, model, status, input_image, output,

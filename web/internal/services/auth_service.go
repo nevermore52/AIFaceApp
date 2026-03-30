@@ -289,3 +289,49 @@ func (s *AuthService) GetUserByID(userID int64) (*models.User, error) {
 func (s *AuthService) IsAdmin(userID int64) (bool, error) {
 	return s.userRepo.IsAdmin(userID)
 }
+
+func (s *AuthService) LinkTelegramAccount(userID int64, telegramID int64) error {
+	// Проверяем, существует ли уже аккаунт с этим telegram_id
+	existingUser, err := s.userRepo.GetByTelegramID(telegramID)
+	if err == nil {
+		// Аккаунт с таким telegram_id уже существует - нужно объединить
+		if existingUser.ID != userID {
+			// Объединяем аккаунты: сохраняем текущий (userID), удаляем старый (existingUser.ID)
+			if err := s.userRepo.MergeAccounts(userID, existingUser.ID); err != nil {
+				return fmt.Errorf("failed to merge accounts: %w", err)
+			}
+		}
+	} else if err != sql.ErrNoRows {
+		return fmt.Errorf("failed to check existing telegram account: %w", err)
+	}
+
+	// Привязываем telegram_id к текущему аккаунту
+	if err := s.userRepo.LinkTelegramID(userID, telegramID); err != nil {
+		return fmt.Errorf("failed to link telegram account: %w", err)
+	}
+
+	return nil
+}
+
+func (s *AuthService) LinkGoogleAccount(userID int64, email string) error {
+	// Проверяем, существует ли уже аккаунт с этим email
+	existingUser, err := s.userRepo.GetByEmail(email)
+	if err == nil {
+		// Аккаунт с таким email уже существует - нужно объединить
+		if existingUser.ID != userID {
+			// Объединяем аккаунты: сохраняем текущий (userID), удаляем старый (existingUser.ID)
+			if err := s.userRepo.MergeAccounts(userID, existingUser.ID); err != nil {
+				return fmt.Errorf("failed to merge accounts: %w", err)
+			}
+		}
+	} else if err != sql.ErrNoRows {
+		return fmt.Errorf("failed to check existing google account: %w", err)
+	}
+
+	// Привязываем email к текущему аккаунту
+	if err := s.userRepo.LinkEmail(userID, email); err != nil {
+		return fmt.Errorf("failed to link google account: %w", err)
+	}
+
+	return nil
+}

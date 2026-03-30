@@ -6,6 +6,7 @@ import (
 	"net/http"
 
 	"telegram-ai-face-bot/web/internal/config"
+	"telegram-ai-face-bot/web/internal/models"
 	"telegram-ai-face-bot/web/internal/repository"
 	"telegram-ai-face-bot/web/internal/services"
 
@@ -136,6 +137,7 @@ func (h *AuthHandler) GoogleLogin(c *gin.Context) {
 		return
 	}
 
+	// Use simple state for now - linking will be handled via separate flow
 	url := h.googleOAuth.AuthCodeURL("state", oauth2.AccessTypeOffline)
 	c.Redirect(http.StatusTemporaryRedirect, url)
 }
@@ -249,7 +251,17 @@ func (h *AuthHandler) CreateWebToken(c *gin.Context) {
 	// Cleanup old expired tokens
 	_ = h.authTokenRepo.CleanupExpired()
 
-	t, err := h.authTokenRepo.Create()
+	// Check if user is authenticated (for linking)
+	var userID *int64
+	actionType := "auth"
+
+	if user, exists := c.Get("user"); exists {
+		u := user.(*models.User)
+		userID = &u.ID
+		actionType = "link"
+	}
+
+	t, err := h.authTokenRepo.CreateWithAction(actionType, userID)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to create auth token"})
 		return
@@ -332,7 +344,28 @@ func (h *AuthHandler) ConfirmWebToken(c *gin.Context) {
 		return
 	}
 
-	// Create user + session via auth service (reuse Telegram login flow)
+	// Check if this is a linking action
+	if t.ActionType == "link" && t.UserID != nil {
+		// Link Telegram account to existing user
+		if err := h.authService.LinkTelegramAccount(*t.UserID, req.TelegramID); err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to link account", "details": err.Error()})
+			return
+		}
+
+		// Mark token as confirmed without creating new session
+		if err := h.authTokenRepo.Confirm(req.Token, req.TelegramID, "", ""); err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to confirm token"})
+			return
+		}
+
+		c.JSON(http.StatusOK, gin.H{
+			"status":  "linked",
+			"message": "Telegram account linked successfully",
+		})
+		return
+	}
+
+	// Regular auth flow - create user + session
 	authData := services.TelegramAuthData{
 		ID:        req.TelegramID,
 		FirstName: req.FirstName,
@@ -362,5 +395,33 @@ func (h *AuthHandler) ConfirmWebToken(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{
 		"status": "confirmed",
 		"user":   user,
+	})
+}
+
+// LinkGoogleAccount links a Google account to the current authenticated user
+func (h *AuthHandler) LinkGoogleAccount(c *gin.Context) {
+	user, exists := c.Get("user")
+	if !exists {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "Not authenticated"})
+		return
+	}
+
+	u := user.(*models.User)
+
+	var req struct {
+		Email string `json:"email" binding:"required"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid request"})
+		return
+	}
+
+	if err := h.authService.LinkGoogleAccount(u.ID, req.Email); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to link Google account", "details": err.Error()})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"message": "Google account linked successfully",
 	})
 }
