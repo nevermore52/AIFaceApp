@@ -80,7 +80,7 @@ func (h *GenerationHandler) GetGeneration(c *gin.Context) {
 	}
 
 	u := user.(*models.User)
-	if u.TelegramID == nil || generation.UserID != *u.TelegramID {
+	if generation.UserID != u.ID {
 		isAdmin, _ := c.Get("is_admin")
 		if isAdmin != true {
 			c.JSON(http.StatusForbidden, gin.H{"error": "Access denied"})
