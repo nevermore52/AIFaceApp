@@ -12,6 +12,7 @@ import (
 	"telegram-ai-face-bot/web/internal/middleware"
 	"telegram-ai-face-bot/web/internal/repository"
 	"telegram-ai-face-bot/web/internal/services"
+
 	"github.com/gin-contrib/cors"
 	"github.com/gin-gonic/gin"
 )
@@ -112,6 +113,7 @@ func New(cfg *config.Config, db *sql.DB) *Server {
 			protected.GET("/payments/packages", paymentHandler.GetPackages)
 			protected.GET("/payments/subscriptions", paymentHandler.GetSubscriptions)
 			protected.POST("/payments/create", paymentHandler.CreatePayment)
+			protected.POST("/payments/subscription", paymentHandler.CreateSubscriptionPayment)
 			protected.GET("/payments/history", paymentHandler.GetPaymentHistory)
 		}
 

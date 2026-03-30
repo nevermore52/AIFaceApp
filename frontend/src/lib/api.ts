@@ -122,4 +122,6 @@ export const paymentApi = {
     api.get(`/payments/history?limit=${limit}&offset=${offset}`),
   create: (category: string, qty: number) =>
     api.post('/payments/create', { category, qty }),
+  createSubscription: (subscriptionName: string) =>
+    api.post('/payments/subscription', { subscription_name: subscriptionName }),
 }

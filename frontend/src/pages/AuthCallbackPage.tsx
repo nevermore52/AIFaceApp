@@ -39,10 +39,16 @@ export function AuthCallbackPage() {
   }, [searchParams, setAuth, navigate])
 
   return (
-    <div className="min-h-screen flex items-center justify-center">
-      <div className="text-center">
-        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary mx-auto" />
-        <p className="mt-4 text-muted-foreground">Авторизация...</p>
+    <div className="min-h-screen flex items-center justify-center bg-[#030303]">
+      <div className="text-center space-y-6">
+        <div className="relative mx-auto w-16 h-16">
+          <div className="absolute inset-0 rounded-full border-2 border-white/5" />
+          <div className="absolute inset-0 rounded-full border-2 border-primary border-t-transparent animate-spin" />
+        </div>
+        <div className="space-y-2">
+          <p className="text-lg font-semibold text-white/90">Авторизация...</p>
+          <p className="text-sm text-white/30">Пожалуйста, подождите, мы настраиваем ваш профиль</p>
+        </div>
       </div>
     </div>
   )

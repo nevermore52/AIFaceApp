@@ -39,6 +39,10 @@ type CreatePaymentRequest struct {
 	Qty      int    `json:"qty" binding:"required"`
 }
 
+type CreateSubscriptionPaymentRequest struct {
+	SubscriptionName string `json:"subscription_name" binding:"required"`
+}
+
 func (h *PaymentHandler) CreatePayment(c *gin.Context) {
 	if h.webPaymentService == nil || !h.webPaymentService.IsConfigured() {
 		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "Payment service not configured"})
@@ -67,6 +71,52 @@ func (h *PaymentHandler) CreatePayment(c *gin.Context) {
 		UserID:    *u.TelegramID,
 		Category:  req.Category,
 		Qty:       req.Qty,
+		Username:  u.Username,
+		FirstName: u.FirstName,
+		LastName:  u.LastName,
+	}
+
+	resp, err := h.webPaymentService.CreatePayment(paymentReq)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"payment_id":   resp.PaymentID,
+		"checkout_url": resp.CheckoutURL,
+		"amount":       resp.Amount,
+	})
+}
+
+func (h *PaymentHandler) CreateSubscriptionPayment(c *gin.Context) {
+	if h.webPaymentService == nil || !h.webPaymentService.IsConfigured() {
+		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "Payment service not configured"})
+		return
+	}
+
+	user, exists := c.Get("user")
+	if !exists {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "Not authenticated"})
+		return
+	}
+
+	u := user.(*models.User)
+	if u.TelegramID == nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Telegram account not linked"})
+		return
+	}
+
+	var req CreateSubscriptionPaymentRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid request"})
+		return
+	}
+
+	paymentReq := services.CreatePaymentRequest{
+		UserID:    *u.TelegramID,
+		Category:  "subscription:" + req.SubscriptionName,
+		Qty:       7,
 		Username:  u.Username,
 		FirstName: u.FirstName,
 		LastName:  u.LastName,

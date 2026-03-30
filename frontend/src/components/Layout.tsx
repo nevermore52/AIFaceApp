@@ -17,48 +17,49 @@ export function Layout() {
   ]
 
   return (
-    <div className="min-h-screen bg-background">
-      <header className="sticky top-0 z-50 w-full border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
-        <div className="container flex h-14 items-center">
-          <div className="mr-4 flex">
-            <Link to="/" className="mr-6 flex items-center space-x-2">
-              <span className="font-bold text-xl bg-gradient-to-r from-blue-600 to-purple-600 bg-clip-text text-transparent">
+    <div className="min-h-screen bg-[#030303] text-foreground selection:bg-primary/30">
+      <header className="sticky top-0 z-50 w-full border-b border-white/5 bg-[#030303]/80 backdrop-blur-xl">
+        <div className="container flex h-16 items-center justify-between">
+          <div className="flex items-center gap-8">
+            <Link to="/" className="flex items-center space-x-2">
+              <span className="font-bold text-2xl tracking-tight bg-gradient-to-br from-white via-white to-white/50 bg-clip-text text-transparent">
                 AI Face App
               </span>
             </Link>
+            <nav className="hidden md:flex items-center space-x-1">
+              {navigation.map((item) => (
+                <Link
+                  key={item.href}
+                  to={item.href}
+                  className={cn(
+                    'flex items-center gap-2 px-4 py-2 rounded-full text-sm font-medium transition-all duration-200',
+                    location.pathname === item.href
+                      ? 'bg-white/10 text-white'
+                      : 'text-white/60 hover:text-white hover:bg-white/5'
+                  )}
+                >
+                  <item.icon className="h-4 w-4" />
+                  <span>{item.name}</span>
+                </Link>
+              ))}
+            </nav>
           </div>
-          <nav className="flex items-center space-x-6 text-sm font-medium flex-1">
-            {navigation.map((item) => (
-              <Link
-                key={item.href}
-                to={item.href}
-                className={cn(
-                  'flex items-center gap-2 transition-colors hover:text-foreground/80',
-                  location.pathname === item.href
-                    ? 'text-foreground'
-                    : 'text-foreground/60'
-                )}
-              >
-                <item.icon className="h-4 w-4" />
-                <span className="hidden sm:inline">{item.name}</span>
-              </Link>
-            ))}
-          </nav>
+          
           <div className="flex items-center gap-4">
             {isAuthenticated && user && (
-              <div className="flex items-center gap-2">
+              <div className="flex items-center gap-3 px-3 py-1.5 rounded-full bg-white/5 border border-white/10">
                 {user.avatar_url ? (
                   <img
                     src={user.avatar_url}
                     alt={user.first_name}
-                    className="h-8 w-8 rounded-full"
+                    className="h-6 w-6 rounded-full object-cover"
                   />
                 ) : (
-                  <div className="h-8 w-8 rounded-full bg-primary flex items-center justify-center text-primary-foreground text-sm font-medium">
+                  <div className="h-6 w-6 rounded-full bg-primary/20 flex items-center justify-center text-primary text-[10px] font-bold">
                     {user.first_name[0]}
                   </div>
                 )}
-                <span className="hidden md:inline text-sm font-medium">
+                <span className="hidden md:inline text-xs font-medium text-white/90">
                   {user.first_name}
                 </span>
               </div>
@@ -66,20 +67,20 @@ export function Layout() {
             {isAuthenticated ? (
               <button
                 onClick={logout}
-                className="flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground transition-colors"
+                className="p-2 text-white/40 hover:text-white hover:bg-white/5 rounded-full transition-all"
+                title="Выйти"
               >
-                <LogOut className="h-4 w-4" />
-                <span className="hidden sm:inline">Выйти</span>
+                <LogOut className="h-5 w-5" />
               </button>
             ) : (
-              <Button asChild size="sm">
+              <Button asChild size="sm" className="rounded-full px-6">
                 <Link to="/login">Войти</Link>
               </Button>
             )}
           </div>
         </div>
       </header>
-      <main className="container py-6">
+      <main className="container py-8">
         <Outlet />
       </main>
     </div>

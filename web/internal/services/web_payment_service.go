@@ -37,6 +37,16 @@ type PackageInfo struct {
 	Price    float64 `json:"price"`
 }
 
+type SubscriptionInfo struct {
+	Name        string  `json:"name"`
+	Price       float64 `json:"price"`
+	TextDaily   int     `json:"text_daily"`
+	ImageWeekly int     `json:"image_weekly"`
+	MusicWeekly int     `json:"music_weekly"`
+	VideoWeekly int     `json:"video_weekly"`
+	Discount    int     `json:"discount"`
+}
+
 func (s *WebPaymentService) GetPackages() []PackageInfo {
 	return []PackageInfo{
 		// Image packages (from bot payment_service.go)
@@ -64,6 +74,38 @@ func (s *WebPaymentService) GetPackages() []PackageInfo {
 		{Category: "video", Qty: 25, Price: 1650},
 		{Category: "video", Qty: 50, Price: 3100},
 		{Category: "video", Qty: 100, Price: 5900},
+	}
+}
+
+func (s *WebPaymentService) GetSubscriptions() []SubscriptionInfo {
+	return []SubscriptionInfo{
+		{
+			Name:        "mini",
+			Price:       299,
+			TextDaily:   10,
+			ImageWeekly: 5,
+			MusicWeekly: 1,
+			VideoWeekly: 0,
+			Discount:    0,
+		},
+		{
+			Name:        "start",
+			Price:       499,
+			TextDaily:   30,
+			ImageWeekly: 15,
+			MusicWeekly: 3,
+			VideoWeekly: 1,
+			Discount:    0,
+		},
+		{
+			Name:        "pro",
+			Price:       799,
+			TextDaily:   100,
+			ImageWeekly: 50,
+			MusicWeekly: 10,
+			VideoWeekly: 5,
+			Discount:    0,
+		},
 	}
 }
 
