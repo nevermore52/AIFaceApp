@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { useAuthStore } from '../store/auth'
-import { userApi } from '../lib/api'
+import { userApi, API_BASE_URL, authApi } from '../lib/api'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../components/ui/card'
 import { Button } from '../components/ui/button'
 
@@ -12,6 +12,21 @@ export function ProfilePage() {
     last_name: user?.last_name || '',
     username: user?.username || '',
   })
+
+  const handleLinkTelegram = async () => {
+    try {
+      const { token } = await authApi.createWebToken()
+      const botName = (import.meta.env.VITE_TELEGRAM_BOT_NAME || 'aifaceappbot').replace('@', '')
+      window.open(`https://t.me/${botName}?start=link-${token}`, '_blank', 'noopener,noreferrer')
+    } catch (error) {
+      console.error('Failed to create web token:', error)
+    }
+  }
+
+  const handleLinkGoogle = () => {
+    sessionStorage.setItem('post_login_redirect', '/profile')
+    window.location.href = `${API_BASE_URL}/auth/google`
+  }
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -138,7 +153,12 @@ export function ProfilePage() {
                       Активен
                     </div>
                   ) : (
-                    <Button variant="outline" size="sm" className="rounded-full h-8 text-[10px] font-bold uppercase tracking-widest border-white/10 hover:bg-white/10">
+                    <Button 
+                      variant="outline" 
+                      size="sm" 
+                      className="rounded-full h-8 text-[10px] font-bold uppercase tracking-widest border-white/10 hover:bg-white/10"
+                      onClick={handleLinkTelegram}
+                    >
                       Связать
                     </Button>
                   )}
@@ -168,7 +188,12 @@ export function ProfilePage() {
                       Активен
                     </div>
                   ) : (
-                    <Button variant="outline" size="sm" className="rounded-full h-8 text-[10px] font-bold uppercase tracking-widest border-white/10 hover:bg-white/10">
+                    <Button 
+                      variant="outline" 
+                      size="sm" 
+                      className="rounded-full h-8 text-[10px] font-bold uppercase tracking-widest border-white/10 hover:bg-white/10"
+                      onClick={handleLinkGoogle}
+                    >
                       Связать
                     </Button>
                   )}
