@@ -104,17 +104,18 @@ func (r *UserRepository) CreateFromTelegram(telegramID int64, username, firstNam
 
 func (r *UserRepository) CreateFromGoogle(email, firstName, lastName string, avatarURL *string) (*models.User, error) {
 	referralCode := generateReferralCode()
+	username := "user_" + referralCode
 
 	query := `
-		INSERT INTO users (email, first_name, last_name, avatar_url, referral_code, created_at, updated_at)
-		VALUES ($1, $2, $3, $4, $5, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+		INSERT INTO users (email, username, first_name, last_name, avatar_url, referral_code, created_at, updated_at)
+		VALUES ($1, $2, $3, $4, $5, $6, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
 		RETURNING id, telegram_id, email, username, first_name, last_name, avatar_url,
 				  language_code, is_premium, is_admin, referrer_id, referral_code,
 				  referrals_count, subscription_type, subscription_started_at, subscription_end,
 				  created_at, updated_at, is_blocked`
 
 	user := &models.User{}
-	err := r.db.QueryRow(query, email, firstName, lastName, avatarURL, referralCode).Scan(
+	err := r.db.QueryRow(query, email, username, firstName, lastName, avatarURL, referralCode).Scan(
 		&user.ID, &user.TelegramID, &user.Email, &user.Username, &user.FirstName, &user.LastName,
 		&user.AvatarURL, &user.LanguageCode, &user.IsPremium, &user.IsAdmin,
 		&user.ReferrerID, &user.ReferralCode, &user.ReferralsCount,

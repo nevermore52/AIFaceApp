@@ -27,6 +27,7 @@ func NewWebGenerationService(db *sql.DB, kieClient *kieapi.Client, callbackURL s
 type GenerationRequest struct {
 	ID             int64      `json:"id"`
 	UserID         int64      `json:"user_id"`
+	Username       string     `json:"username"`
 	Model          string     `json:"model"`
 	ModelType      string     `json:"model_type"`
 	Prompt         string     `json:"prompt"`
@@ -72,7 +73,7 @@ func (s *WebGenerationService) GetAvailableModels() []ModelInfo {
 	}
 }
 
-func (s *WebGenerationService) CreateGeneration(userID int64, req CreateGenerationRequest) (*GenerationRequest, error) {
+func (s *WebGenerationService) CreateGeneration(userID int64, username string, req CreateGenerationRequest) (*GenerationRequest, error) {
 	if s.kieClient == nil {
 		return nil, fmt.Errorf("generation service not configured")
 	}
@@ -91,19 +92,21 @@ func (s *WebGenerationService) CreateGeneration(userID int64, req CreateGenerati
 	}
 
 	query := `
-		INSERT INTO generation_requests (user_id, model_type, model, status, input_image, prompt, tokens_used)
-		VALUES ($1, $2, $3, 'pending', $4, $5, 1)
-		RETURNING id, user_id, model_type, model, status, input_image, output, prompt, error_msg, tokens_used, created_at, completed_at`
+		INSERT INTO generation_requests (user_id, username, model_type, model, status, input_image, prompt, tokens_used)
+		VALUES ($1, $2, $3, $4, 'pending', $5, $6, 1)
+		RETURNING id, user_id, username, model_type, model, status, input_image, output, prompt, error_msg, tokens_used, created_at, completed_at`
 
 	genReq := &GenerationRequest{}
-	err := s.db.QueryRow(query, userID, modelType, req.Model, inputImage, req.Prompt).Scan(
-		&genReq.ID, &genReq.UserID, &genReq.ModelType, &genReq.Model, &genReq.Status,
+	err := s.db.QueryRow(query, userID, username, modelType, req.Model, inputImage, req.Prompt).Scan(
+		&genReq.ID, &genReq.UserID, &genReq.Username, &genReq.ModelType, &genReq.Model, &genReq.Status,
 		&genReq.InputImage, &genReq.Output, &genReq.Prompt, &genReq.ErrorMsg,
 		&genReq.TokensUsed, &genReq.CreatedAt, &genReq.CompletedAt,
 	)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create generation request: %w", err)
 	}
+
+	log.Printf("Generation created: id=%d userID=%d username=%s model=%s status=%s", genReq.ID, genReq.UserID, username, genReq.Model, genReq.Status)
 
 	go s.processGeneration(genReq, req)
 

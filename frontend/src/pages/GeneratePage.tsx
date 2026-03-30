@@ -38,6 +38,14 @@ const MAX_IMAGES_PER_MODEL: Record<string, number> = {
   'seedream/4.5-edit': 4,
 }
 
+// Модели, требующие подписку
+const SUBSCRIPTION_REQUIRED_MODELS: Record<string, string[]> = {
+  'google/gemini-3-flash': ['start', 'pro'],
+  'openai/gpt-5-mini': ['mini', 'start', 'pro'],
+  'openai/gpt-5-nano': ['mini', 'start', 'pro'],
+  'chat-gpt-4.1mini': ['start', 'pro'],
+}
+
 export function GeneratePage() {
   const navigate = useNavigate()
   const { isAuthenticated, user } = useAuthStore()
@@ -82,7 +90,17 @@ export function GeneratePage() {
     }
   }, [isAuthenticated, navigate])
 
-  const filteredModels = allModels.filter((m) => m.type === selectedCategory)
+  const canAccessModel = (modelId: string): boolean => {
+    const requiredSubscriptions = SUBSCRIPTION_REQUIRED_MODELS[modelId]
+    if (!requiredSubscriptions) return true // Модель доступна всем
+    if (!user?.subscription_type) return false // Нет подписки
+    return requiredSubscriptions.includes(user.subscription_type)
+  }
+
+  const filteredModels = allModels.filter((m) => {
+    if (m.type !== selectedCategory) return false
+    return canAccessModel(m.id)
+  })
 
   useEffect(() => {
     if (filteredModels.length > 0 && !filteredModels.find(m => m.id === selectedModel)) {
@@ -409,6 +427,11 @@ export function GeneratePage() {
                 </div>
                 {selectedModelInfo && (
                   <p className="text-xs text-white/30 ml-1 italic">{selectedModelInfo.description}</p>
+                )}
+                {selectedCategory === 'text' && !user?.subscription_type && (
+                  <div className="p-3 rounded-xl bg-yellow-500/10 border border-yellow-500/20 text-yellow-200 text-xs">
+                    Текстовые модели требуют активную подписку. Выберите подписку на странице платежей.
+                  </div>
                 )}
               </div>
 

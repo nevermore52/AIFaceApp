@@ -99,20 +99,11 @@ func (h *GenerationHandler) GetUserHistory(c *gin.Context) {
 	}
 
 	u := user.(*models.User)
-	if u.TelegramID == nil {
-		c.JSON(http.StatusOK, gin.H{
-			"data":   []interface{}{},
-			"total":  0,
-			"limit":  10,
-			"offset": 0,
-		})
-		return
-	}
 
 	limit, _ := strconv.Atoi(c.DefaultQuery("limit", "10"))
 	offset, _ := strconv.Atoi(c.DefaultQuery("offset", "0"))
 
-	generations, total, err := h.generationService.GetByUserID(*u.TelegramID, limit, offset)
+	generations, total, err := h.generationService.GetByUserID(u.ID, limit, offset)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to get history"})
 		return
@@ -155,7 +146,43 @@ func (h *GenerationHandler) CreateGeneration(c *gin.Context) {
 		return
 	}
 
-	genReq, err := h.webGenerationService.CreateGeneration(u.ID, req)
+	// Проверяем подписку для текстовых моделей
+	textModels := map[string]bool{
+		"google/gemini-3-flash": true,
+		"openai/gpt-5-mini":     true,
+		"openai/gpt-5-nano":     true,
+		"chat-gpt-4.1mini":      true,
+	}
+
+	if textModels[req.Model] {
+		if u.SubscriptionType == "" {
+			c.JSON(http.StatusForbidden, gin.H{"error": "Subscription required for text models"})
+			return
+		}
+		// Проверяем, доступна ли модель для подписки
+		allowedModels := map[string][]string{
+			"google/gemini-3-flash": {"start", "pro"},
+			"openai/gpt-5-mini":     {"mini", "start", "pro"},
+			"openai/gpt-5-nano":     {"mini", "start", "pro"},
+			"chat-gpt-4.1mini":      {"start", "pro"},
+		}
+
+		if allowed, ok := allowedModels[req.Model]; ok {
+			found := false
+			for _, sub := range allowed {
+				if sub == u.SubscriptionType {
+					found = true
+					break
+				}
+			}
+			if !found {
+				c.JSON(http.StatusForbidden, gin.H{"error": "This model is not available for your subscription"})
+				return
+			}
+		}
+	}
+
+	genReq, err := h.webGenerationService.CreateGeneration(u.ID, u.Username, req)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return

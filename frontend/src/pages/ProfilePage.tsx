@@ -85,10 +85,11 @@ export function ProfilePage() {
                       id="username"
                       type="text"
                       value={formData.username}
-                      onChange={(e) => setFormData({ ...formData, username: e.target.value })}
-                      className="w-full pl-8 pr-4 py-3 rounded-xl border border-white/5 bg-white/[0.03] text-sm text-white/80 transition-all focus:border-primary/50 focus:ring-0 hover:bg-white/[0.05]"
+                      readOnly
+                      className="w-full pl-8 pr-4 py-3 rounded-xl border border-white/5 bg-white/[0.03] text-sm text-white/40 transition-all cursor-not-allowed opacity-60"
                     />
                   </div>
+                  <p className="text-[10px] text-white/30 ml-1">Username не может быть изменен</p>
                 </div>
                 <Button 
                   type="submit" 
