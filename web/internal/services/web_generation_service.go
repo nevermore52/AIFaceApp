@@ -25,19 +25,19 @@ func NewWebGenerationService(db *sql.DB, kieClient *kieapi.Client, callbackURL s
 }
 
 type GenerationRequest struct {
-	ID              int64      `json:"id"`
-	UserID          int64      `json:"user_id"`
-	Model           string     `json:"model"`
-	ModelType       string     `json:"model_type"`
-	Prompt          string     `json:"prompt"`
-	InputImage      string     `json:"input_image,omitempty"`
-	Status          string     `json:"status"`
-	Output          *string    `json:"output,omitempty"`
-	ErrorMsg        *string    `json:"error_msg,omitempty"`
-	ExternalTaskID  string     `json:"external_task_id,omitempty"`
-	TokensUsed      int        `json:"tokens_used"`
-	CreatedAt       time.Time  `json:"created_at"`
-	CompletedAt     *time.Time `json:"completed_at,omitempty"`
+	ID             int64      `json:"id"`
+	UserID         int64      `json:"user_id"`
+	Model          string     `json:"model"`
+	ModelType      string     `json:"model_type"`
+	Prompt         string     `json:"prompt"`
+	InputImage     string     `json:"input_image,omitempty"`
+	Status         string     `json:"status"`
+	Output         *string    `json:"output,omitempty"`
+	ErrorMsg       *string    `json:"error_msg,omitempty"`
+	ExternalTaskID string     `json:"external_task_id,omitempty"`
+	TokensUsed     int        `json:"tokens_used"`
+	CreatedAt      time.Time  `json:"created_at"`
+	CompletedAt    *time.Time `json:"completed_at,omitempty"`
 }
 
 type CreateGenerationRequest struct {
@@ -57,11 +57,18 @@ type ModelInfo struct {
 
 func (s *WebGenerationService) GetAvailableModels() []ModelInfo {
 	return []ModelInfo{
-		{ID: "nano-banana-2", Name: "Nano Banana 2", Type: "image", Description: "Генерация и редактирование изображений", TokenCost: 1},
-		{ID: "nano-banana-pro", Name: "Nano Banana Pro", Type: "image", Description: "Продвинутая генерация изображений", TokenCost: 2},
-		{ID: "seedream/4.5-edit", Name: "Seedream Edit", Type: "image", Description: "Редактирование изображений", TokenCost: 1},
-		{ID: "wan/2-6-image-to-video", Name: "Wan Video", Type: "video", Description: "Генерация видео из изображения", TokenCost: 3},
-		{ID: "kling-2.6/image-to-video", Name: "Kling Video", Type: "video", Description: "Генерация видео с звуком", TokenCost: 4},
+		{ID: "google/nano-banana", Name: "Nano Banana", Type: "image", Description: "Генерация изображений", TokenCost: 1},
+		{ID: "google/nano-banana-pro", Name: "Nano Banana Pro", Type: "image", Description: "Продвинутая генерация изображений", TokenCost: 4},
+		{ID: "nano-banana-2", Name: "Nano Banana 2", Type: "image", Description: "Генерация и редактирование изображений", TokenCost: 2},
+		{ID: "seedream/4.5-edit", Name: "Seedream 4.5", Type: "image", Description: "Редактирование изображений", TokenCost: 3},
+		{ID: "veo3_fast", Name: "Veo 3.1 Fast", Type: "video", Description: "Генерация видео", TokenCost: 1},
+		{ID: "wan/2-6-image-to-video", Name: "Wan 2.6", Type: "video", Description: "Генерация видео из изображения", TokenCost: 2},
+		{ID: "kling-2.6/image-to-video", Name: "Kling 2.6", Type: "video", Description: "Генерация видео с звуком", TokenCost: 1},
+		{ID: "music-suno", Name: "Suno Music", Type: "music", Description: "Генерация музыки", TokenCost: 1},
+		{ID: "google/gemini-3-flash", Name: "Gemini 3 Flash", Type: "text", Description: "Текстовая модель", TokenCost: 1},
+		{ID: "openai/gpt-5-mini", Name: "GPT-5 mini", Type: "text", Description: "Текстовая модель", TokenCost: 1},
+		{ID: "openai/gpt-5-nano", Name: "GPT-5 nano", Type: "text", Description: "Текстовая модель", TokenCost: 1},
+		{ID: "chat-gpt-4.1mini", Name: "GPT-4.1 mini", Type: "text", Description: "Текстовая модель", TokenCost: 1},
 	}
 }
 

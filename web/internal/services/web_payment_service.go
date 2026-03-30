@@ -14,11 +14,11 @@ import (
 )
 
 type WebPaymentService struct {
-	db            *sql.DB
-	shopID        string
-	secretKey     string
-	returnURL     string
-	httpClient    *http.Client
+	db         *sql.DB
+	shopID     string
+	secretKey  string
+	returnURL  string
+	httpClient *http.Client
 }
 
 func NewWebPaymentService(db *sql.DB, shopID, secretKey, returnURL string) *WebPaymentService {
@@ -39,14 +39,31 @@ type PackageInfo struct {
 
 func (s *WebPaymentService) GetPackages() []PackageInfo {
 	return []PackageInfo{
+		// Image packages (from bot payment_service.go)
 		{Category: "image", Qty: 10, Price: 99},
-		{Category: "image", Qty: 50, Price: 399},
-		{Category: "image", Qty: 100, Price: 699},
-		{Category: "video", Qty: 5, Price: 199},
-		{Category: "video", Qty: 20, Price: 699},
-		{Category: "video", Qty: 50, Price: 1499},
-		{Category: "music", Qty: 10, Price: 149},
-		{Category: "music", Qty: 30, Price: 399},
+		{Category: "image", Qty: 50, Price: 389},
+		{Category: "image", Qty: 100, Price: 669},
+		{Category: "image", Qty: 250, Price: 1499},
+		{Category: "image", Qty: 500, Price: 2899},
+		// Text packages
+		{Category: "text", Qty: 10, Price: 10},
+		{Category: "text", Qty: 50, Price: 45},
+		{Category: "text", Qty: 100, Price: 80},
+		{Category: "text", Qty: 250, Price: 200},
+		{Category: "text", Qty: 500, Price: 345},
+		// Music packages
+		{Category: "music", Qty: 1, Price: 25},
+		{Category: "music", Qty: 5, Price: 119},
+		{Category: "music", Qty: 10, Price: 202},
+		{Category: "music", Qty: 50, Price: 812},
+		{Category: "music", Qty: 100, Price: 1599},
+		// Video packages
+		{Category: "video", Qty: 1, Price: 99},
+		{Category: "video", Qty: 5, Price: 379},
+		{Category: "video", Qty: 10, Price: 699},
+		{Category: "video", Qty: 25, Price: 1650},
+		{Category: "video", Qty: 50, Price: 3100},
+		{Category: "video", Qty: 100, Price: 5900},
 	}
 }
 
@@ -69,8 +86,8 @@ type CreatePaymentRequest struct {
 }
 
 type CreatePaymentResponse struct {
-	PaymentID   string `json:"payment_id"`
-	CheckoutURL string `json:"checkout_url"`
+	PaymentID   string  `json:"payment_id"`
+	CheckoutURL string  `json:"checkout_url"`
 	Amount      float64 `json:"amount"`
 }
 
