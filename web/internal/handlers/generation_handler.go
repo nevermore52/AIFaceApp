@@ -182,12 +182,7 @@ func (h *GenerationHandler) CreateGeneration(c *gin.Context) {
 		}
 	}
 
-	userID := u.ID
-	if u.TelegramID != nil {
-		userID = *u.TelegramID
-	}
-
-	genReq, err := h.webGenerationService.CreateGeneration(userID, u.Username, req)
+	genReq, err := h.webGenerationService.CreateGeneration(u.ID, u.Username, req)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
