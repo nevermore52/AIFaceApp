@@ -117,113 +117,100 @@ export function GenerationDetailPage() {
   const Icon = getIcon(generation.model_type)
 
   return (
-    <div className="space-y-8 max-w-4xl mx-auto">
-      <Button variant="ghost" size="sm" onClick={() => navigate('/history')} className="text-white/40 hover:text-white">
+    <div className="space-y-3 max-w-4xl mx-auto h-[calc(100vh-8rem)] flex flex-col">
+      <Button variant="ghost" size="sm" onClick={() => navigate('/history')} className="text-white/40 hover:text-white self-start">
         <ChevronLeft className="h-4 w-4 mr-2" />
-        Вернуться в историю
+        Назад
       </Button>
 
-      <div className="flex flex-col gap-1">
-        <h1 className="text-4xl font-bold tracking-tight bg-gradient-to-br from-white to-white/40 bg-clip-text text-transparent">
-          Детали генерации
-        </h1>
-        <p className="text-white/40 text-sm">
-          Просмотр результата и параметров генерации
-        </p>
-      </div>
-
-      <div className="grid gap-6">
-        <Card className="border-white/5 bg-white/[0.02] backdrop-blur-sm">
-          <CardHeader>
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-4">
-                <div className="p-3.5 rounded-2xl bg-white/5">
-                  <Icon className="h-6 w-6 text-white/60" />
-                </div>
-                <div>
-                  <CardTitle className="text-2xl">{generation.model}</CardTitle>
-                  <p className="text-sm text-white/40 mt-1">{formatDate(generation.created_at)}</p>
-                </div>
+      <Card className="border-white/5 bg-white/[0.02] backdrop-blur-sm flex-shrink-0">
+        <CardContent className="p-4">
+          <div className="flex items-center justify-between gap-3">
+            <div className="flex items-center gap-3 min-w-0">
+              <div className="p-2 rounded-xl bg-white/5 flex-shrink-0">
+                <Icon className="h-5 w-5 text-white/60" />
               </div>
-              <span className={cn(
-                "text-xs px-3 py-1.5 rounded-full font-bold uppercase tracking-wider",
-                getStatusColor(generation.status)
-              )}>
-                {getStatusText(generation.status)}
-              </span>
+              <div className="min-w-0">
+                <h2 className="text-base font-semibold truncate">{generation.model}</h2>
+                <p className="text-xs text-white/40">{formatDate(generation.created_at)}</p>
+              </div>
+            </div>
+            <span className={cn(
+              "text-[10px] px-2 py-1 rounded-full font-bold uppercase tracking-wider flex-shrink-0",
+              getStatusColor(generation.status)
+            )}>
+              {getStatusText(generation.status)}
+            </span>
+          </div>
+        </CardContent>
+      </Card>
+
+      {generation.status === 'completed' && generation.output ? (
+        <Card className="border-white/5 bg-white/[0.02] backdrop-blur-sm overflow-hidden flex-1 min-h-0 flex flex-col">
+          <CardHeader className="p-3 flex-shrink-0">
+            <div className="flex items-center justify-between">
+              <CardTitle className="text-sm">Изображение</CardTitle>
+              <Button asChild variant="secondary" size="sm" className="rounded-full h-7 text-xs">
+                <a href={generation.output} target="_blank" rel="noopener noreferrer" download>
+                  <Download className="h-3 w-3 mr-1" />
+                  Скачать
+                </a>
+              </Button>
             </div>
           </CardHeader>
+          <CardContent className="p-3 flex-1 min-h-0 flex items-center justify-center">
+            <div className="rounded-xl overflow-hidden border border-white/10 max-h-full max-w-full">
+              {generation.output.includes('.mp4') || generation.output.includes('video') ? (
+                <video
+                  src={generation.output}
+                  controls
+                  className="w-full h-full object-contain max-h-[50vh]"
+                />
+              ) : (
+                <img
+                  src={generation.output}
+                  alt="Generated content"
+                  className="w-full h-full object-contain max-h-[50vh]"
+                />
+              )}
+            </div>
+          </CardContent>
         </Card>
+      ) : generation.status === 'failed' ? (
+        <Card className="border-destructive/20 bg-destructive/5 flex-1">
+          <CardContent className="p-6 flex items-center justify-center">
+            <div className="space-y-2 text-center">
+              <p className="font-semibold text-destructive">Ошибка при генерации</p>
+              {generation.error_msg && (
+                <p className="text-sm text-white/60">{generation.error_msg}</p>
+              )}
+            </div>
+          </CardContent>
+        </Card>
+      ) : (
+        <Card className="border-yellow-500/20 bg-yellow-500/5 flex-1">
+          <CardContent className="p-6 flex items-center justify-center">
+            <div className="space-y-3 text-center">
+              <div className="flex justify-center">
+                <div className="h-6 w-6 animate-spin rounded-full border-4 border-yellow-500/20 border-t-yellow-500" />
+              </div>
+              <p className="text-yellow-200/80 font-medium text-sm">Генерация в процессе</p>
+              <p className="text-xs text-white/40">Обновите страницу</p>
+            </div>
+          </CardContent>
+        </Card>
+      )}
 
-        {generation.prompt && (
-          <Card className="border-white/5 bg-white/[0.02] backdrop-blur-sm">
-            <CardHeader>
-              <CardTitle className="text-lg">Промпт</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <p className="text-white/80 leading-relaxed italic">
-                &ldquo;{generation.prompt}&rdquo;
-              </p>
-            </CardContent>
-          </Card>
-        )}
-
-        {generation.status === 'completed' && generation.output ? (
-          <Card className="border-white/5 bg-white/[0.02] backdrop-blur-sm overflow-hidden">
-            <CardHeader>
-              <div className="flex items-center justify-between">
-                <CardTitle className="text-lg">Результат</CardTitle>
-                <Button asChild variant="secondary" size="sm" className="rounded-full">
-                  <a href={generation.output} target="_blank" rel="noopener noreferrer" download>
-                    <Download className="h-4 w-4 mr-2" />
-                    Скачать
-                  </a>
-                </Button>
-              </div>
-            </CardHeader>
-            <CardContent>
-              <div className="rounded-2xl overflow-hidden border border-white/10">
-                {generation.output.includes('.mp4') || generation.output.includes('video') ? (
-                  <video
-                    src={generation.output}
-                    controls
-                    className="w-full h-auto max-h-[600px]"
-                  />
-                ) : (
-                  <img
-                    src={generation.output}
-                    alt="Generated content"
-                    className="w-full h-auto max-h-[600px] object-contain"
-                  />
-                )}
-              </div>
-            </CardContent>
-          </Card>
-        ) : generation.status === 'failed' ? (
-          <Card className="border-destructive/20 bg-destructive/5">
-            <CardContent className="p-8">
-              <div className="space-y-2">
-                <p className="font-semibold text-destructive">Ошибка при генерации</p>
-                {generation.error_msg && (
-                  <p className="text-sm text-white/60">{generation.error_msg}</p>
-                )}
-              </div>
-            </CardContent>
-          </Card>
-        ) : (
-          <Card className="border-yellow-500/20 bg-yellow-500/5">
-            <CardContent className="p-8 text-center">
-              <div className="space-y-4">
-                <div className="flex justify-center">
-                  <div className="h-8 w-8 animate-spin rounded-full border-4 border-yellow-500/20 border-t-yellow-500" />
-                </div>
-                <p className="text-yellow-200/80 font-medium">Генерация в процессе</p>
-                <p className="text-sm text-white/40">Обновите страницу через несколько секунд</p>
-              </div>
-            </CardContent>
-          </Card>
-        )}
-      </div>
+      {generation.prompt && (
+        <Card className="border-white/5 bg-white/[0.02] backdrop-blur-sm flex-shrink-0">
+          <CardContent className="p-3">
+            <p className="text-xs font-semibold text-white/40 mb-1">Запрос</p>
+            <p className="text-sm text-white/80 line-clamp-2 italic">
+              &ldquo;{generation.prompt}&rdquo;
+            </p>
+          </CardContent>
+        </Card>
+      )}
     </div>
   )
 }
