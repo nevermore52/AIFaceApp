@@ -192,7 +192,7 @@ func (h *AuthHandler) GoogleCallback(c *gin.Context) {
 		c.ClientIP(),
 	)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Login failed"})
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Login failed", "details": err.Error()})
 		return
 	}
 

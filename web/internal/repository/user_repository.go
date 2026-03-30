@@ -106,8 +106,8 @@ func (r *UserRepository) CreateFromGoogle(email, firstName, lastName string, ava
 	referralCode := generateReferralCode()
 
 	query := `
-		INSERT INTO users (email, first_name, last_name, avatar_url, referral_code)
-		VALUES ($1, $2, $3, $4, $5)
+		INSERT INTO users (email, first_name, last_name, avatar_url, referral_code, created_at, updated_at)
+		VALUES ($1, $2, $3, $4, $5, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
 		RETURNING id, telegram_id, email, username, first_name, last_name, avatar_url,
 				  language_code, is_premium, is_admin, referrer_id, referral_code,
 				  referrals_count, subscription_type, subscription_started_at, subscription_end,

@@ -171,8 +171,12 @@ export function PaymentsPage() {
                     <span className="font-medium">{sub.video_weekly}</span>
                   </div>
                 </div>
-                <Button className="w-full mt-4" variant="outline">
-                  Оформить в боте
+                <Button 
+                  className="w-full mt-4" 
+                  variant="outline"
+                  disabled
+                >
+                  Скоро доступно
                 </Button>
               </CardContent>
             </Card>
