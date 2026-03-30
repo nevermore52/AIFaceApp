@@ -117,23 +117,30 @@ export function GeneratePage() {
       return
     }
 
-    const totalFiles = imageFiles.length + newFiles.length
-    if (totalFiles > maxImages) {
+    const remainingSlots = maxImages - imageFiles.length
+    if (remainingSlots <= 0) {
       setError(`Максимум ${maxImages} изображений для этой модели`)
       return
     }
 
-    setError(null)
+    // Обрезаем файлы до оставшихся слотов
+    const filesToAdd = newFiles.slice(0, remainingSlots)
+    if (filesToAdd.length < newFiles.length) {
+      setError(`Можно добавить только ${filesToAdd.length} изображений. Максимум ${maxImages} для этой модели`)
+    } else {
+      setError(null)
+    }
+
     const newPreviews: string[] = []
     let loadedCount = 0
 
-    newFiles.forEach((file) => {
+    filesToAdd.forEach((file) => {
       const reader = new FileReader()
       reader.onloadend = () => {
         newPreviews.push(reader.result as string)
         loadedCount++
-        if (loadedCount === newFiles.length) {
-          setImageFiles([...imageFiles, ...newFiles])
+        if (loadedCount === filesToAdd.length) {
+          setImageFiles([...imageFiles, ...filesToAdd])
           setImagePreviews([...imagePreviews, ...newPreviews])
         }
       }

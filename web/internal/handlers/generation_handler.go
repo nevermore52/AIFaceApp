@@ -99,15 +99,11 @@ func (h *GenerationHandler) GetUserHistory(c *gin.Context) {
 	}
 
 	u := user.(*models.User)
-	if u.TelegramID == nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "Telegram account not linked"})
-		return
-	}
 
 	limit, _ := strconv.Atoi(c.DefaultQuery("limit", "10"))
 	offset, _ := strconv.Atoi(c.DefaultQuery("offset", "0"))
 
-	generations, total, err := h.generationService.GetByUserID(*u.TelegramID, limit, offset)
+	generations, total, err := h.generationService.GetByUserID(u.ID, limit, offset)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to get history"})
 		return
@@ -143,10 +139,6 @@ func (h *GenerationHandler) CreateGeneration(c *gin.Context) {
 	}
 
 	u := user.(*models.User)
-	if u.TelegramID == nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "Telegram account not linked"})
-		return
-	}
 
 	var req services.CreateGenerationRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
@@ -154,7 +146,7 @@ func (h *GenerationHandler) CreateGeneration(c *gin.Context) {
 		return
 	}
 
-	genReq, err := h.webGenerationService.CreateGeneration(*u.TelegramID, req)
+	genReq, err := h.webGenerationService.CreateGeneration(u.ID, req)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
