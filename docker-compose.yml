@@ -107,23 +107,6 @@ services:
       - aifacebot_network
     restart: unless-stopped
 
-  migrate-generations:
-    build:
-      context: .
-      dockerfile: Dockerfile
-    container_name: aifacebot_migrate_generations
-    working_dir: /app/cmd/migrate-generations
-    command: go run main.go -host=postgres -port=5432 -user=aifacebot_user -password=aifacebot_password -db=aifacebot -dry-run=true
-    environment:
-      DATABASE_URL: "postgres://aifacebot_user:aifacebot_password@postgres:5432/aifacebot?sslmode=disable"
-    depends_on:
-      postgres:
-        condition: service_healthy
-    networks:
-      - aifacebot_network
-    profiles:
-      - migrate
-
 volumes:
   postgres_data:
   redis_data:
