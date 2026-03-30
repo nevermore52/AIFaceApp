@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
-import { generationApi } from '../lib/api'
+import { userApi } from '../lib/api'
 import { Card, CardContent } from '../components/ui/card'
 import { Button } from '../components/ui/button'
 import { formatDate } from '../lib/utils'
@@ -33,7 +33,7 @@ export function HistoryPage() {
   const loadGenerations = async () => {
     setLoading(true)
     try {
-      const response = await generationApi.getAll(limit, page * limit) as {
+      const response = await userApi.getHistory(limit, page * limit) as {
         data: Generation[]
         total: number
       }

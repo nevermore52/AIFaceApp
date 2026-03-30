@@ -60,7 +60,11 @@ func New(cfg *config.Config, db *sql.DB) *Server {
 	// Web payment service (YooKassa)
 	var webPaymentService *services.WebPaymentService
 	if cfg.YooKassaShopID != "" && cfg.YooKassaSecretKey != "" {
-		webPaymentService = services.NewWebPaymentService(db, cfg.YooKassaShopID, cfg.YooKassaSecretKey, cfg.YooKassaReturnURL)
+		returnURL := cfg.YooKassaReturnURL
+		if returnURL == "" {
+			returnURL = cfg.FrontendURL + "/payments/success"
+		}
+		webPaymentService = services.NewWebPaymentService(db, cfg.YooKassaShopID, cfg.YooKassaSecretKey, returnURL)
 	}
 
 	authTokenRepo := repository.NewAuthTokenRepository(db)

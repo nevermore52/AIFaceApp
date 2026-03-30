@@ -86,9 +86,21 @@ export function GeneratePage() {
 
   useEffect(() => {
     if (filteredModels.length > 0 && !filteredModels.find(m => m.id === selectedModel)) {
-      setSelectedModel(filteredModels[0].id)
+      const newModel = filteredModels[0].id
+      setSelectedModel(newModel)
+      
+      // Проверяем лимит фото для новой модели
+      const maxImagesForNewModel = MAX_IMAGES_PER_MODEL[newModel] || 4
+      if (imageFiles.length > maxImagesForNewModel) {
+        // Удаляем лишние фото
+        const allowedFiles = imageFiles.slice(0, maxImagesForNewModel)
+        const allowedPreviews = imagePreviews.slice(0, maxImagesForNewModel)
+        setImageFiles(allowedFiles)
+        setImagePreviews(allowedPreviews)
+        setError(`Для модели ${filteredModels[0].name} максимум ${maxImagesForNewModel} изображений. Оставлены первые ${maxImagesForNewModel}.`)
+      }
     }
-  }, [selectedCategory, filteredModels, selectedModel])
+  }, [selectedCategory, filteredModels, selectedModel, imageFiles, imagePreviews])
 
   const getMaxImages = (): number => {
     return MAX_IMAGES_PER_MODEL[selectedModel] || 4

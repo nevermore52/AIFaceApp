@@ -110,6 +110,18 @@ func (s *WebPaymentService) GetSubscriptions() []SubscriptionInfo {
 }
 
 func (s *WebPaymentService) GetPrice(category string, qty int) (float64, bool) {
+	// Handle subscription categories (e.g., "subscription:mini")
+	if strings.HasPrefix(category, "subscription:") {
+		subscriptionName := strings.TrimPrefix(category, "subscription:")
+		for _, sub := range s.GetSubscriptions() {
+			if sub.Name == subscriptionName {
+				return sub.Price, true
+			}
+		}
+		return 0, false
+	}
+
+	// Handle regular packages
 	for _, pkg := range s.GetPackages() {
 		if pkg.Category == category && pkg.Qty == qty {
 			return pkg.Price, true
@@ -147,7 +159,12 @@ func (s *WebPaymentService) CreatePayment(req CreatePaymentRequest) (*CreatePaym
 		return nil, fmt.Errorf("invalid package: %s x %d", req.Category, req.Qty)
 	}
 
-	description := fmt.Sprintf("Покупка %d %s запросов", req.Qty, getCategoryName(req.Category))
+	var description string
+	if strings.HasPrefix(req.Category, "subscription:") {
+		description = fmt.Sprintf("Покупка %s", getCategoryName(req.Category))
+	} else {
+		description = fmt.Sprintf("Покупка %d %s запросов", req.Qty, getCategoryName(req.Category))
+	}
 
 	body := map[string]any{
 		"amount": map[string]string{
@@ -331,6 +348,20 @@ func (s *WebPaymentService) RecordPayment(data *WebhookData) error {
 }
 
 func getCategoryName(category string) string {
+	// Handle subscription categories
+	if strings.HasPrefix(category, "subscription:") {
+		subscriptionName := strings.TrimPrefix(category, "subscription:")
+		subscriptionNames := map[string]string{
+			"mini":  "подписка Mini",
+			"start": "подписка Start",
+			"pro":   "подписка Pro",
+		}
+		if name, ok := subscriptionNames[subscriptionName]; ok {
+			return name
+		}
+		return "подписка " + subscriptionName
+	}
+
 	switch category {
 	case "image":
 		return "изображений"
