@@ -1,14 +1,9 @@
 package services
 
 import (
-	"bytes"
 	"database/sql"
-	"encoding/base64"
 	"encoding/json"
 	"fmt"
-	"image"
-	_ "image/jpeg"
-	_ "image/png"
 	"io"
 	"log"
 	"net/http"
@@ -72,9 +67,15 @@ type CreateGenerationRequest struct {
 	// Nano Banana 2/Pro параметры
 	Resolution   string `json:"resolution"`
 	GoogleSearch string `json:"google_search"`
-	// Видео параметры (Wan, Kling)
+	// Видео параметры (Wan, Kling, Veo)
 	Duration string `json:"duration"`
 	Sound    string `json:"sound"`
+	// Veo параметры
+	Watermark         string `json:"watermark"`
+	Seeds             int    `json:"seeds"`
+	EnableFallback    bool   `json:"enableFallback"`
+	EnableTranslation bool   `json:"enableTranslation"`
+	GenerationType    string `json:"generationType"`
 	// Suno Music параметры
 	Instrumental bool   `json:"instrumental"`
 	VocalGender  string `json:"vocal_gender"`
@@ -328,15 +329,7 @@ func (s *WebGenerationService) processGeneration(genReq *GenerationRequest, req 
 	// Nano Banana 2: разрешение и Google поиск
 	if model == "nano-banana-2" {
 		if len(req.ImageURLs) > 0 {
-			// Convert images to base64 for Nano Banana 2 API
-			base64Images, err := s.convertImagesToBase64(req.ImageURLs)
-			if err != nil {
-				log.Printf("Failed to convert images: %v", err)
-				_ = s.updateStatus(genReq.ID, "failed", fmt.Sprintf("Failed to process images: %v", err))
-				refundQuota(req.PrimaryUsed, req.ExtraUsed)
-				return
-			}
-			input["image_input"] = base64Images
+			input["image_input"] = s.normalizeImageURLs(req.ImageURLs)
 		} else {
 			input["image_input"] = []string{}
 		}
@@ -353,15 +346,7 @@ func (s *WebGenerationService) processGeneration(genReq *GenerationRequest, req 
 	} else if model == "google/nano-banana-pro" || model == "nano-banana-pro" {
 		// Nano Banana Pro: разрешение 2K или 5K
 		if len(req.ImageURLs) > 0 {
-			// Convert images to base64 for Nano Banana Pro API
-			base64Images, err := s.convertImagesToBase64(req.ImageURLs)
-			if err != nil {
-				log.Printf("Failed to convert images: %v", err)
-				_ = s.updateStatus(genReq.ID, "failed", fmt.Sprintf("Failed to process images: %v", err))
-				refundQuota(req.PrimaryUsed, req.ExtraUsed)
-				return
-			}
-			input["image_input"] = base64Images
+			input["image_input"] = s.normalizeImageURLs(req.ImageURLs)
 		} else {
 			input["image_input"] = []string{}
 		}
@@ -373,15 +358,7 @@ func (s *WebGenerationService) processGeneration(genReq *GenerationRequest, req 
 	} else if model == "wan/2-6-image-to-video" {
 		// Wan 2.6: длительность и разрешение 1080p
 		if len(req.ImageURLs) > 0 {
-			// Convert images to base64 for Wan API
-			base64Images, err := s.convertImagesToBase64(req.ImageURLs)
-			if err != nil {
-				log.Printf("Failed to convert images: %v", err)
-				_ = s.updateStatus(genReq.ID, "failed", fmt.Sprintf("Failed to process images: %v", err))
-				refundQuota(req.PrimaryUsed, req.ExtraUsed)
-				return
-			}
-			input["image_urls"] = base64Images
+			input["image_urls"] = s.normalizeImageURLs(req.ImageURLs)
 		}
 		duration := req.Duration
 		if duration == "" {
@@ -389,36 +366,55 @@ func (s *WebGenerationService) processGeneration(genReq *GenerationRequest, req 
 		}
 		input["duration"] = duration
 		input["resolution"] = "1080p"
+		input["nsfw_checker"] = false
 	} else if model == "kling-2.6/image-to-video" {
 		// Kling 2.6: длительность и звук
 		if len(req.ImageURLs) > 0 {
-			// Convert images to base64 for Kling API
-			base64Images, err := s.convertImagesToBase64(req.ImageURLs)
-			if err != nil {
-				log.Printf("Failed to convert images: %v", err)
-				_ = s.updateStatus(genReq.ID, "failed", fmt.Sprintf("Failed to process images: %v", err))
-				refundQuota(req.PrimaryUsed, req.ExtraUsed)
-				return
-			}
-			input["image_urls"] = base64Images
+			input["image_urls"] = s.normalizeImageURLs(req.ImageURLs)
 		}
 		duration := req.Duration
 		if duration == "" {
 			duration = "5"
 		}
 		input["duration"] = duration
+		// Звук: false по умолчанию, true если явно передано
+		sound := false
 		if req.Sound == "true" {
-			input["sound"] = true
+			sound = true
 		}
+		input["sound"] = sound
 	} else if model == "veo3_fast" {
-		// Veo 3.1 Fast: формат видео
+		// Veo 3.1 Fast: используем imageUrls (camelCase) как в примере API
 		if len(req.ImageURLs) > 0 {
-			input["image_urls"] = req.ImageURLs
+			input["imageUrls"] = s.normalizeImageURLs(req.ImageURLs)
 		}
+		// Aspect ratio по умолчанию
+		aspectRatio := req.AspectRatio
+		if aspectRatio == "" {
+			aspectRatio = "16:9"
+		}
+		input["aspect_ratio"] = aspectRatio
+
+		// Опциональные параметры для Veo
+		if req.Watermark != "" {
+			input["watermark"] = req.Watermark
+		}
+		if req.Seeds != 0 {
+			input["seeds"] = req.Seeds
+		}
+		input["enableFallback"] = req.EnableFallback
+		input["enableTranslation"] = req.EnableTranslation
+
+		// Тип генерации (REFERENCE_2_VIDEO по умолчанию для образов)
+		generationType := req.GenerationType
+		if generationType == "" {
+			generationType = "REFERENCE_2_VIDEO"
+		}
+		input["generationType"] = generationType
 	} else {
 		// Остальные модели
 		if len(req.ImageURLs) > 0 {
-			input["image_urls"] = req.ImageURLs
+			input["image_urls"] = s.normalizeImageURLs(req.ImageURLs)
 		}
 	}
 
@@ -431,6 +427,10 @@ func (s *WebGenerationService) processGeneration(genReq *GenerationRequest, req 
 		CallBackURL: s.callbackURL,
 		Input:       input,
 	}
+
+	// Log the request for debugging
+	inputJSON, _ := json.Marshal(input)
+	log.Printf("KieAPI request for model %s: input=%s", req.Model, string(inputJSON))
 
 	taskID, err := s.kieClient.CreateTask(taskReq)
 	if err != nil {
@@ -876,70 +876,22 @@ func (s *WebGenerationService) generateChat(model string, messages []map[string]
 	return "", fmt.Errorf("unexpected defapi response format: %s", string(respBody))
 }
 
-// downloadAndEncodeImage downloads an image from URL and returns it as base64
-func (s *WebGenerationService) downloadAndEncodeImage(imageURL string) (string, error) {
-	// Create a new request with a User-Agent to avoid being blocked by some hosts
-	client := &http.Client{
-		Timeout: 30 * time.Second,
-	}
-
-	req, err := http.NewRequest("GET", imageURL, nil)
-	if err != nil {
-		return "", fmt.Errorf("create request: %w", err)
-	}
-
-	// Set User-Agent to avoid being blocked
-	req.Header.Set("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36")
-
-	resp, err := client.Do(req)
-	if err != nil {
-		return "", fmt.Errorf("download image: %w", err)
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		return "", fmt.Errorf("download failed with status %d", resp.StatusCode)
-	}
-
-	// Read the image data
-	imageData, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return "", fmt.Errorf("read image data: %w", err)
-	}
-
-	// Validate that it's a valid image
-	_, _, err = image.DecodeConfig(bytes.NewReader(imageData))
-	if err != nil {
-		return "", fmt.Errorf("invalid image format: %w", err)
-	}
-
-	// Encode to base64
-	base64Str := base64.StdEncoding.EncodeToString(imageData)
-	return base64Str, nil
-}
-
-// convertImagesToBase64 converts image URLs to base64 format for KIE API
-func (s *WebGenerationService) convertImagesToBase64(imageURLs []string) ([]string, error) {
+// normalizeImageURLs converts image URLs to direct downloadable format
+// For imgur.com URLs, converts them to i.imgur.com direct downloads
+func (s *WebGenerationService) normalizeImageURLs(imageURLs []string) []string {
 	var result []string
 	for _, url := range imageURLs {
-		if strings.HasPrefix(url, "data:") {
-			// Already base64
-			result = append(result, url)
-		} else if strings.HasPrefix(url, "http://") || strings.HasPrefix(url, "https://") {
-			// Download and convert to base64
-			base64Str, err := s.downloadAndEncodeImage(url)
-			if err != nil {
-				log.Printf("Failed to convert image %s to base64: %v", url, err)
-				// Continue with the original URL as fallback
-				result = append(result, url)
-			} else {
-				// Add as data URL
-				result = append(result, "data:image/jpeg;base64,"+base64Str)
+		originalURL := url
+		if strings.Contains(url, "imgur.com") {
+			// Convert imgur.com URLs to direct download URLs
+			// Example: https://imgur.com/X6GS3XA -> https://i.imgur.com/X6GS3XA.jpg
+			url = strings.ReplaceAll(url, "imgur.com", "i.imgur.com")
+			if !strings.HasSuffix(url, ".jpg") && !strings.HasSuffix(url, ".png") && !strings.HasSuffix(url, ".jpeg") {
+				url = url + ".jpg"
 			}
-		} else {
-			// Assume it's already in correct format
-			result = append(result, url)
+			log.Printf("Normalized imgur URL: %s -> %s", originalURL, url)
 		}
+		result = append(result, url)
 	}
-	return result, nil
+	return result
 }
