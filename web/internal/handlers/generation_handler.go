@@ -146,15 +146,15 @@ func (h *GenerationHandler) CreateGeneration(c *gin.Context) {
 		return
 	}
 
-	// Проверяем подписку для текстовых моделей
-	textModels := map[string]bool{
+	// Проверяем подписку для текстовых моделей (chat-gpt-4.1mini доступна всем)
+	textModelsRequireSubscription := map[string]bool{
 		"google/gemini-3-flash": true,
 		"openai/gpt-5-mini":     true,
 		"openai/gpt-5-nano":     true,
-		"chat-gpt-4.1mini":      true,
+		// "chat-gpt-4.1mini" убрана - теперь доступна без подписки
 	}
 
-	if textModels[req.Model] {
+	if textModelsRequireSubscription[req.Model] {
 		if u.SubscriptionType == "" {
 			c.JSON(http.StatusForbidden, gin.H{"error": "Subscription required for text models"})
 			return
@@ -164,7 +164,6 @@ func (h *GenerationHandler) CreateGeneration(c *gin.Context) {
 			"google/gemini-3-flash": {"start", "pro"},
 			"openai/gpt-5-mini":     {"mini", "start", "pro"},
 			"openai/gpt-5-nano":     {"mini", "start", "pro"},
-			"chat-gpt-4.1mini":      {"start", "pro"},
 		}
 
 		if allowed, ok := allowedModels[req.Model]; ok {

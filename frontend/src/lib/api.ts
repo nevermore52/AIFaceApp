@@ -105,13 +105,29 @@ export const userApi = {
     api.get(`/me/history?limit=${limit}&offset=${offset}`),
 }
 
+export interface GenerationCreateParams {
+  model: string
+  prompt: string
+  image_urls?: string[]
+  aspect_ratio?: string
+  // Nano Banana 2 параметры
+  resolution?: string
+  google_search?: string
+  // Видео параметры (Wan, Kling)
+  duration?: string
+  sound?: string
+  // Suno Music параметры
+  instrumental?: boolean
+  vocal_gender?: string
+}
+
 export const generationApi = {
   getAll: (limit = 20, offset = 0) =>
     api.get(`/generations?limit=${limit}&offset=${offset}`),
   getById: (id: number) => api.get(`/generations/${id}`),
   getStatus: (id: number) => api.get(`/generations/${id}/status`),
   getModels: () => api.get<{ id: string; name: string; type: string; description: string; token_cost: number }[]>('/models'),
-  create: (data: { model: string; prompt: string; image_urls?: string[]; aspect_ratio?: string }) =>
+  create: (data: GenerationCreateParams) =>
     api.post<{ id: number; status: string }>('/generations', data),
 }
 

@@ -46,6 +46,15 @@ type CreateGenerationRequest struct {
 	Prompt      string   `json:"prompt" binding:"required"`
 	ImageURLs   []string `json:"image_urls"`
 	AspectRatio string   `json:"aspect_ratio"`
+	// Nano Banana 2/Pro параметры
+	Resolution   string `json:"resolution"`
+	GoogleSearch string `json:"google_search"`
+	// Видео параметры (Wan, Kling)
+	Duration string `json:"duration"`
+	Sound    string `json:"sound"`
+	// Suno Music параметры
+	Instrumental bool   `json:"instrumental"`
+	VocalGender  string `json:"vocal_gender"`
 }
 
 type ModelInfo struct {
@@ -126,14 +135,72 @@ func (s *WebGenerationService) processGeneration(genReq *GenerationRequest, req 
 
 	model := strings.ToLower(strings.TrimSpace(req.Model))
 
-	if model == "nano-banana-2" || model == "nano-banana-pro" {
+	// Nano Banana 2: разрешение и Google поиск
+	if model == "nano-banana-2" {
 		if len(req.ImageURLs) > 0 {
 			input["image_input"] = req.ImageURLs
 		} else {
 			input["image_input"] = []string{}
 		}
-		input["resolution"] = "1K"
+		// Разрешение: 1K, 2K, 4K
+		resolution := req.Resolution
+		if resolution == "" {
+			resolution = "1K"
+		}
+		input["resolution"] = resolution
+		// Google поиск
+		if req.GoogleSearch == "true" {
+			input["google_search"] = true
+		}
+	} else if model == "google/nano-banana-pro" || model == "nano-banana-pro" {
+		// Nano Banana Pro: разрешение 2K или 5K
+		if len(req.ImageURLs) > 0 {
+			input["image_input"] = req.ImageURLs
+		} else {
+			input["image_input"] = []string{}
+		}
+		resolution := req.Resolution
+		if resolution == "" {
+			resolution = "2K"
+		}
+		input["resolution"] = resolution
+	} else if model == "wan/2-6-image-to-video" {
+		// Wan 2.6: длительность и разрешение 1080p
+		if len(req.ImageURLs) > 0 {
+			input["image_urls"] = req.ImageURLs
+		}
+		duration := req.Duration
+		if duration == "" {
+			duration = "5"
+		}
+		input["duration"] = duration
+		input["resolution"] = "1080p"
+	} else if model == "kling-2.6/image-to-video" {
+		// Kling 2.6: длительность и звук
+		if len(req.ImageURLs) > 0 {
+			input["image_urls"] = req.ImageURLs
+		}
+		duration := req.Duration
+		if duration == "" {
+			duration = "5"
+		}
+		input["duration"] = duration
+		if req.Sound == "true" {
+			input["sound"] = true
+		}
+	} else if model == "veo3_fast" {
+		// Veo 3.1 Fast: формат видео
+		if len(req.ImageURLs) > 0 {
+			input["image_urls"] = req.ImageURLs
+		}
+	} else if model == "music-suno" {
+		// Suno Music: режим и голос
+		input["instrumental"] = req.Instrumental
+		if !req.Instrumental && req.VocalGender != "" {
+			input["vocal_gender"] = req.VocalGender
+		}
 	} else {
+		// Остальные модели
 		if len(req.ImageURLs) > 0 {
 			input["image_urls"] = req.ImageURLs
 		}
@@ -157,7 +224,7 @@ func (s *WebGenerationService) processGeneration(genReq *GenerationRequest, req 
 	}
 
 	_ = s.updateExternalTaskID(genReq.ID, taskID)
-	log.Printf("KieAPI task created: requestID=%d taskID=%s", genReq.ID, taskID)
+	log.Printf("KieAPI task created: requestID=%d taskID=%s model=%s", genReq.ID, taskID, req.Model)
 }
 
 func (s *WebGenerationService) HandleCallback(payload kieapi.CallbackPayload) error {

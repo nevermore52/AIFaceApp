@@ -1,7 +1,7 @@
 import { useEffect, useState, useRef, ChangeEvent, DragEvent } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useAuthStore } from '../store/auth'
-import { generationApi } from '../lib/api'
+import { generationApi, GenerationCreateParams } from '../lib/api'
 import { Card, CardContent, CardHeader, CardTitle } from '../components/ui/card'
 import { Button } from '../components/ui/button'
 import { cn } from '../lib/utils'
@@ -38,13 +38,56 @@ const CATEGORY_ICONS: Record<Category, any> = {
   text: Type,
 }
 
-const ASPECT_RATIOS = [
-  { id: 'auto', label: 'Автоматически', value: 'auto' },
-  { id: '1:1', label: '1:1 (Квадрат)', value: '1:1' },
-  { id: '16:9', label: '16:9 (Горизонтальный)', value: '16:9' },
-  { id: '9:16', label: '9:16 (Вертикальный)', value: '9:16' },
-  { id: '4:3', label: '4:3', value: '4:3' },
-  { id: '3:4', label: '3:4', value: '3:4' },
+// Форматы для фото моделей (как в боте)
+const PHOTO_ASPECT_RATIOS = [
+  { id: '16:9', label: '16:9 Альбомный', value: '16:9' },
+  { id: '9:16', label: '9:16 Портретный', value: '9:16' },
+  { id: '1:1', label: '1:1 Квадрат', value: '1:1' },
+]
+
+// Форматы для Veo 3.1 Fast
+const VEO_ASPECT_RATIOS = [
+  { id: '16:9', label: '16:9 Альбомный', value: '16:9' },
+  { id: '9:16', label: '9:16 Портретный', value: '9:16' },
+  { id: 'auto', label: 'Авто', value: 'auto' },
+]
+
+// Разрешения для Nano Banana 2
+const NANO_BANANA_2_RESOLUTIONS = [
+  { id: '1K', label: '1K (2 генерации)', value: '1K', cost: 2 },
+  { id: '2K', label: '2K (3 генерации)', value: '2K', cost: 3 },
+  { id: '4K', label: '4K (4 генерации)', value: '4K', cost: 4 },
+]
+
+// Разрешения для Nano Banana Pro
+const NANO_BANANA_PRO_RESOLUTIONS = [
+  { id: '2K', label: '2K (4 генерации)', value: '2K', cost: 4 },
+  { id: '5K', label: '5K (5 генераций)', value: '5K', cost: 5 },
+]
+
+// Длительность для Wan 2.6
+const WAN_DURATIONS = [
+  { id: '5', label: '5 сек (2 генерации)', value: '5', cost: 2 },
+  { id: '10', label: '10 сек (4 генерации)', value: '10', cost: 4 },
+  { id: '15', label: '15 сек (6 генераций)', value: '15', cost: 6 },
+]
+
+// Длительность для Kling 2.6
+const KLING_DURATIONS = [
+  { id: '5', label: '5 сек (1 генерация)', value: '5', cost: 1 },
+  { id: '10', label: '10 сек (2 генерации)', value: '10', cost: 2 },
+]
+
+// Режимы для Suno Music
+const SUNO_MODES = [
+  { id: 'instrumental', label: 'Без голоса (инструментал)', value: 'instrumental' },
+  { id: 'vocal', label: 'С голосом', value: 'vocal' },
+]
+
+// Голоса для Suno Music
+const SUNO_VOICES = [
+  { id: 'm', label: 'Мужской', value: 'm' },
+  { id: 'f', label: 'Женский', value: 'f' },
 ]
 
 const MAX_IMAGES_PER_MODEL: Record<string, number> = {
@@ -54,12 +97,12 @@ const MAX_IMAGES_PER_MODEL: Record<string, number> = {
   'seedream/4.5-edit': 4,
 }
 
-// Модели, требующие подписку
+// Модели, требующие подписку (GPT-4.1 mini теперь доступна всем)
 const SUBSCRIPTION_REQUIRED_MODELS: Record<string, string[]> = {
   'google/gemini-3-flash': ['start', 'pro'],
   'openai/gpt-5-mini': ['mini', 'start', 'pro'],
   'openai/gpt-5-nano': ['mini', 'start', 'pro'],
-  'chat-gpt-4.1mini': ['start', 'pro'],
+  // 'chat-gpt-4.1mini' убрана - теперь доступна без подписки
 }
 
 export function GeneratePage() {
@@ -68,8 +111,15 @@ export function GeneratePage() {
   const [allModels, setAllModels] = useState<Model[]>([])
   const [selectedCategory, setSelectedCategory] = useState<Category>('image')
   const [selectedModel, setSelectedModel] = useState<string>('')
-  const [selectedAspectRatio, setSelectedAspectRatio] = useState('auto')
+  const [selectedAspectRatio, setSelectedAspectRatio] = useState('1:1')
   const [numOutputs, setNumOutputs] = useState(1)
+  // Новые параметры для разных моделей
+  const [selectedResolution, setSelectedResolution] = useState('1K')
+  const [googleSearch, setGoogleSearch] = useState(false)
+  const [videoDuration, setVideoDuration] = useState('5')
+  const [withSound, setWithSound] = useState(false)
+  const [sunoMode, setSunoMode] = useState('instrumental')
+  const [sunoVoice, setSunoVoice] = useState('m')
   const [prompt, setPrompt] = useState('')
   const [imageFiles, setImageFiles] = useState<File[]>([])
   const [imagePreviews, setImagePreviews] = useState<string[]>([])
@@ -262,12 +312,52 @@ export function GeneratePage() {
         setUploadingImage(false)
       }
 
-      const result = await generationApi.create({
+      // Собираем параметры в зависимости от модели
+      const params: GenerationCreateParams = {
         model: selectedModel,
         prompt: prompt.trim(),
         image_urls: imageUrls,
-        aspect_ratio: selectedAspectRatio !== 'auto' ? selectedAspectRatio : undefined,
-      })
+      }
+
+      // Формат для фото моделей и Veo
+      if (selectedCategory === 'image' || selectedModel === 'veo3_fast') {
+        if (selectedAspectRatio !== 'auto') {
+          params.aspect_ratio = selectedAspectRatio
+        }
+      }
+
+      // Nano Banana 2: разрешение и Google поиск
+      if (selectedModel === 'nano-banana-2') {
+        params.resolution = selectedResolution
+        params.google_search = googleSearch ? 'true' : 'false'
+      }
+
+      // Nano Banana Pro: разрешение
+      if (selectedModel === 'google/nano-banana-pro') {
+        params.resolution = selectedResolution
+      }
+
+      // Wan 2.6: длительность (разрешение всегда 1080p)
+      if (selectedModel === 'wan/2-6-image-to-video') {
+        params.duration = videoDuration
+        params.resolution = '1080p'
+      }
+
+      // Kling 2.6: длительность и звук
+      if (selectedModel === 'kling-2.6/image-to-video') {
+        params.duration = videoDuration
+        params.sound = withSound ? 'true' : 'false'
+      }
+
+      // Suno Music: режим и голос
+      if (selectedModel === 'music-suno') {
+        params.instrumental = sunoMode === 'instrumental'
+        if (sunoMode === 'vocal') {
+          params.vocal_gender = sunoVoice
+        }
+      }
+
+      const result = await generationApi.create(params)
 
       setCurrentGeneration({ id: result.id, status: result.status })
 
@@ -292,6 +382,45 @@ export function GeneratePage() {
   }
 
   const selectedModelInfo = filteredModels.find(m => m.id === selectedModel)
+
+  // Расчет динамической стоимости в зависимости от параметров
+  const calculateCost = (): number => {
+    let baseCost = selectedModelInfo?.token_cost || 0
+
+    // Nano Banana 2: стоимость зависит от разрешения
+    if (selectedModel === 'nano-banana-2') {
+      const res = NANO_BANANA_2_RESOLUTIONS.find(r => r.value === selectedResolution)
+      if (res) baseCost = res.cost
+    }
+
+    // Nano Banana Pro: стоимость зависит от разрешения
+    if (selectedModel === 'google/nano-banana-pro') {
+      const res = NANO_BANANA_PRO_RESOLUTIONS.find(r => r.value === selectedResolution)
+      if (res) baseCost = res.cost
+    }
+
+    // Wan 2.6: стоимость зависит от длительности
+    if (selectedModel === 'wan/2-6-image-to-video') {
+      const dur = WAN_DURATIONS.find(d => d.value === videoDuration)
+      if (dur) baseCost = dur.cost
+    }
+
+    // Kling 2.6: стоимость зависит от длительности и звука
+    if (selectedModel === 'kling-2.6/image-to-video') {
+      const dur = KLING_DURATIONS.find(d => d.value === videoDuration)
+      if (dur) baseCost = dur.cost
+      if (withSound) baseCost *= 2 // Со звуком цена x2
+    }
+
+    // Suno Music: всегда 1 генерация
+    if (selectedModel === 'music-suno') {
+      baseCost = 1
+    }
+
+    return baseCost
+  }
+
+  const totalCost = calculateCost()
 
   if (loading) {
     return (
@@ -436,30 +565,217 @@ export function GeneratePage() {
           </div>
         </div>
 
-        {/* Aspect Ratio */}
-        <div className="space-y-1">
-          <label className="text-[13px] font-medium text-white/90 ml-1">Соотношение сторон</label>
-          <div className="relative">
-            <div className="w-full flex items-center rounded-xl border border-white/10 bg-white/[0.03] px-3.5 py-3 text-sm transition-all hover:bg-white/[0.05] cursor-pointer group">
-              <span className="text-[13px] text-white/80 flex-1">{ASPECT_RATIOS.find(r => r.value === selectedAspectRatio)?.label}</span>
-              <div className="p-1 rounded-md bg-[#2a2218] border border-orange-500/20 mr-2.5">
-                <Info className="w-3.5 h-3.5 text-orange-400" />
-              </div>
-              <ChevronDown className="w-4 h-4 text-white/20 group-hover:text-white/40 transition-colors shrink-0" />
-            </div>
-            <select
-              className="absolute inset-0 w-full opacity-0 cursor-pointer"
-              value={selectedAspectRatio}
-              onChange={(e) => setSelectedAspectRatio(e.target.value)}
-            >
-              {ASPECT_RATIOS.map((ratio) => (
-                <option key={ratio.id} value={ratio.value} className="bg-[#0a0a0a]">
+        {/* Aspect Ratio - для фото моделей */}
+        {selectedCategory === 'image' && (
+          <div className="space-y-1">
+            <label className="text-[13px] font-medium text-white/90 ml-1">Формат</label>
+            <div className="flex gap-2">
+              {PHOTO_ASPECT_RATIOS.map((ratio) => (
+                <button
+                  key={ratio.id}
+                  onClick={() => setSelectedAspectRatio(ratio.value)}
+                  className={cn(
+                    "flex-1 py-2.5 px-3 rounded-xl border text-xs font-medium transition-all",
+                    selectedAspectRatio === ratio.value
+                      ? "border-primary bg-primary/10 text-primary"
+                      : "border-white/10 bg-white/[0.03] text-white/60 hover:bg-white/[0.05]"
+                  )}
+                >
                   {ratio.label}
-                </option>
+                </button>
               ))}
-            </select>
+            </div>
           </div>
-        </div>
+        )}
+
+        {/* Разрешение для Nano Banana 2 */}
+        {selectedModel === 'nano-banana-2' && (
+          <>
+            <div className="space-y-1">
+              <label className="text-[13px] font-medium text-white/90 ml-1">Разрешение</label>
+              <div className="flex gap-2">
+                {NANO_BANANA_2_RESOLUTIONS.map((res) => (
+                  <button
+                    key={res.id}
+                    onClick={() => setSelectedResolution(res.value)}
+                    className={cn(
+                      "flex-1 py-2.5 px-3 rounded-xl border text-xs font-medium transition-all",
+                      selectedResolution === res.value
+                        ? "border-primary bg-primary/10 text-primary"
+                        : "border-white/10 bg-white/[0.03] text-white/60 hover:bg-white/[0.05]"
+                    )}
+                  >
+                    {res.label}
+                  </button>
+                ))}
+              </div>
+            </div>
+            <div className="flex items-center gap-3 p-3 rounded-xl border border-white/10 bg-white/[0.03]">
+              <input
+                type="checkbox"
+                id="googleSearch"
+                checked={googleSearch}
+                onChange={(e) => setGoogleSearch(e.target.checked)}
+                className="w-4 h-4 rounded border-white/20 bg-white/5 text-primary focus:ring-primary/50"
+              />
+              <label htmlFor="googleSearch" className="text-[13px] text-white/80 cursor-pointer">
+                Google поиск (улучшает качество)
+              </label>
+            </div>
+          </>
+        )}
+
+        {/* Разрешение для Nano Banana Pro */}
+        {selectedModel === 'google/nano-banana-pro' && (
+          <div className="space-y-1">
+            <label className="text-[13px] font-medium text-white/90 ml-1">Разрешение</label>
+            <div className="flex gap-2">
+              {NANO_BANANA_PRO_RESOLUTIONS.map((res) => (
+                <button
+                  key={res.id}
+                  onClick={() => setSelectedResolution(res.value)}
+                  className={cn(
+                    "flex-1 py-2.5 px-3 rounded-xl border text-xs font-medium transition-all",
+                    selectedResolution === res.value
+                      ? "border-primary bg-primary/10 text-primary"
+                      : "border-white/10 bg-white/[0.03] text-white/60 hover:bg-white/[0.05]"
+                  )}
+                >
+                  {res.label}
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* Формат для Veo 3.1 Fast */}
+        {selectedModel === 'veo3_fast' && (
+          <div className="space-y-1">
+            <label className="text-[13px] font-medium text-white/90 ml-1">Формат видео</label>
+            <div className="flex gap-2">
+              {VEO_ASPECT_RATIOS.map((ratio) => (
+                <button
+                  key={ratio.id}
+                  onClick={() => setSelectedAspectRatio(ratio.value)}
+                  className={cn(
+                    "flex-1 py-2.5 px-3 rounded-xl border text-xs font-medium transition-all",
+                    selectedAspectRatio === ratio.value
+                      ? "border-primary bg-primary/10 text-primary"
+                      : "border-white/10 bg-white/[0.03] text-white/60 hover:bg-white/[0.05]"
+                  )}
+                >
+                  {ratio.label}
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* Длительность для Wan 2.6 */}
+        {selectedModel === 'wan/2-6-image-to-video' && (
+          <div className="space-y-1">
+            <label className="text-[13px] font-medium text-white/90 ml-1">Длительность (разрешение 1080p)</label>
+            <div className="flex gap-2">
+              {WAN_DURATIONS.map((dur) => (
+                <button
+                  key={dur.id}
+                  onClick={() => setVideoDuration(dur.value)}
+                  className={cn(
+                    "flex-1 py-2.5 px-3 rounded-xl border text-xs font-medium transition-all",
+                    videoDuration === dur.value
+                      ? "border-primary bg-primary/10 text-primary"
+                      : "border-white/10 bg-white/[0.03] text-white/60 hover:bg-white/[0.05]"
+                  )}
+                >
+                  {dur.label}
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* Длительность и звук для Kling 2.6 */}
+        {selectedModel === 'kling-2.6/image-to-video' && (
+          <>
+            <div className="space-y-1">
+              <label className="text-[13px] font-medium text-white/90 ml-1">Длительность</label>
+              <div className="flex gap-2">
+                {KLING_DURATIONS.map((dur) => (
+                  <button
+                    key={dur.id}
+                    onClick={() => setVideoDuration(dur.value)}
+                    className={cn(
+                      "flex-1 py-2.5 px-3 rounded-xl border text-xs font-medium transition-all",
+                      videoDuration === dur.value
+                        ? "border-primary bg-primary/10 text-primary"
+                        : "border-white/10 bg-white/[0.03] text-white/60 hover:bg-white/[0.05]"
+                    )}
+                  >
+                    {dur.label}
+                  </button>
+                ))}
+              </div>
+            </div>
+            <div className="flex items-center gap-3 p-3 rounded-xl border border-white/10 bg-white/[0.03]">
+              <input
+                type="checkbox"
+                id="withSound"
+                checked={withSound}
+                onChange={(e) => setWithSound(e.target.checked)}
+                className="w-4 h-4 rounded border-white/20 bg-white/5 text-primary focus:ring-primary/50"
+              />
+              <label htmlFor="withSound" className="text-[13px] text-white/80 cursor-pointer">
+                Со звуком (цена ×2)
+              </label>
+            </div>
+          </>
+        )}
+
+        {/* Режимы для Suno Music */}
+        {selectedModel === 'music-suno' && (
+          <>
+            <div className="space-y-1">
+              <label className="text-[13px] font-medium text-white/90 ml-1">Режим</label>
+              <div className="flex gap-2">
+                {SUNO_MODES.map((mode) => (
+                  <button
+                    key={mode.id}
+                    onClick={() => setSunoMode(mode.value)}
+                    className={cn(
+                      "flex-1 py-2.5 px-3 rounded-xl border text-xs font-medium transition-all",
+                      sunoMode === mode.value
+                        ? "border-primary bg-primary/10 text-primary"
+                        : "border-white/10 bg-white/[0.03] text-white/60 hover:bg-white/[0.05]"
+                    )}
+                  >
+                    {mode.label}
+                  </button>
+                ))}
+              </div>
+            </div>
+            {sunoMode === 'vocal' && (
+              <div className="space-y-1">
+                <label className="text-[13px] font-medium text-white/90 ml-1">Голос</label>
+                <div className="flex gap-2">
+                  {SUNO_VOICES.map((voice) => (
+                    <button
+                      key={voice.id}
+                      onClick={() => setSunoVoice(voice.value)}
+                      className={cn(
+                        "flex-1 py-2.5 px-3 rounded-xl border text-xs font-medium transition-all",
+                        sunoVoice === voice.value
+                          ? "border-primary bg-primary/10 text-primary"
+                          : "border-white/10 bg-white/[0.03] text-white/60 hover:bg-white/[0.05]"
+                      )}
+                    >
+                      {voice.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
+          </>
+        )}
 
         {error && (
           <div className="p-3 rounded-xl bg-destructive/10 border border-destructive/20 text-destructive text-xs animate-in fade-in slide-in-from-top-2">
@@ -506,7 +822,7 @@ export function GeneratePage() {
               ) : (
                 <div className="flex items-center gap-2">
                   <Sparkles className="h-3.5 w-3.5" />
-                  Сгенерировать — {selectedModelInfo?.token_cost || 0}
+                  Сгенерировать — {totalCost}
                 </div>
               )}
             </Button>
