@@ -18,6 +18,7 @@ import (
 	"telegram-ai-face-bot/web/internal/repository"
 
 	"github.com/golang-jwt/jwt/v5"
+	"github.com/google/uuid"
 )
 
 type AuthService struct {
@@ -197,36 +198,55 @@ func (s *AuthService) LoginWithGoogle(email, firstName, lastName string, avatarU
 func (s *AuthService) createSession(userID int64, userAgent, ipAddress string) (string, string, error) {
 	expiresAt := time.Now().Add(time.Duration(s.cfg.JWTExpireHours) * time.Hour)
 
-	accessToken, err := s.generateJWT(userID, expiresAt)
-	if err != nil {
-		return "", "", err
-	}
+	// Попытка создания сессии с повторами при конфликте токенов
+	maxRetries := 3
+	for attempt := 0; attempt < maxRetries; attempt++ {
+		accessToken, err := s.generateJWT(userID, expiresAt)
+		if err != nil {
+			return "", "", err
+		}
 
-	refreshToken, err := s.generateJWT(userID, time.Now().Add(30*24*time.Hour))
-	if err != nil {
-		return "", "", err
-	}
+		refreshToken, err := s.generateJWT(userID, time.Now().Add(30*24*time.Hour))
+		if err != nil {
+			return "", "", err
+		}
 
-	session := &models.WebSession{
-		UserID:       userID,
-		Token:        accessToken,
-		RefreshToken: refreshToken,
-		UserAgent:    userAgent,
-		IPAddress:    ipAddress,
-		ExpiresAt:    expiresAt,
-	}
+		session := &models.WebSession{
+			UserID:       userID,
+			Token:        accessToken,
+			RefreshToken: refreshToken,
+			UserAgent:    userAgent,
+			IPAddress:    ipAddress,
+			ExpiresAt:    expiresAt,
+		}
 
-	if err := s.sessionRepo.Create(session); err != nil {
+		err = s.sessionRepo.Create(session)
+		if err == nil {
+			return accessToken, refreshToken, nil
+		}
+
+		// Если ошибка дубликата токена, пробуем еще раз
+		if strings.Contains(err.Error(), "duplicate key") || strings.Contains(err.Error(), "web_sessions_token_key") {
+			if attempt < maxRetries-1 {
+				time.Sleep(time.Millisecond * 10) // Небольшая задержка перед повтором
+				continue
+			}
+		}
+
 		return "", "", fmt.Errorf("failed to create session: %w", err)
 	}
 
-	return accessToken, refreshToken, nil
+	return "", "", fmt.Errorf("failed to create session after %d attempts", maxRetries)
 }
 
 func (s *AuthService) generateJWT(userID int64, expiresAt time.Time) (string, error) {
+	// Генерируем уникальный ID для токена, чтобы избежать дубликатов
+	jti := uuid.New().String()
+
 	claims := JWTClaims{
 		UserID: userID,
 		RegisteredClaims: jwt.RegisteredClaims{
+			ID:        jti,
 			ExpiresAt: jwt.NewNumericDate(expiresAt),
 			IssuedAt:  jwt.NewNumericDate(time.Now()),
 		},
