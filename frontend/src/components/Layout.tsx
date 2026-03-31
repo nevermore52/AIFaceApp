@@ -10,14 +10,13 @@ export function Layout() {
 
   const navigation = [
     { name: 'Главная', href: '/', icon: Home },
-    { name: 'Генерация', href: '/generate', icon: Sparkles },
+    { name: 'Создать', href: '/generate', icon: Sparkles, isPrimary: true },
     { name: 'История', href: '/history', icon: History },
-    { name: 'Оплата', href: '/payments', icon: CreditCard },
     { name: 'Профиль', href: '/profile', icon: User },
   ]
 
   return (
-    <div className="min-h-screen bg-[#030303] text-foreground selection:bg-primary/30">
+    <div className="min-h-screen bg-[#030303] text-foreground selection:bg-primary/30 pb-20 md:pb-0">
       <header className="sticky top-0 z-50 w-full border-b border-white/10 bg-[#030303] shadow-lg">
         <div className="container flex h-16 items-center justify-between px-4">
           <div className="flex items-center gap-8">
@@ -42,6 +41,18 @@ export function Layout() {
                   <span>{item.name}</span>
                 </Link>
               ))}
+              <Link
+                to="/payments"
+                className={cn(
+                  'flex items-center gap-2 px-4 py-2 rounded-full text-sm font-medium transition-all duration-200',
+                  location.pathname === '/payments'
+                    ? 'bg-white/10 text-white'
+                    : 'text-white/60 hover:text-white hover:bg-white/5'
+                )}
+              >
+                <CreditCard className="h-4 w-4" />
+                <span>Оплата</span>
+              </Link>
             </nav>
           </div>
           
@@ -80,6 +91,53 @@ export function Layout() {
           </div>
         </div>
       </header>
+
+      {/* Bottom Navigation for Mobile */}
+      <nav className="fixed bottom-0 left-0 right-0 z-50 md:hidden bg-[#0A0A0A]/95 backdrop-blur-lg border-t border-white/10 px-6 py-3">
+        <div className="flex items-center justify-between max-w-lg mx-auto">
+          {navigation.map((item) => {
+            const isActive = location.pathname === item.href
+            if (item.isPrimary) {
+              return (
+                <Link
+                  key={item.href}
+                  to={item.href}
+                  className="relative -top-6 flex flex-col items-center gap-1 group"
+                >
+                  <div className={cn(
+                    "w-16 h-12 rounded-2xl flex items-center justify-center transition-transform duration-200 group-active:scale-95 shadow-lg shadow-yellow-500/20",
+                    "bg-gradient-to-b from-[#FFD700] via-[#FFB700] to-[#FFA000]"
+                  )}>
+                    <item.icon className="h-6 w-6 text-black fill-black" />
+                  </div>
+                  <span className="text-[10px] font-medium text-white/90 uppercase tracking-wider">
+                    {item.name}
+                  </span>
+                </Link>
+              )
+            }
+            return (
+              <Link
+                key={item.href}
+                to={item.href}
+                className="flex flex-col items-center gap-1.5 group"
+              >
+                <item.icon className={cn(
+                  "h-6 w-6 transition-colors duration-200",
+                  isActive ? "text-white" : "text-white/40 group-hover:text-white/60"
+                )} />
+                <span className={cn(
+                  "text-[10px] font-medium transition-colors duration-200",
+                  isActive ? "text-white" : "text-white/40"
+                )}>
+                  {item.name}
+                </span>
+              </Link>
+            )
+          })}
+        </div>
+      </nav>
+
       <main className="container py-8 px-4">
         <Outlet />
       </main>
