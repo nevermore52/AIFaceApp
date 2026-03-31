@@ -299,12 +299,22 @@ export function GeneratePage() {
     const formData = new FormData()
     formData.append('image', file)
 
+    // Get auth token from storage
+    const storage = localStorage.getItem('auth-storage')
+    const token = storage ? JSON.parse(storage).state?.accessToken : null
+
+    if (!token) {
+      throw new Error('Не авторизованы')
+    }
+
     // Upload through our backend instead of direct imgur
     // This avoids IP blocking issues
     const response = await fetch('/api/upload-image', {
       method: 'POST',
       body: formData,
-      credentials: 'include',
+      headers: {
+        Authorization: `Bearer ${token}`,
+      },
     })
 
     if (!response.ok) {
