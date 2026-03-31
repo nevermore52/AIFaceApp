@@ -5,7 +5,7 @@ import { generationApi, GenerationCreateParams } from '../lib/api'
 import { Card, CardContent, CardHeader, CardTitle } from '../components/ui/card'
 import { Button } from '../components/ui/button'
 import { cn } from '../lib/utils'
-import { Sparkles, Image as ImageIcon, Video, Music, Type, ChevronDown, Plus, Minus, Info, X, ChevronRight, Mic } from 'lucide-react'
+import { Sparkles, Image as ImageIcon, Video, Music, Type, ChevronDown, Info, X, ChevronRight, Mic } from 'lucide-react'
 
 type Category = 'image' | 'video' | 'music' | 'text'
 
@@ -112,7 +112,6 @@ export function GeneratePage() {
   const [selectedCategory, setSelectedCategory] = useState<Category>('image')
   const [selectedModel, setSelectedModel] = useState<string>('')
   const [selectedAspectRatio, setSelectedAspectRatio] = useState('1:1')
-  const [numOutputs, setNumOutputs] = useState(1)
   // Новые параметры для разных моделей
   const [selectedResolution, setSelectedResolution] = useState('1K')
   const [googleSearch, setGoogleSearch] = useState(false)
@@ -475,15 +474,15 @@ export function GeneratePage() {
       <div className="space-y-2 px-2">
         {/* Model Selection */}
         <div className="space-y-1">
-          <label className="text-[13px] font-medium text-white/90 ml-1">Модель</label>
+          <label className="text-[13px] lg:text-sm font-medium text-white/90 ml-1">Модель</label>
           <div className="relative">
-            <div className="w-full flex items-center rounded-xl border border-white/10 bg-white/[0.03] px-3 py-2.5 text-sm transition-all hover:bg-white/[0.05] cursor-pointer group">
-              <div className="w-6 h-6 rounded-lg bg-white/10 flex items-center justify-center mr-2.5">
-                <span className="text-[10px] font-bold text-white/40">G</span>
+            <div className="w-full flex items-center rounded-xl border border-white/10 bg-white/[0.03] px-3 lg:px-4 py-2.5 lg:py-3.5 text-sm lg:text-base transition-all hover:bg-white/[0.05] cursor-pointer group">
+              <div className="w-6 h-6 lg:w-7 lg:h-7 rounded-lg bg-white/10 flex items-center justify-center mr-2.5">
+                <span className="text-[10px] lg:text-xs font-bold text-white/40">G</span>
               </div>
-              <Sparkles className="w-3.5 h-3.5 text-orange-400 mr-2 shrink-0" />
-              <span className="text-[13px] text-white/80 truncate flex-1">{selectedModelInfo?.name || 'Выберите модель'}</span>
-              <ChevronRight className="w-4 h-4 text-white/20 ml-2 shrink-0 group-hover:text-white/40 transition-colors" />
+              <Sparkles className="w-3.5 h-3.5 lg:w-4 lg:h-4 text-orange-400 mr-2 shrink-0" />
+              <span className="text-[13px] lg:text-base text-white/80 truncate flex-1">{selectedModelInfo?.name || 'Выберите модель'}</span>
+              <ChevronRight className="w-4 h-4 lg:w-5 lg:h-5 text-white/20 ml-2 shrink-0 group-hover:text-white/40 transition-colors" />
             </div>
             <select
               className="absolute inset-0 w-full opacity-0 cursor-pointer"
@@ -499,67 +498,69 @@ export function GeneratePage() {
           </div>
         </div>
 
-        {/* Media Upload */}
-        <div className="space-y-1">
-          <label className="text-[13px] font-medium text-white/90 ml-1">Изображения</label>
-          <div className="flex flex-wrap gap-2">
-            <div
-              onDragEnter={handleDrag}
-              onDragLeave={handleDrag}
-              onDragOver={handleDrag}
-              onDrop={handleDrop}
-              onClick={() => fileInputRef.current?.click()}
-              className={cn(
-                "relative flex flex-col items-center justify-center w-24 h-32 rounded-xl border border-white/10 transition-all cursor-pointer group",
-                dragActive 
-                  ? "border-primary bg-primary/5" 
-                  : "bg-white/[0.03] hover:bg-white/[0.05]"
-              )}
-            >
-              <input
-                ref={fileInputRef}
-                type="file"
-                accept="image/*"
-                multiple
-                className="hidden"
-                onChange={handleFileChange}
-              />
-              <ImageIcon className="w-5 h-5 text-white/20 mb-2 group-hover:scale-110 transition-transform" />
-              <p className="text-[9px] text-white/25 text-center px-2 leading-tight">
-                Загрузите одно или несколько изображений для редактирования.
-              </p>
-            </div>
-
-            {imagePreviews.map((preview, idx) => (
-              <div key={idx} className="relative w-24 h-32 rounded-xl overflow-hidden border border-white/10 shadow-lg">
-                <img src={preview} alt={`Preview ${idx}`} className="w-full h-full object-cover" />
-                <button
-                  onClick={(e) => { e.stopPropagation(); removeImage(idx); }}
-                  className="absolute top-1 right-1 p-1 bg-black/60 hover:bg-black/80 text-white rounded-lg backdrop-blur-md transition-all border border-white/5"
-                >
-                  <X className="w-2.5 h-2.5" />
-                </button>
+        {/* Media Upload - скрыто для музыки и текста */}
+        {selectedCategory !== 'music' && selectedCategory !== 'text' && (
+          <div className="space-y-1">
+            <label className="text-[13px] font-medium text-white/90 ml-1">Изображения</label>
+            <div className="flex flex-wrap gap-2">
+              <div
+                onDragEnter={handleDrag}
+                onDragLeave={handleDrag}
+                onDragOver={handleDrag}
+                onDrop={handleDrop}
+                onClick={() => fileInputRef.current?.click()}
+                className={cn(
+                  "relative flex flex-col items-center justify-center w-24 h-32 rounded-xl border border-white/10 transition-all cursor-pointer group",
+                  dragActive 
+                    ? "border-primary bg-primary/5" 
+                    : "bg-white/[0.03] hover:bg-white/[0.05]"
+                )}
+              >
+                <input
+                  ref={fileInputRef}
+                  type="file"
+                  accept="image/*"
+                  multiple
+                  className="hidden"
+                  onChange={handleFileChange}
+                />
+                <ImageIcon className="w-5 h-5 text-white/20 mb-2 group-hover:scale-110 transition-transform" />
+                <p className="text-[9px] text-white/25 text-center px-2 leading-tight">
+                  Загрузите одно или несколько изображений для редактирования.
+                </p>
               </div>
-            ))}
+
+              {imagePreviews.map((preview, idx) => (
+                <div key={idx} className="relative w-24 h-32 rounded-xl overflow-hidden border border-white/10 shadow-lg">
+                  <img src={preview} alt={`Preview ${idx}`} className="w-full h-full object-cover" />
+                  <button
+                    onClick={(e) => { e.stopPropagation(); removeImage(idx); }}
+                    className="absolute top-1 right-1 p-1 bg-black/60 hover:bg-black/80 text-white rounded-lg backdrop-blur-md transition-all border border-white/5"
+                  >
+                    <X className="w-2.5 h-2.5" />
+                  </button>
+                </div>
+              ))}
+            </div>
           </div>
-        </div>
+        )}
 
         {/* Prompt Section */}
         <div className="space-y-1">
           <div className="flex items-center gap-1 ml-1">
-            <label className="text-[13px] font-medium text-white/90">Запрос</label>
+            <label className="text-[13px] lg:text-sm font-medium text-white/90">Запрос</label>
             <span className="text-orange-400 font-bold">*</span>
           </div>
           <div className="relative">
             <textarea
-              className="w-full rounded-xl border border-white/10 bg-white/[0.03] px-3.5 py-3 text-sm transition-all focus:border-primary/50 focus:ring-0 hover:bg-white/[0.05] min-h-[80px] max-h-[120px] resize-none"
+              className="w-full rounded-xl border border-white/10 bg-white/[0.03] px-3.5 lg:px-4 py-3 lg:py-4 text-sm lg:text-base transition-all focus:border-primary/50 focus:ring-0 hover:bg-white/[0.05] min-h-[80px] lg:min-h-[100px] max-h-[120px] lg:max-h-[150px] resize-none"
               placeholder="Опишите, что должно быть на изображении."
               value={prompt}
               onChange={(e: ChangeEvent<HTMLTextAreaElement>) => setPrompt(e.target.value)}
             />
-            <div className="absolute bottom-3 right-3">
-              <button className="p-1.5 hover:bg-white/5 rounded-lg text-white/40 hover:text-white transition-colors">
-                <Mic className="w-4 h-4" />
+            <div className="absolute bottom-3 lg:bottom-4 right-3 lg:right-4">
+              <button className="p-1.5 lg:p-2 hover:bg-white/5 rounded-lg text-white/40 hover:text-white transition-colors">
+                <Mic className="w-4 h-4 lg:w-5 lg:h-5" />
               </button>
             </div>
           </div>
@@ -568,14 +569,14 @@ export function GeneratePage() {
         {/* Aspect Ratio - для фото моделей */}
         {selectedCategory === 'image' && (
           <div className="space-y-1">
-            <label className="text-[13px] font-medium text-white/90 ml-1">Формат</label>
+            <label className="text-[13px] lg:text-sm font-medium text-white/90 ml-1">Формат</label>
             <div className="flex gap-2">
               {PHOTO_ASPECT_RATIOS.map((ratio) => (
                 <button
                   key={ratio.id}
                   onClick={() => setSelectedAspectRatio(ratio.value)}
                   className={cn(
-                    "flex-1 py-2.5 px-3 rounded-xl border text-xs font-medium transition-all",
+                    "flex-1 py-2.5 lg:py-3.5 px-3 lg:px-4 rounded-xl border text-xs lg:text-sm font-medium transition-all",
                     selectedAspectRatio === ratio.value
                       ? "border-primary bg-primary/10 text-primary"
                       : "border-white/10 bg-white/[0.03] text-white/60 hover:bg-white/[0.05]"
@@ -592,14 +593,14 @@ export function GeneratePage() {
         {selectedModel === 'nano-banana-2' && (
           <>
             <div className="space-y-1">
-              <label className="text-[13px] font-medium text-white/90 ml-1">Разрешение</label>
+              <label className="text-[13px] lg:text-sm font-medium text-white/90 ml-1">Разрешение</label>
               <div className="flex gap-2">
                 {NANO_BANANA_2_RESOLUTIONS.map((res) => (
                   <button
                     key={res.id}
                     onClick={() => setSelectedResolution(res.value)}
                     className={cn(
-                      "flex-1 py-2.5 px-3 rounded-xl border text-xs font-medium transition-all",
+                      "flex-1 py-2.5 lg:py-3.5 px-3 lg:px-4 rounded-xl border text-xs lg:text-sm font-medium transition-all",
                       selectedResolution === res.value
                         ? "border-primary bg-primary/10 text-primary"
                         : "border-white/10 bg-white/[0.03] text-white/60 hover:bg-white/[0.05]"
@@ -610,15 +611,15 @@ export function GeneratePage() {
                 ))}
               </div>
             </div>
-            <div className="flex items-center gap-3 p-3 rounded-xl border border-white/10 bg-white/[0.03]">
+            <div className="flex items-center gap-3 p-3 lg:p-4 rounded-xl border border-white/10 bg-white/[0.03]">
               <input
                 type="checkbox"
                 id="googleSearch"
                 checked={googleSearch}
                 onChange={(e) => setGoogleSearch(e.target.checked)}
-                className="w-4 h-4 rounded border-white/20 bg-white/5 text-primary focus:ring-primary/50"
+                className="w-4 h-4 lg:w-5 lg:h-5 rounded border-white/20 bg-white/5 text-primary focus:ring-primary/50"
               />
-              <label htmlFor="googleSearch" className="text-[13px] text-white/80 cursor-pointer">
+              <label htmlFor="googleSearch" className="text-[13px] lg:text-sm text-white/80 cursor-pointer">
                 Google поиск (улучшает качество)
               </label>
             </div>
@@ -628,14 +629,14 @@ export function GeneratePage() {
         {/* Разрешение для Nano Banana Pro */}
         {selectedModel === 'google/nano-banana-pro' && (
           <div className="space-y-1">
-            <label className="text-[13px] font-medium text-white/90 ml-1">Разрешение</label>
+            <label className="text-[13px] lg:text-sm font-medium text-white/90 ml-1">Разрешение</label>
             <div className="flex gap-2">
               {NANO_BANANA_PRO_RESOLUTIONS.map((res) => (
                 <button
                   key={res.id}
                   onClick={() => setSelectedResolution(res.value)}
                   className={cn(
-                    "flex-1 py-2.5 px-3 rounded-xl border text-xs font-medium transition-all",
+                    "flex-1 py-2.5 lg:py-3.5 px-3 lg:px-4 rounded-xl border text-xs lg:text-sm font-medium transition-all",
                     selectedResolution === res.value
                       ? "border-primary bg-primary/10 text-primary"
                       : "border-white/10 bg-white/[0.03] text-white/60 hover:bg-white/[0.05]"
@@ -651,14 +652,14 @@ export function GeneratePage() {
         {/* Формат для Veo 3.1 Fast */}
         {selectedModel === 'veo3_fast' && (
           <div className="space-y-1">
-            <label className="text-[13px] font-medium text-white/90 ml-1">Формат видео</label>
+            <label className="text-[13px] lg:text-sm font-medium text-white/90 ml-1">Формат видео</label>
             <div className="flex gap-2">
               {VEO_ASPECT_RATIOS.map((ratio) => (
                 <button
                   key={ratio.id}
                   onClick={() => setSelectedAspectRatio(ratio.value)}
                   className={cn(
-                    "flex-1 py-2.5 px-3 rounded-xl border text-xs font-medium transition-all",
+                    "flex-1 py-2.5 lg:py-3.5 px-3 lg:px-4 rounded-xl border text-xs lg:text-sm font-medium transition-all",
                     selectedAspectRatio === ratio.value
                       ? "border-primary bg-primary/10 text-primary"
                       : "border-white/10 bg-white/[0.03] text-white/60 hover:bg-white/[0.05]"
@@ -674,14 +675,14 @@ export function GeneratePage() {
         {/* Длительность для Wan 2.6 */}
         {selectedModel === 'wan/2-6-image-to-video' && (
           <div className="space-y-1">
-            <label className="text-[13px] font-medium text-white/90 ml-1">Длительность (разрешение 1080p)</label>
+            <label className="text-[13px] lg:text-sm font-medium text-white/90 ml-1">Длительность (разрешение 1080p)</label>
             <div className="flex gap-2">
               {WAN_DURATIONS.map((dur) => (
                 <button
                   key={dur.id}
                   onClick={() => setVideoDuration(dur.value)}
                   className={cn(
-                    "flex-1 py-2.5 px-3 rounded-xl border text-xs font-medium transition-all",
+                    "flex-1 py-2.5 lg:py-3.5 px-3 lg:px-4 rounded-xl border text-xs lg:text-sm font-medium transition-all",
                     videoDuration === dur.value
                       ? "border-primary bg-primary/10 text-primary"
                       : "border-white/10 bg-white/[0.03] text-white/60 hover:bg-white/[0.05]"
@@ -698,14 +699,14 @@ export function GeneratePage() {
         {selectedModel === 'kling-2.6/image-to-video' && (
           <>
             <div className="space-y-1">
-              <label className="text-[13px] font-medium text-white/90 ml-1">Длительность</label>
+              <label className="text-[13px] lg:text-sm font-medium text-white/90 ml-1">Длительность</label>
               <div className="flex gap-2">
                 {KLING_DURATIONS.map((dur) => (
                   <button
                     key={dur.id}
                     onClick={() => setVideoDuration(dur.value)}
                     className={cn(
-                      "flex-1 py-2.5 px-3 rounded-xl border text-xs font-medium transition-all",
+                      "flex-1 py-2.5 lg:py-3.5 px-3 lg:px-4 rounded-xl border text-xs lg:text-sm font-medium transition-all",
                       videoDuration === dur.value
                         ? "border-primary bg-primary/10 text-primary"
                         : "border-white/10 bg-white/[0.03] text-white/60 hover:bg-white/[0.05]"
@@ -716,15 +717,15 @@ export function GeneratePage() {
                 ))}
               </div>
             </div>
-            <div className="flex items-center gap-3 p-3 rounded-xl border border-white/10 bg-white/[0.03]">
+            <div className="flex items-center gap-3 p-3 lg:p-4 rounded-xl border border-white/10 bg-white/[0.03]">
               <input
                 type="checkbox"
                 id="withSound"
                 checked={withSound}
                 onChange={(e) => setWithSound(e.target.checked)}
-                className="w-4 h-4 rounded border-white/20 bg-white/5 text-primary focus:ring-primary/50"
+                className="w-4 h-4 lg:w-5 lg:h-5 rounded border-white/20 bg-white/5 text-primary focus:ring-primary/50"
               />
-              <label htmlFor="withSound" className="text-[13px] text-white/80 cursor-pointer">
+              <label htmlFor="withSound" className="text-[13px] lg:text-sm text-white/80 cursor-pointer">
                 Со звуком (цена ×2)
               </label>
             </div>
@@ -735,14 +736,14 @@ export function GeneratePage() {
         {selectedModel === 'music-suno' && (
           <>
             <div className="space-y-1">
-              <label className="text-[13px] font-medium text-white/90 ml-1">Режим</label>
+              <label className="text-[13px] lg:text-sm font-medium text-white/90 ml-1">Режим</label>
               <div className="flex gap-2">
                 {SUNO_MODES.map((mode) => (
                   <button
                     key={mode.id}
                     onClick={() => setSunoMode(mode.value)}
                     className={cn(
-                      "flex-1 py-2.5 px-3 rounded-xl border text-xs font-medium transition-all",
+                      "flex-1 py-2.5 lg:py-3.5 px-3 lg:px-4 rounded-xl border text-xs lg:text-sm font-medium transition-all",
                       sunoMode === mode.value
                         ? "border-primary bg-primary/10 text-primary"
                         : "border-white/10 bg-white/[0.03] text-white/60 hover:bg-white/[0.05]"
@@ -755,14 +756,14 @@ export function GeneratePage() {
             </div>
             {sunoMode === 'vocal' && (
               <div className="space-y-1">
-                <label className="text-[13px] font-medium text-white/90 ml-1">Голос</label>
+                <label className="text-[13px] lg:text-sm font-medium text-white/90 ml-1">Голос</label>
                 <div className="flex gap-2">
                   {SUNO_VOICES.map((voice) => (
                     <button
                       key={voice.id}
                       onClick={() => setSunoVoice(voice.value)}
                       className={cn(
-                        "flex-1 py-2.5 px-3 rounded-xl border text-xs font-medium transition-all",
+                        "flex-1 py-2.5 lg:py-3.5 px-3 lg:px-4 rounded-xl border text-xs lg:text-sm font-medium transition-all",
                         sunoVoice === voice.value
                           ? "border-primary bg-primary/10 text-primary"
                           : "border-white/10 bg-white/[0.03] text-white/60 hover:bg-white/[0.05]"
@@ -785,43 +786,26 @@ export function GeneratePage() {
 
         {/* Sticky Footer */}
         <div className="fixed bottom-0 left-0 right-0 p-3 lg:relative lg:p-0 z-40 bg-black/80 backdrop-blur-xl border-t border-white/5 lg:border-none lg:bg-transparent">
-          <div className="max-w-2xl mx-auto flex items-center gap-2">
-            {/* Quantity Selector */}
-            <div className="flex items-center bg-white/[0.05] border border-white/10 rounded-xl h-12 px-0.5">
-              <button 
-                onClick={() => setNumOutputs(Math.max(1, numOutputs - 1))}
-                className="p-2.5 text-white/30 hover:text-white transition-colors"
-              >
-                <Minus className="w-3.5 h-3.5" />
-              </button>
-              <span className="w-8 text-center text-xs font-bold text-white/60">{numOutputs}/4</span>
-              <button 
-                onClick={() => setNumOutputs(Math.min(4, numOutputs + 1))}
-                className="p-2.5 text-white/30 hover:text-white transition-colors"
-              >
-                <Plus className="w-3.5 h-3.5" />
-              </button>
-            </div>
-
-            {/* Generate Button */}
+          <div className="max-w-2xl mx-auto">
+            {/* Generate Button - увеличенный на ПК */}
             <Button
-              className="flex-1 h-12 rounded-xl text-sm font-bold bg-gradient-to-r from-[#f7d570] via-[#f7b733] to-[#f7d570] text-black hover:opacity-95 transition-all shadow-[0_4px_15px_rgba(247,183,51,0.15)] active:scale-[0.98]"
+              className="w-full h-12 lg:h-14 rounded-xl text-sm lg:text-base font-bold bg-gradient-to-r from-[#f7d570] via-[#f7b733] to-[#f7d570] text-black hover:opacity-95 transition-all shadow-[0_4px_15px_rgba(247,183,51,0.15)] active:scale-[0.98]"
               onClick={handleGenerate}
               disabled={generating || uploadingImage || !user?.telegram_id}
             >
               {uploadingImage ? (
                 <div className="flex items-center gap-2">
-                  <span className="h-3.5 w-3.5 animate-spin rounded-full border-2 border-black/20 border-t-black" />
+                  <span className="h-3.5 w-3.5 lg:h-4 lg:w-4 animate-spin rounded-full border-2 border-black/20 border-t-black" />
                   Загрузка...
                 </div>
               ) : generating ? (
                 <div className="flex items-center gap-2">
-                  <span className="h-3.5 w-3.5 animate-spin rounded-full border-2 border-black/20 border-t-black" />
+                  <span className="h-3.5 w-3.5 lg:h-4 lg:w-4 animate-spin rounded-full border-2 border-black/20 border-t-black" />
                   Создание...
                 </div>
               ) : (
                 <div className="flex items-center gap-2">
-                  <Sparkles className="h-3.5 w-3.5" />
+                  <Sparkles className="h-3.5 w-3.5 lg:h-4 lg:w-4" />
                   Сгенерировать — {totalCost}
                 </div>
               )}
