@@ -54,9 +54,7 @@ func New(cfg *config.Config, db *sql.DB) *Server {
 	var webGenerationService *services.WebGenerationService
 	if cfg.KieAPIKey != "" {
 		kieClient := kieapi.NewClient(cfg.KieAPIKey, cfg.KieAPIBaseURL)
-		// TODO: Integrate core GenerationService for music/text generation
-		// For now, passing nil - music and text generation will show "not configured" error
-		webGenerationService = services.NewWebGenerationService(db, kieClient, cfg.KieCallbackURL, nil)
+		webGenerationService = services.NewWebGenerationService(db, kieClient, cfg.KieCallbackURL)
 	}
 
 	// Web payment service (YooKassa)
