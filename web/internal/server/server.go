@@ -30,14 +30,26 @@ func New(cfg *config.Config, db *sql.DB) *Server {
 
 	router := gin.Default()
 
+	// Увеличиваем лимит размера тела запроса до 50MB для поддержки больших изображений
+	router.MaxMultipartMemory = 50 << 20 // 50MB
+
 	router.Use(cors.New(cors.Config{
 		AllowOrigins:     []string{cfg.FrontendURL, "https://telegram.org"},
 		AllowMethods:     []string{"GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"},
-		AllowHeaders:     []string{"Origin", "Content-Type", "Accept", "Authorization", "X-Telegram-Init-Data"},
-		ExposeHeaders:    []string{"Content-Length"},
+		AllowHeaders:     []string{"Origin", "Content-Type", "Accept", "Authorization", "X-Telegram-Init-Data", "X-Requested-With"},
+		ExposeHeaders:    []string{"Content-Length", "Content-Type"},
 		AllowCredentials: true,
 		MaxAge:           12 * time.Hour,
 	}))
+
+	// Middleware для обработки больших JSON payload
+	router.Use(func(c *gin.Context) {
+		// Увеличиваем лимит для JSON запросов
+		if c.ContentType() == "application/json" {
+			c.Request.Body = http.MaxBytesReader(c.Writer, c.Request.Body, 50*1024*1024) // 50MB
+		}
+		c.Next()
+	})
 
 	userRepo := repository.NewUserRepository(db)
 	quotaRepo := repository.NewQuotaRepository(db)
