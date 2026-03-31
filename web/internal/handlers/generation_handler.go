@@ -146,38 +146,31 @@ func (h *GenerationHandler) CreateGeneration(c *gin.Context) {
 		return
 	}
 
-	// Проверяем подписку для текстовых моделей (gpt-4.1-mini доступна всем)
-	textModelsRequireSubscription := map[string]bool{
-		"google/gemini-3-flash": true,
-		"openai/gpt-5-mini":     true,
-		"openai/gpt-5-nano":     true,
-		// "gpt-4.1-mini" убрана - теперь доступна без подписки
+	// Проверяем подписку для текстовых моделей
+	// Все текстовые модели видны, но доступны по подпискам
+	textModelsRequireSubscription := map[string][]string{
+		"google/gemini-3-flash": {"start", "pro"},
+		"openai/gpt-5-mini":     {"mini", "start", "pro"},
+		"openai/gpt-5-nano":     {"mini", "start", "pro"},
+		// "gpt-4.1-mini" доступна всем без подписки
 	}
 
-	if textModelsRequireSubscription[req.Model] {
+	if allowedSubs, requiresSubscription := textModelsRequireSubscription[req.Model]; requiresSubscription {
 		if u.SubscriptionType == "" {
-			c.JSON(http.StatusForbidden, gin.H{"error": "Subscription required for text models"})
+			c.JSON(http.StatusForbidden, gin.H{"error": "Subscription required for this model"})
 			return
 		}
 		// Проверяем, доступна ли модель для подписки
-		allowedModels := map[string][]string{
-			"google/gemini-3-flash": {"start", "pro"},
-			"openai/gpt-5-mini":     {"mini", "start", "pro"},
-			"openai/gpt-5-nano":     {"mini", "start", "pro"},
+		found := false
+		for _, sub := range allowedSubs {
+			if sub == u.SubscriptionType {
+				found = true
+				break
+			}
 		}
-
-		if allowed, ok := allowedModels[req.Model]; ok {
-			found := false
-			for _, sub := range allowed {
-				if sub == u.SubscriptionType {
-					found = true
-					break
-				}
-			}
-			if !found {
-				c.JSON(http.StatusForbidden, gin.H{"error": "This model is not available for your subscription"})
-				return
-			}
+		if !found {
+			c.JSON(http.StatusForbidden, gin.H{"error": "This model is not available for your subscription"})
+			return
 		}
 	}
 

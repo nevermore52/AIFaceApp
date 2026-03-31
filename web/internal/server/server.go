@@ -66,7 +66,7 @@ func New(cfg *config.Config, db *sql.DB) *Server {
 	var webGenerationService *services.WebGenerationService
 	if cfg.KieAPIKey != "" {
 		kieClient := kieapi.NewClient(cfg.KieAPIKey, cfg.KieAPIBaseURL)
-		webGenerationService = services.NewWebGenerationService(db, kieClient, cfg.KieCallbackURL)
+		webGenerationService = services.NewWebGenerationService(db, kieClient, cfg.KieCallbackURL, userService)
 	}
 
 	// Web payment service (YooKassa)
@@ -86,7 +86,8 @@ func New(cfg *config.Config, db *sql.DB) *Server {
 	paymentHandler := handlers.NewPaymentHandler(paymentService, webPaymentService)
 	adminHandler := handlers.NewAdminHandler(userService, generationService, paymentService)
 
-	authMiddleware := middleware.NewAuthMiddleware(authService)
+	// Используем middleware с userService для обновления информации о подписке при каждом запросе
+	authMiddleware := middleware.NewAuthMiddlewareWithUserService(authService, userService)
 
 	api := router.Group("/api")
 	{

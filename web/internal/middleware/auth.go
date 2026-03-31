@@ -11,10 +11,15 @@ import (
 
 type AuthMiddleware struct {
 	authService *services.AuthService
+	userService *services.UserService
 }
 
 func NewAuthMiddleware(authService *services.AuthService) *AuthMiddleware {
 	return &AuthMiddleware{authService: authService}
+}
+
+func NewAuthMiddlewareWithUserService(authService *services.AuthService, userService *services.UserService) *AuthMiddleware {
+	return &AuthMiddleware{authService: authService, userService: userService}
 }
 
 func (m *AuthMiddleware) RequireAuth() gin.HandlerFunc {
@@ -39,6 +44,14 @@ func (m *AuthMiddleware) RequireAuth() gin.HandlerFunc {
 			c.JSON(http.StatusUnauthorized, gin.H{"error": "Invalid or expired token"})
 			c.Abort()
 			return
+		}
+
+		// Если есть userService, обновляем информацию о подписке из БД
+		if m.userService != nil {
+			freshUser, err := m.userService.GetUserByID(user.ID)
+			if err == nil {
+				user = freshUser
+			}
 		}
 
 		c.Set("user", user)

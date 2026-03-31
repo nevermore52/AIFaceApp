@@ -21,6 +21,10 @@ func (s *UserService) GetByID(id int64) (*models.User, error) {
 	return s.userRepo.GetByID(id)
 }
 
+func (s *UserService) GetUserByID(id int64) (*models.User, error) {
+	return s.userRepo.GetByID(id)
+}
+
 func (s *UserService) GetByTelegramID(telegramID int64) (*models.User, error) {
 	return s.userRepo.GetByTelegramID(telegramID)
 }

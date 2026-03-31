@@ -24,7 +24,17 @@ func (h *UserHandler) GetCurrentUser(c *gin.Context) {
 		return
 	}
 
-	c.JSON(http.StatusOK, user)
+	u := user.(*models.User)
+
+	// Перезагружаем пользователя из БД чтобы получить актуальную информацию о подписке
+	freshUser, err := h.userService.GetUserByID(u.ID)
+	if err != nil {
+		// Если ошибка при загрузке, возвращаем кэшированного пользователя
+		c.JSON(http.StatusOK, user)
+		return
+	}
+
+	c.JSON(http.StatusOK, freshUser)
 }
 
 type UpdateProfileRequest struct {
