@@ -476,11 +476,15 @@ func (s *WebGenerationService) generateMusicSuno(prompt, vocalGender string, ins
 	return "", "", fmt.Errorf("suno response missing audio url and taskId: %s", string(raw))
 }
 
-// generateChat генерирует текст через OpenRouter API
+// generateChat генерирует текст через DefAPI
 func (s *WebGenerationService) generateChat(model string, messages []map[string]string) (string, error) {
-	apiKey := os.Getenv("OPENROUTER_API_KEY")
+	apiKey := os.Getenv("DEF_API_KEY")
 	if apiKey == "" {
-		return "", fmt.Errorf("OPENROUTER_API_KEY is not set")
+		return "", fmt.Errorf("DEF_API_KEY is not set")
+	}
+	baseURL := os.Getenv("DEF_BASE_URL")
+	if baseURL == "" {
+		baseURL = "https://api.defapi.org"
 	}
 
 	payload := map[string]any{
@@ -490,37 +494,35 @@ func (s *WebGenerationService) generateChat(model string, messages []map[string]
 
 	body, err := json.Marshal(payload)
 	if err != nil {
-		return "", fmt.Errorf("marshal openrouter payload: %w", err)
+		return "", fmt.Errorf("marshal defapi payload: %w", err)
 	}
 
-	req, err := http.NewRequest("POST", "https://openrouter.ai/api/v1/chat/completions", strings.NewReader(string(body)))
+	req, err := http.NewRequest("POST", baseURL+"/v1/chat/completions", strings.NewReader(string(body)))
 	if err != nil {
-		return "", fmt.Errorf("create openrouter request: %w", err)
+		return "", fmt.Errorf("create defapi request: %w", err)
 	}
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Authorization", "Bearer "+apiKey)
-	req.Header.Set("HTTP-Referer", os.Getenv("FRONTEND_URL"))
-	req.Header.Set("X-Title", "AI Face App")
 
 	resp, err := s.httpClient.Do(req)
 	if err != nil {
-		return "", fmt.Errorf("openrouter request failed: %w", err)
+		return "", fmt.Errorf("defapi request failed: %w", err)
 	}
 	defer resp.Body.Close()
 
 	if resp.StatusCode >= 400 {
 		raw, _ := io.ReadAll(resp.Body)
-		return "", fmt.Errorf("openrouter api error: %s", string(raw))
+		return "", fmt.Errorf("defapi api error: %s", string(raw))
 	}
 
 	raw, err := io.ReadAll(resp.Body)
 	if err != nil {
-		return "", fmt.Errorf("read openrouter response: %w", err)
+		return "", fmt.Errorf("read defapi response: %w", err)
 	}
 
 	var result map[string]any
 	if err := json.Unmarshal(raw, &result); err != nil {
-		return "", fmt.Errorf("parse openrouter response: %w", err)
+		return "", fmt.Errorf("parse defapi response: %w", err)
 	}
 
 	// Извлекаем текст ответа
@@ -534,7 +536,7 @@ func (s *WebGenerationService) generateChat(model string, messages []map[string]
 		}
 	}
 
-	return "", fmt.Errorf("unexpected openrouter response format: %s", string(raw))
+	return "", fmt.Errorf("unexpected defapi response format: %s", string(raw))
 }
 
 // Вспомогательные функции для парсинга ответов
