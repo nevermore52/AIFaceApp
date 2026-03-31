@@ -32,6 +32,9 @@ type Config struct {
 	KieAPIBaseURL  string
 	KieCallbackURL string
 
+	// OpenRouter for text/music generation
+	OpenRouterAPIKey string
+
 	// YooKassa payments
 	YooKassaShopID    string
 	YooKassaSecretKey string
@@ -63,6 +66,8 @@ func Load() (*Config, error) {
 		KieAPIKey:      getEnv("KIEAPI_API_KEY", ""),
 		KieAPIBaseURL:  getEnv("KIEAPI_BASE_URL", "https://api.kie.ai"),
 		KieCallbackURL: getEnv("WEB_KIEAPI_CALLBACK_URL", ""),
+
+		OpenRouterAPIKey: getEnv("OPENROUTER_API_KEY", ""),
 
 		YooKassaShopID:    getEnv("YOOKASSA_SHOP_ID", ""),
 		YooKassaSecretKey: getEnv("YOOKASSA_SECRET_KEY", ""),

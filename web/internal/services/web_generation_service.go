@@ -14,13 +14,20 @@ type WebGenerationService struct {
 	db          *sql.DB
 	kieClient   *kieapi.Client
 	callbackURL string
+	genService  GenerationServiceInterface
 }
 
-func NewWebGenerationService(db *sql.DB, kieClient *kieapi.Client, callbackURL string) *WebGenerationService {
+type GenerationServiceInterface interface {
+	GenerateMusicSuno(prompt, vocalGender string, instrumental bool) (string, string, error)
+	GenerateChat(model string, messages []map[string]string) (string, error)
+}
+
+func NewWebGenerationService(db *sql.DB, kieClient *kieapi.Client, callbackURL string, genService GenerationServiceInterface) *WebGenerationService {
 	return &WebGenerationService{
 		db:          db,
 		kieClient:   kieClient,
 		callbackURL: callbackURL,
+		genService:  genService,
 	}
 }
 
@@ -246,17 +253,69 @@ func isTextModel(model string) bool {
 }
 
 func (s *WebGenerationService) processMusicGeneration(genReq *GenerationRequest, req CreateGenerationRequest) {
-	// TODO: Implement Suno API integration
-	// For now, return error
-	log.Printf("Music generation requested but Suno API not yet integrated in web service")
-	_ = s.updateStatus(genReq.ID, "failed", "Music generation is not yet available in web interface. Please use Telegram bot.")
+	if s.genService == nil {
+		log.Printf("GenerationService not configured for music generation")
+		_ = s.updateStatus(genReq.ID, "failed", "Music generation service not configured")
+		return
+	}
+
+	_ = s.updateStatus(genReq.ID, "processing", "")
+
+	audioURL, taskID, err := s.genService.GenerateMusicSuno(req.Prompt, req.VocalGender, req.Instrumental)
+	if err != nil {
+		log.Printf("Suno generation failed: %v", err)
+		_ = s.updateStatus(genReq.ID, "failed", fmt.Sprintf("Music generation failed: %v", err))
+		return
+	}
+
+	// Если есть готовый audioURL, сразу завершаем
+	if audioURL != "" {
+		_ = s.completeGeneration(genReq.ID, audioURL)
+		return
+	}
+
+	// Если только taskID, сохраняем его для обработки callback
+	if taskID != "" {
+		_ = s.updateExternalTaskID(genReq.ID, taskID)
+		log.Printf("Music generation started with taskID: %s", taskID)
+		return
+	}
+
+	_ = s.updateStatus(genReq.ID, "failed", "No audio URL or task ID returned from Suno API")
 }
 
 func (s *WebGenerationService) processTextGeneration(genReq *GenerationRequest, req CreateGenerationRequest) {
-	// TODO: Implement text model integration
-	// For now, return error
-	log.Printf("Text generation requested but chat API not yet integrated in web service")
-	_ = s.updateStatus(genReq.ID, "failed", "Text generation is not yet available in web interface. Please use Telegram bot.")
+	if s.genService == nil {
+		log.Printf("GenerationService not configured for text generation")
+		_ = s.updateStatus(genReq.ID, "failed", "Text generation service not configured")
+		return
+	}
+
+	_ = s.updateStatus(genReq.ID, "processing", "")
+
+	// Формируем сообщения для chat API
+	messages := []map[string]string{
+		{"role": "user", "content": req.Prompt},
+	}
+
+	response, err := s.genService.GenerateChat(req.Model, messages)
+	if err != nil {
+		log.Printf("Chat generation failed: %v", err)
+		_ = s.updateStatus(genReq.ID, "failed", fmt.Sprintf("Text generation failed: %v", err))
+		return
+	}
+
+	_ = s.completeGeneration(genReq.ID, response)
+}
+
+func (s *WebGenerationService) completeGeneration(id int64, output string) error {
+	now := time.Now()
+	_, err := s.db.Exec(`
+		UPDATE generation_requests
+		SET status = 'completed', output = $1, completed_at = $2
+		WHERE id = $3
+	`, output, now, id)
+	return err
 }
 
 func (s *WebGenerationService) HandleCallback(payload kieapi.CallbackPayload) error {
