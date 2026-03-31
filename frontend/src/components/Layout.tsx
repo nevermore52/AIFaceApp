@@ -16,7 +16,7 @@ export function Layout() {
   ]
 
   return (
-    <div className="min-h-screen bg-[#030303] text-foreground selection:bg-primary/30 pb-20 md:pb-0">
+    <div className="min-h-screen bg-[#030303] text-foreground selection:bg-primary/30">
       <header className="sticky top-0 z-50 w-full border-b border-white/10 bg-[#030303] shadow-lg">
         <div className="container flex h-16 items-center justify-between px-4">
           <div className="flex items-center gap-8">
@@ -138,7 +138,7 @@ export function Layout() {
         </div>
       </nav>
 
-      <main className="container py-8 px-4">
+      <main className="container py-8 px-4 pb-32 md:pb-8">
         <Outlet />
       </main>
     </div>

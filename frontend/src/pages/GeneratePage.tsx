@@ -113,7 +113,7 @@ export function GeneratePage() {
   const [selectedModel, setSelectedModel] = useState<string>('')
   const [selectedAspectRatio, setSelectedAspectRatio] = useState('1:1')
   // Новые параметры для разных моделей
-  const [selectedResolution, setSelectedResolution] = useState('1K')
+  const [selectedResolution, setSelectedResolution] = useState('2K')
   const [googleSearch, setGoogleSearch] = useState(false)
   const [videoDuration, setVideoDuration] = useState('5')
   const [withSound, setWithSound] = useState(false)
@@ -174,6 +174,28 @@ export function GeneratePage() {
       setSelectedModel(filteredModels[0].id)
     }
   }, [selectedCategory, filteredModels, selectedModel])
+
+  // Устанавливаем дефолтные параметры при смене модели
+  useEffect(() => {
+    if (!selectedModel) return
+
+    // Nano Banana Pro: дефолт 2K
+    if (selectedModel === 'google/nano-banana-pro') {
+      setSelectedResolution('2K')
+    }
+    // Nano Banana 2: дефолт 1K
+    else if (selectedModel === 'nano-banana-2') {
+      setSelectedResolution('1K')
+    }
+    // Kling 2.6: дефолт 5 сек
+    else if (selectedModel === 'kling-2.6/image-to-video') {
+      setVideoDuration('5')
+    }
+    // Wan 2.6: дефолт 5 сек
+    else if (selectedModel === 'wan/2-6-image-to-video') {
+      setVideoDuration('5')
+    }
+  }, [selectedModel])
 
   // Проверяем лимит фото при смене модели
   useEffect(() => {
@@ -795,30 +817,29 @@ export function GeneratePage() {
           </div>
         )}
 
-        {/* Sticky Footer */}
-        <div className="fixed bottom-0 left-0 right-0 p-3 lg:relative lg:p-0 z-40 bg-black/80 backdrop-blur-xl border-t border-white/5 lg:border-none lg:bg-transparent">
+        {/* Generate Button Section */}
+        <div className="mt-10 mb-4 px-2">
           <div className="max-w-2xl mx-auto">
-            {/* Generate Button - увеличенный на ПК */}
             <Button
-              className="w-full h-12 lg:h-14 rounded-xl text-sm lg:text-base font-bold bg-gradient-to-r from-[#f7d570] via-[#f7b733] to-[#f7d570] text-black hover:opacity-95 transition-all shadow-[0_4px_15px_rgba(247,183,51,0.15)] active:scale-[0.98]"
+              className="w-full h-16 rounded-2xl text-lg font-black bg-gradient-to-r from-[#FFD700] via-[#FFB700] to-[#FF8C00] text-black hover:opacity-90 transition-all shadow-[0_8px_30px_rgba(255,183,0,0.3)] active:scale-[0.95] flex items-center justify-center gap-3"
               onClick={handleGenerate}
-              disabled={generating || uploadingImage || !user?.telegram_id}
+              disabled={generating || uploadingImage}
             >
               {uploadingImage ? (
-                <div className="flex items-center gap-2">
-                  <span className="h-3.5 w-3.5 lg:h-4 lg:w-4 animate-spin rounded-full border-2 border-black/20 border-t-black" />
-                  Загрузка...
-                </div>
+                <>
+                  <span className="h-5 w-5 animate-spin rounded-full border-2 border-black/20 border-t-black" />
+                  <span>Загрузка...</span>
+                </>
               ) : generating ? (
-                <div className="flex items-center gap-2">
-                  <span className="h-3.5 w-3.5 lg:h-4 lg:w-4 animate-spin rounded-full border-2 border-black/20 border-t-black" />
-                  Создание...
-                </div>
+                <>
+                  <span className="h-5 w-5 animate-spin rounded-full border-2 border-black/20 border-t-black" />
+                  <span>Создание...</span>
+                </>
               ) : (
-                <div className="flex items-center gap-2">
-                  <Sparkles className="h-3.5 w-3.5 lg:h-4 lg:w-4" />
-                  Сгенерировать — {totalCost}
-                </div>
+                <>
+                  <Sparkles className="h-6 w-6 fill-black" />
+                  <span>Сгенерировать — {totalCost}</span>
+                </>
               )}
             </Button>
           </div>
