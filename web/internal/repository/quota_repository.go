@@ -76,6 +76,28 @@ func (r *QuotaRepository) AddExtra(telegramID int64, category models.QuotaCatego
 	return err
 }
 
+func (r *QuotaRepository) AddPrimary(telegramID int64, category models.QuotaCategory, amount int) error {
+	var column string
+	switch category {
+	case models.QuotaCategoryText:
+		column = "text_daily"
+	case models.QuotaCategoryImage:
+		column = "image_weekly"
+	case models.QuotaCategoryMusic:
+		column = "music_weekly"
+	case models.QuotaCategoryVideo:
+		column = "video_weekly"
+	default:
+		return fmt.Errorf("unknown category: %s", category)
+	}
+
+	query := fmt.Sprintf(`
+		UPDATE user_quotas SET %s = %s + $2, updated_at = CURRENT_TIMESTAMP
+		WHERE telegram_id = $1`, column, column)
+	_, err := r.db.Exec(query, telegramID, amount)
+	return err
+}
+
 func (r *QuotaRepository) Consume(telegramID int64, category models.QuotaCategory, amount int) (primaryUsed, extraUsed int, err error) {
 	var primaryCol, extraCol string
 	switch category {

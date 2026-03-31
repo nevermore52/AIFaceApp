@@ -20,6 +20,7 @@ type QuotaService interface {
 	GetQuota(telegramID int64) (*models.UserQuota, error)
 	ConsumeQuota(telegramID int64, category models.QuotaCategory, amount int) (primaryUsed, extraUsed int, err error)
 	AddExtraQuota(telegramID int64, category models.QuotaCategory, amount int) error
+	AddPrimaryQuota(telegramID int64, category models.QuotaCategory, amount int) error
 }
 
 type WebGenerationService struct {
@@ -72,6 +73,9 @@ type CreateGenerationRequest struct {
 	// Suno Music параметры
 	Instrumental bool   `json:"instrumental"`
 	VocalGender  string `json:"vocal_gender"`
+	// Информация о потраченных квотах (заполняется сервером)
+	PrimaryUsed int `json:"primary_used"`
+	ExtraUsed   int `json:"extra_used"`
 }
 
 type ModelInfo struct {
@@ -99,6 +103,74 @@ func (s *WebGenerationService) GetAvailableModels() []ModelInfo {
 	}
 }
 
+// getTokenCost определяет стоимость генерации в зависимости от модели и настроек
+func (s *WebGenerationService) getTokenCost(model string, req CreateGenerationRequest) int {
+	model = strings.ToLower(strings.TrimSpace(model))
+
+	// Базовые стоимости из GetAvailableModels
+	baseCosts := map[string]int{
+		"google/nano-banana":       1,
+		"google/nano-banana-pro":   4,
+		"nano-banana-2":            2,
+		"seedream/4.5-edit":        3,
+		"veo3_fast":                1,
+		"wan/2-6-image-to-video":   2,
+		"kling-2.6/image-to-video": 1,
+		"music-suno":               1,
+		"google/gemini-3-flash":    1,
+		"openai/gpt-5-mini":        1,
+		"openai/gpt-5-nano":        1,
+		"gpt-4.1-mini":             1,
+	}
+
+	baseCost := baseCosts[model]
+	if baseCost == 0 {
+		return 1 // По умолчанию
+	}
+
+	// Модификаторы стоимости для разных настроек
+	if model == "nano-banana-2" {
+		// Разрешение: 1K (базовое), 2K (+1), 4K (+3)
+		switch req.Resolution {
+		case "4K":
+			return baseCost + 3
+		case "2K":
+			return baseCost + 1
+		default:
+			return baseCost
+		}
+	}
+
+	if model == "google/nano-banana-pro" || model == "nano-banana-pro" {
+		// Разрешение: 2K (базовое), 5K (+2)
+		switch req.Resolution {
+		case "5K":
+			return baseCost + 2
+		default:
+			return baseCost
+		}
+	}
+
+	if model == "wan/2-6-image-to-video" {
+		// Длительность видео: 5с (базовое), 10с (+1)
+		switch req.Duration {
+		case "10":
+			return baseCost + 1
+		default:
+			return baseCost
+		}
+	}
+
+	if model == "kling-2.6/image-to-video" {
+		// Звук: без звука (базовое), со звуком (+1)
+		if req.Sound == "true" {
+			return baseCost + 1
+		}
+	}
+
+	return baseCost
+}
+
 func (s *WebGenerationService) CreateGeneration(userID int64, username string, req CreateGenerationRequest) (*GenerationRequest, error) {
 	if s.kieClient == nil {
 		return nil, fmt.Errorf("generation service not configured")
@@ -118,6 +190,9 @@ func (s *WebGenerationService) CreateGeneration(userID int64, username string, r
 	} else if strings.Contains(model, "video") {
 		modelType = "video"
 	}
+
+	// Определяем стоимость генерации
+	tokenCost := s.getTokenCost(req.Model, req)
 
 	// Проверяем и списываем квоты
 	if s.quotaService != nil {
@@ -146,11 +221,18 @@ func (s *WebGenerationService) CreateGeneration(userID int64, username string, r
 			return nil, fmt.Errorf("unknown model type: %s", modelType)
 		}
 
-		// Списываем квоту (1 генерация)
-		_, _, err = s.quotaService.ConsumeQuota(*user.TelegramID, category, 1)
+		// Списываем квоту (с правильной стоимостью)
+		primaryUsed, extraUsed, err := s.quotaService.ConsumeQuota(*user.TelegramID, category, tokenCost)
 		if err != nil {
 			return nil, fmt.Errorf("insufficient quota: %w", err)
 		}
+
+		log.Printf("Quota consumed: telegramID=%d category=%s amount=%d primary=%d extra=%d",
+			*user.TelegramID, category, tokenCost, primaryUsed, extraUsed)
+
+		// Сохраняем информацию о потраченных квотах для возврата при ошибке
+		req.PrimaryUsed = primaryUsed
+		req.ExtraUsed = extraUsed
 	}
 
 	inputImage := ""
@@ -160,11 +242,11 @@ func (s *WebGenerationService) CreateGeneration(userID int64, username string, r
 
 	query := `
 		INSERT INTO generation_requests (user_id, username, model_type, model, status, input_image, prompt, tokens_used, source)
-		VALUES ($1, $2, $3, $4, 'pending', $5, $6, 1, 'web')
+		VALUES ($1, $2, $3, $4, 'pending', $5, $6, $7, 'web')
 		RETURNING id, user_id, username, model_type, model, status, input_image, output, prompt, error_msg, tokens_used, source, created_at, completed_at`
 
 	genReq := &GenerationRequest{}
-	err := s.db.QueryRow(query, userID, username, modelType, req.Model, inputImage, req.Prompt).Scan(
+	err := s.db.QueryRow(query, userID, username, modelType, req.Model, inputImage, req.Prompt, tokenCost).Scan(
 		&genReq.ID, &genReq.UserID, &genReq.Username, &genReq.ModelType, &genReq.Model, &genReq.Status,
 		&genReq.InputImage, &genReq.Output, &genReq.Prompt, &genReq.ErrorMsg,
 		&genReq.TokensUsed, &genReq.Source, &genReq.CreatedAt, &genReq.CompletedAt,
@@ -185,9 +267,9 @@ func (s *WebGenerationService) processGeneration(genReq *GenerationRequest, req 
 
 	model := strings.ToLower(strings.TrimSpace(req.Model))
 
-	// Вспомогательная функция для возврата квоты при ошибке
-	refundQuota := func() {
-		if s.quotaService != nil {
+	// Вспомогательная функция для возврата квот при ошибке
+	refundQuota := func(primaryUsed, extraUsed int) {
+		if s.quotaService != nil && (primaryUsed > 0 || extraUsed > 0) {
 			// Получаем пользователя для получения telegram_id
 			user, err := s.quotaService.GetByID(genReq.UserID)
 			if err == nil && user.TelegramID != nil {
@@ -204,8 +286,15 @@ func (s *WebGenerationService) processGeneration(genReq *GenerationRequest, req 
 					category = models.QuotaCategoryVideo
 				}
 
-				// Возвращаем квоту (добавляем extra)
-				_ = s.quotaService.AddExtraQuota(*user.TelegramID, category, 1)
+				// Возвращаем квоты в те же типы, откуда были потрачены
+				if primaryUsed > 0 {
+					_ = s.quotaService.AddPrimaryQuota(*user.TelegramID, category, primaryUsed)
+					log.Printf("Refunded primary quota: telegramID=%d category=%s amount=%d", *user.TelegramID, category, primaryUsed)
+				}
+				if extraUsed > 0 {
+					_ = s.quotaService.AddExtraQuota(*user.TelegramID, category, extraUsed)
+					log.Printf("Refunded extra quota: telegramID=%d category=%s amount=%d", *user.TelegramID, category, extraUsed)
+				}
 			}
 		}
 	}
@@ -310,7 +399,7 @@ func (s *WebGenerationService) processGeneration(genReq *GenerationRequest, req 
 	if err != nil {
 		log.Printf("KieAPI task creation failed for request %d: %v", genReq.ID, err)
 		_ = s.updateStatus(genReq.ID, "failed", err.Error())
-		refundQuota()
+		refundQuota(req.PrimaryUsed, req.ExtraUsed)
 		return
 	}
 
@@ -340,7 +429,12 @@ func (s *WebGenerationService) processMusicGeneration(genReq *GenerationRequest,
 		if s.quotaService != nil {
 			user, err := s.quotaService.GetByID(genReq.UserID)
 			if err == nil && user.TelegramID != nil {
-				_ = s.quotaService.AddExtraQuota(*user.TelegramID, models.QuotaCategoryMusic, 1)
+				if req.PrimaryUsed > 0 {
+					_ = s.quotaService.AddPrimaryQuota(*user.TelegramID, models.QuotaCategoryMusic, req.PrimaryUsed)
+				}
+				if req.ExtraUsed > 0 {
+					_ = s.quotaService.AddExtraQuota(*user.TelegramID, models.QuotaCategoryMusic, req.ExtraUsed)
+				}
 			}
 		}
 		return
@@ -364,7 +458,12 @@ func (s *WebGenerationService) processMusicGeneration(genReq *GenerationRequest,
 	if s.quotaService != nil {
 		user, err := s.quotaService.GetByID(genReq.UserID)
 		if err == nil && user.TelegramID != nil {
-			_ = s.quotaService.AddExtraQuota(*user.TelegramID, models.QuotaCategoryMusic, 1)
+			if req.PrimaryUsed > 0 {
+				_ = s.quotaService.AddPrimaryQuota(*user.TelegramID, models.QuotaCategoryMusic, req.PrimaryUsed)
+			}
+			if req.ExtraUsed > 0 {
+				_ = s.quotaService.AddExtraQuota(*user.TelegramID, models.QuotaCategoryMusic, req.ExtraUsed)
+			}
 		}
 	}
 }
@@ -385,7 +484,12 @@ func (s *WebGenerationService) processTextGeneration(genReq *GenerationRequest, 
 		if s.quotaService != nil {
 			user, err := s.quotaService.GetByID(genReq.UserID)
 			if err == nil && user.TelegramID != nil {
-				_ = s.quotaService.AddExtraQuota(*user.TelegramID, models.QuotaCategoryText, 1)
+				if req.PrimaryUsed > 0 {
+					_ = s.quotaService.AddPrimaryQuota(*user.TelegramID, models.QuotaCategoryText, req.PrimaryUsed)
+				}
+				if req.ExtraUsed > 0 {
+					_ = s.quotaService.AddExtraQuota(*user.TelegramID, models.QuotaCategoryText, req.ExtraUsed)
+				}
 			}
 		}
 		return

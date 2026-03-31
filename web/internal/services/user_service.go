@@ -41,6 +41,10 @@ func (s *UserService) AddExtraQuota(telegramID int64, category models.QuotaCateg
 	return s.quotaRepo.AddExtra(telegramID, category, amount)
 }
 
+func (s *UserService) AddPrimaryQuota(telegramID int64, category models.QuotaCategory, amount int) error {
+	return s.quotaRepo.AddPrimary(telegramID, category, amount)
+}
+
 func (s *UserService) ConsumeQuota(telegramID int64, category models.QuotaCategory, amount int) (primaryUsed, extraUsed int, err error) {
 	return s.quotaRepo.Consume(telegramID, category, amount)
 }
