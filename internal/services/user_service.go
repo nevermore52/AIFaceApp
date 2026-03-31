@@ -1142,7 +1142,8 @@ func (s *UserService) GetUsersForTrialReminder() ([]*models.User, error) {
 			   is_premium, is_admin, COALESCE(referrer_id, 0), COALESCE(referral_code, ''),
 			   COALESCE(referrals_count, 0), created_at, updated_at, is_blocked
 		FROM users
-		WHERE channel_trial_claimed = FALSE
+		WHERE telegram_id IS NOT NULL
+		  AND channel_trial_claimed = FALSE
 		  AND trial_reminder_sent = FALSE
 		  AND created_at < NOW() - INTERVAL '2 hours'
 		ORDER BY created_at ASC
