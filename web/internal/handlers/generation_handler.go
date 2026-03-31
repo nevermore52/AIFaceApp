@@ -243,3 +243,29 @@ func (h *GenerationHandler) HandleKieAPICallback(c *gin.Context) {
 
 	c.JSON(http.StatusOK, gin.H{"status": "ok"})
 }
+
+func (h *GenerationHandler) HandleSunoCallback(c *gin.Context) {
+	if h.webGenerationService == nil {
+		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "Generation service not available"})
+		return
+	}
+
+	body, err := io.ReadAll(c.Request.Body)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Failed to read body"})
+		return
+	}
+
+	var payload map[string]any
+	if err := json.Unmarshal(body, &payload); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid callback payload"})
+		return
+	}
+
+	if err := h.webGenerationService.HandleSunoCallback(payload); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{"status": "ok"})
+}

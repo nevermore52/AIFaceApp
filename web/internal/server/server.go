@@ -91,6 +91,7 @@ func New(cfg *config.Config, db *sql.DB) *Server {
 
 		// Public callback endpoints
 		api.POST("/callbacks/kieapi", generationHandler.HandleKieAPICallback)
+		api.POST("/callbacks/suno", generationHandler.HandleSunoCallback)
 		api.POST("/callbacks/yookassa", paymentHandler.HandleYooKassaWebhook)
 
 		auth := api.Group("/auth")

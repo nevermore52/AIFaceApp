@@ -102,8 +102,15 @@ func (s *WebGenerationService) CreateGeneration(userID int64, username string, r
 		return nil, fmt.Errorf("callback URL not configured")
 	}
 
+	// Определяем тип модели
 	modelType := "image"
-	if strings.Contains(req.Model, "video") {
+	model := strings.ToLower(strings.TrimSpace(req.Model))
+
+	if model == "music-suno" || strings.Contains(model, "suno") {
+		modelType = "music"
+	} else if isTextModel(model) {
+		modelType = "text"
+	} else if strings.Contains(model, "video") {
 		modelType = "video"
 	}
 
@@ -337,6 +344,51 @@ func (s *WebGenerationService) HandleCallback(payload kieapi.CallbackPayload) er
 	}
 
 	return s.completeRequest(genReq.ID, resultURL)
+}
+
+func (s *WebGenerationService) HandleSunoCallback(payload map[string]any) error {
+	// Извлекаем taskID из payload
+	taskID := findStringByKeys(payload, "taskId", "task_id", "id")
+	if taskID == "" {
+		return fmt.Errorf("callback missing taskId")
+	}
+
+	genReq, err := s.getByExternalTaskID(taskID)
+	if err != nil {
+		return fmt.Errorf("generation request not found for taskId %s: %w", taskID, err)
+	}
+
+	// Проверяем статус
+	status := findStringByKeys(payload, "status", "state")
+	if status != "" && status != "success" && status != "completed" && status != "succeeded" {
+		reason := findStringByKeys(payload, "message", "msg", "error")
+		if reason == "" {
+			reason = fmt.Sprintf("status=%s", status)
+		}
+		return s.updateStatus(genReq.ID, "failed", reason)
+	}
+
+	// Извлекаем URL аудио
+	audioURL := findStringByKeys(
+		payload,
+		"audio_url", "audioUrl", "audio",
+		"audioUrlHigh", "audio_url_high", "audio_high", "audio_high_url",
+		"download_url", "downloadUrl",
+		"result_url", "resultUrl",
+		"streaming_url", "streamingUrl",
+		"preview_url", "previewUrl",
+		"url",
+	)
+	if audioURL == "" {
+		audioURL = findFirstURL(payload)
+	}
+
+	if audioURL == "" {
+		return s.updateStatus(genReq.ID, "failed", "callback missing audio URL")
+	}
+
+	log.Printf("Suno callback processed: taskID=%s audioURL=%s", taskID, audioURL)
+	return s.completeRequest(genReq.ID, audioURL)
 }
 
 func (s *WebGenerationService) GetByID(id int64) (*GenerationRequest, error) {

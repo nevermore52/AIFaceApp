@@ -24,8 +24,13 @@ func NewDefAPIClient(apiKey, baseURL string) DefAPIClient {
 
 func (c *DefAPIClientImpl) CreateChatCompletion(model string, messages []map[string]string) (string, error) {
 	payload := map[string]any{
-		"model":    model,
-		"messages": messages,
+		"model":             model,
+		"messages":          messages,
+		"stream":            false,
+		"temperature":       0.7,
+		"top_p":             1,
+		"frequency_penalty": 0,
+		"presence_penalty":  0,
 	}
 
 	body, err := json.Marshal(payload)
@@ -33,7 +38,10 @@ func (c *DefAPIClientImpl) CreateChatCompletion(model string, messages []map[str
 		return "", fmt.Errorf("marshal defapi payload: %w", err)
 	}
 
-	req, err := http.NewRequest("POST", c.baseURL+"/v1/chat/completions", bytes.NewReader(body))
+	url := c.baseURL + "/api/v1/chat/completions"
+	fmt.Printf("[DEFAPI WEB] chat request url=%s model=%s\n", url, model)
+
+	req, err := http.NewRequest("POST", url, bytes.NewReader(body))
 	if err != nil {
 		return "", fmt.Errorf("create defapi request: %w", err)
 	}
@@ -51,6 +59,8 @@ func (c *DefAPIClientImpl) CreateChatCompletion(model string, messages []map[str
 	if err != nil {
 		return "", fmt.Errorf("read defapi response: %w", err)
 	}
+
+	fmt.Printf("[DEFAPI WEB] chat response status=%d body=%s\n", resp.StatusCode, string(respBody))
 
 	if resp.StatusCode >= 400 {
 		return "", fmt.Errorf("defapi api error: %s", string(respBody))
