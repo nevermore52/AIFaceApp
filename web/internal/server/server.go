@@ -50,11 +50,18 @@ func New(cfg *config.Config, db *sql.DB) *Server {
 	generationService := services.NewGenerationService(generationRepo)
 	paymentService := services.NewPaymentService(paymentRepo, userRepo, quotaRepo)
 
-	// Web generation service (KieAPI)
+	// Web generation service (KieAPI + DefAPI)
 	var webGenerationService *services.WebGenerationService
 	if cfg.KieAPIKey != "" {
 		kieClient := kieapi.NewClient(cfg.KieAPIKey, cfg.KieAPIBaseURL)
-		webGenerationService = services.NewWebGenerationService(db, kieClient, cfg.KieCallbackURL)
+
+		// DefAPI client for text generation
+		var defAPIClient services.DefAPIClient
+		if cfg.DefAPIKey != "" {
+			defAPIClient = services.NewDefAPIClient(cfg.DefAPIKey, cfg.DefAPIBaseURL)
+		}
+
+		webGenerationService = services.NewWebGenerationService(db, kieClient, cfg.KieCallbackURL, defAPIClient)
 	}
 
 	// Web payment service (YooKassa)

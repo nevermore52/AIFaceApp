@@ -19,14 +19,20 @@ type WebGenerationService struct {
 	kieClient   *kieapi.Client
 	callbackURL string
 	httpClient  *http.Client
+	defAPI      DefAPIClient
 }
 
-func NewWebGenerationService(db *sql.DB, kieClient *kieapi.Client, callbackURL string) *WebGenerationService {
+type DefAPIClient interface {
+	CreateChatCompletion(model string, messages []map[string]string) (string, error)
+}
+
+func NewWebGenerationService(db *sql.DB, kieClient *kieapi.Client, callbackURL string, defAPIClient DefAPIClient) *WebGenerationService {
 	return &WebGenerationService{
 		db:          db,
 		kieClient:   kieClient,
 		callbackURL: callbackURL,
 		httpClient:  &http.Client{Timeout: 30 * time.Second},
+		defAPI:      defAPIClient,
 	}
 }
 
@@ -476,67 +482,12 @@ func (s *WebGenerationService) generateMusicSuno(prompt, vocalGender string, ins
 	return "", "", fmt.Errorf("suno response missing audio url and taskId: %s", string(raw))
 }
 
-// generateChat генерирует текст через DefAPI
+// generateChat генерирует текст через DefAPI (используя готовую систему из Telegram бота)
 func (s *WebGenerationService) generateChat(model string, messages []map[string]string) (string, error) {
-	apiKey := os.Getenv("DEF_API_KEY")
-	if apiKey == "" {
-		return "", fmt.Errorf("DEF_API_KEY is not set")
+	if s.defAPI == nil {
+		return "", fmt.Errorf("defapi client is not configured")
 	}
-	baseURL := os.Getenv("DEF_BASE_URL")
-	if baseURL == "" {
-		baseURL = "https://api.defapi.org"
-	}
-
-	payload := map[string]any{
-		"model":    model,
-		"messages": messages,
-	}
-
-	body, err := json.Marshal(payload)
-	if err != nil {
-		return "", fmt.Errorf("marshal defapi payload: %w", err)
-	}
-
-	req, err := http.NewRequest("POST", baseURL+"/v1/chat/completions", strings.NewReader(string(body)))
-	if err != nil {
-		return "", fmt.Errorf("create defapi request: %w", err)
-	}
-	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("Authorization", "Bearer "+apiKey)
-
-	resp, err := s.httpClient.Do(req)
-	if err != nil {
-		return "", fmt.Errorf("defapi request failed: %w", err)
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode >= 400 {
-		raw, _ := io.ReadAll(resp.Body)
-		return "", fmt.Errorf("defapi api error: %s", string(raw))
-	}
-
-	raw, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return "", fmt.Errorf("read defapi response: %w", err)
-	}
-
-	var result map[string]any
-	if err := json.Unmarshal(raw, &result); err != nil {
-		return "", fmt.Errorf("parse defapi response: %w", err)
-	}
-
-	// Извлекаем текст ответа
-	if choices, ok := result["choices"].([]any); ok && len(choices) > 0 {
-		if choice, ok := choices[0].(map[string]any); ok {
-			if message, ok := choice["message"].(map[string]any); ok {
-				if content, ok := message["content"].(string); ok {
-					return content, nil
-				}
-			}
-		}
-	}
-
-	return "", fmt.Errorf("unexpected defapi response format: %s", string(raw))
+	return s.defAPI.CreateChatCompletion(model, messages)
 }
 
 // Вспомогательные функции для парсинга ответов
