@@ -168,6 +168,69 @@ func (c *Client) CreateTask(req CreateTaskRequest) (string, error) {
 	return taskID, nil
 }
 
+// CreateVeoTask creates a task using the Veo-specific endpoint
+func (c *Client) CreateVeoTask(req CreateTaskRequest) (string, error) {
+	if c == nil {
+		return "", fmt.Errorf("kieapi client is nil")
+	}
+	if c.apiKey == "" {
+		return "", fmt.Errorf("KIEAPI_API_KEY is not set")
+	}
+	if c.baseURL == "" {
+		return "", fmt.Errorf("KIEAPI_BASE_URL is not set")
+	}
+
+	body, err := json.Marshal(req)
+	if err != nil {
+		return "", fmt.Errorf("marshal kieapi veo payload: %w", err)
+	}
+
+	// Veo uses a different endpoint
+	url := c.baseURL + "/api/v1/veo/generate"
+	httpReq, err := http.NewRequest(http.MethodPost, url, bytes.NewReader(body))
+	if err != nil {
+		return "", fmt.Errorf("create kieapi veo request: %w", err)
+	}
+	httpReq.Header.Set("Authorization", "Bearer "+c.apiKey)
+	httpReq.Header.Set("Content-Type", "application/json")
+
+	resp, err := c.client.Do(httpReq)
+	if err != nil {
+		return "", fmt.Errorf("kieapi veo request failed: %w", err)
+	}
+	defer resp.Body.Close()
+
+	raw, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return "", fmt.Errorf("read kieapi veo response: %w", err)
+	}
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		return "", fmt.Errorf("kieapi veo status %d: %s", resp.StatusCode, truncate(string(raw), 512))
+	}
+
+	var parsed CreateTaskResponse
+	if err := json.Unmarshal(raw, &parsed); err != nil {
+		return "", fmt.Errorf("parse kieapi veo response: %w", err)
+	}
+
+	if parsed.Code != 0 && parsed.Code != 200 {
+		msg := parsed.Message
+		if msg == "" {
+			msg = parsed.Msg
+		}
+		return "", fmt.Errorf("kieapi veo error: code=%d message=%s", parsed.Code, msg)
+	}
+
+	taskID := strings.TrimSpace(parsed.Data.TaskID)
+	if taskID == "" {
+		taskID = strings.TrimSpace(parsed.Data.TaskIDAlt)
+	}
+	if taskID == "" {
+		return "", fmt.Errorf("kieapi veo response missing taskId")
+	}
+	return taskID, nil
+}
+
 func (c *Client) GetRecordInfo(taskID string) (*CallbackPayload, error) {
 	if c == nil || c.apiKey == "" || c.baseURL == "" {
 		return nil, fmt.Errorf("kieapi client not configured")

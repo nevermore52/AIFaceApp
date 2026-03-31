@@ -432,7 +432,16 @@ func (s *WebGenerationService) processGeneration(genReq *GenerationRequest, req 
 	inputJSON, _ := json.Marshal(input)
 	log.Printf("KieAPI request for model %s: input=%s", req.Model, string(inputJSON))
 
-	taskID, err := s.kieClient.CreateTask(taskReq)
+	var taskID string
+	var err error
+
+	// Use different endpoint for Veo 3.1 Fast
+	if model == "veo3_fast" {
+		taskID, err = s.kieClient.CreateVeoTask(taskReq)
+	} else {
+		taskID, err = s.kieClient.CreateTask(taskReq)
+	}
+
 	if err != nil {
 		log.Printf("KieAPI task creation failed for request %d: %v", genReq.ID, err)
 		_ = s.updateStatus(genReq.ID, "failed", err.Error())
