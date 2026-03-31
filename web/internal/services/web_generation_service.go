@@ -891,14 +891,16 @@ func (s *WebGenerationService) normalizeImageURLs(imageURLs []string) []string {
 	var result []string
 	for _, url := range imageURLs {
 		originalURL := url
-		if strings.Contains(url, "imgur.com") {
-			// Convert imgur.com URLs to direct download URLs
+		if strings.Contains(url, "imgur.com") && !strings.Contains(url, "i.imgur.com") {
+			// Convert imgur.com URLs to direct download URLs (but not if already i.imgur.com)
 			// Example: https://imgur.com/X6GS3XA -> https://i.imgur.com/X6GS3XA.jpg
 			url = strings.ReplaceAll(url, "imgur.com", "i.imgur.com")
-			if !strings.HasSuffix(url, ".jpg") && !strings.HasSuffix(url, ".png") && !strings.HasSuffix(url, ".jpeg") {
-				url = url + ".jpg"
-			}
 			log.Printf("Normalized imgur URL: %s -> %s", originalURL, url)
+		}
+		// Add file extension if needed
+		if strings.Contains(url, "imgur.com") && !strings.HasSuffix(url, ".jpg") && !strings.HasSuffix(url, ".png") && !strings.HasSuffix(url, ".jpeg") {
+			url = url + ".jpg"
+			log.Printf("Added extension to imgur URL: %s", url)
 		}
 		result = append(result, url)
 	}
