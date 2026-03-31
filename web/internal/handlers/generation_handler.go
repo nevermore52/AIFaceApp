@@ -341,3 +341,53 @@ func (h *GenerationHandler) HandleSunoCallback(c *gin.Context) {
 
 	c.JSON(http.StatusOK, gin.H{"status": "ok"})
 }
+
+// UploadImage handles temporary image uploads
+func (h *GenerationHandler) UploadImage(c *gin.Context) {
+	user, exists := c.Get("user")
+	if !exists {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "Not authenticated"})
+		return
+	}
+
+	u := user.(*models.User)
+
+	// Get file from request
+	file, header, err := c.Request.FormFile("image")
+	if err != nil {
+		log.Printf("Error getting file: %v", err)
+		c.JSON(http.StatusBadRequest, gin.H{"error": "No file provided"})
+		return
+	}
+	defer file.Close()
+
+	// Validate file size (max 10MB)
+	if header.Size > 10*1024*1024 {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "File too large (max 10MB)"})
+		return
+	}
+
+	// Validate file type
+	buffer := make([]byte, 512)
+	n, _ := file.Read(buffer)
+	file.Seek(0, 0)
+
+	contentType := http.DetectContentType(buffer[:n])
+	if !strings.HasPrefix(contentType, "image/") {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid file type"})
+		return
+	}
+
+	// Use webGenerationService to upload to imgur
+	tempImageURL, err := h.webGenerationService.UploadImageToImgur(file, header.Filename)
+	if err != nil {
+		log.Printf("Error uploading image for user %d: %v", u.ID, err)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to upload image"})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"url":  tempImageURL,
+		"size": header.Size,
+	})
+}

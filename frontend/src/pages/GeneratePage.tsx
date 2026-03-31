@@ -299,20 +299,21 @@ export function GeneratePage() {
     const formData = new FormData()
     formData.append('image', file)
 
-    const response = await fetch('https://api.imgur.com/3/image', {
+    // Upload through our backend instead of direct imgur
+    // This avoids IP blocking issues
+    const response = await fetch('/api/upload-image', {
       method: 'POST',
-      headers: {
-        Authorization: 'Client-ID 546c25a59c58ad7',
-      },
       body: formData,
+      credentials: 'include',
     })
 
     if (!response.ok) {
-      throw new Error('Не удалось загрузить изображение')
+      const error = await response.json()
+      throw new Error(error.error || 'Не удалось загрузить изображение')
     }
 
     const data = await response.json()
-    return data.data.link
+    return data.url
   }
 
   const handleGenerate = async () => {

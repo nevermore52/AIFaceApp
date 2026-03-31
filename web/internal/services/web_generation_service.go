@@ -1239,3 +1239,51 @@ func (s *WebGenerationService) registerSunoTaskInBot(taskID string, userID int64
 	log.Printf("Task registered in bot: taskID=%s userID=%d", taskID, userID)
 	return nil
 }
+
+// UploadImageToImgur uploads an image to imgur and returns the URL
+// This is used as a fallback for direct imgur uploads from frontend
+func (s *WebGenerationService) UploadImageToImgur(file io.Reader, filename string) (string, error) {
+	// Read file content
+	fileContent, err := io.ReadAll(file)
+	if err != nil {
+		log.Printf("Error reading file content: %v", err)
+		return "", fmt.Errorf("failed to read file: %w", err)
+	}
+
+	// Create request
+	request, err := http.NewRequest("POST", "https://api.imgur.com/3/image", bytes.NewReader(fileContent))
+	if err != nil {
+		return "", fmt.Errorf("failed to create request: %w", err)
+	}
+
+	request.Header.Set("Authorization", "Client-ID 546c25a59c58ad7")
+	request.Header.Set("Content-Type", "application/octet-stream")
+
+	client := &http.Client{Timeout: 30 * time.Second}
+	resp, err := client.Do(request)
+	if err != nil {
+		log.Printf("Error uploading to imgur: %v", err)
+		return "", fmt.Errorf("failed to upload: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode >= 400 {
+		body, _ := io.ReadAll(resp.Body)
+		log.Printf("Imgur returned error: status=%d body=%s", resp.StatusCode, string(body))
+		return "", fmt.Errorf("imgur error: %d", resp.StatusCode)
+	}
+
+	var imgurResp struct {
+		Data struct {
+			Link string `json:"link"`
+		} `json:"data"`
+	}
+
+	if err := json.NewDecoder(resp.Body).Decode(&imgurResp); err != nil {
+		return "", fmt.Errorf("failed to decode response: %w", err)
+	}
+
+	imageURL := imgurResp.Data.Link
+	log.Printf("Image uploaded to imgur: %s", imageURL)
+	return imageURL, nil
+}

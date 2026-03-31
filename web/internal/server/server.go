@@ -130,6 +130,9 @@ func New(cfg *config.Config, db *sql.DB) *Server {
 
 			protected.GET("/models", generationHandler.GetModels)
 
+			// Image upload endpoint - upload through our backend instead of direct imgur
+			protected.POST("/upload-image", generationHandler.UploadImage)
+
 			protected.GET("/payments/packages", paymentHandler.GetPackages)
 			protected.GET("/payments/subscriptions", paymentHandler.GetSubscriptions)
 			protected.POST("/payments/create", paymentHandler.CreatePayment)
