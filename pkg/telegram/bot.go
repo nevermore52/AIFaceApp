@@ -2613,6 +2613,34 @@ func (b *Bot) registerSunoTask(taskID string, task sunoTask) {
 	log.Printf("Suno task registered: %s for chat %d", taskID, task.ChatID)
 }
 
+// RegisterSunoTask is a public method to register a Suno task from external sources (like web app)
+// This ensures the bot recognizes the task when callback arrives
+func (b *Bot) RegisterSunoTask(taskID string, userID int64) {
+	if taskID == "" {
+		return
+	}
+	b.sunoMu.Lock()
+	defer b.sunoMu.Unlock()
+
+	// Check if task already exists
+	if _, exists := b.sunoTasks[taskID]; exists {
+		log.Printf("Suno task already registered: %s", taskID)
+		return
+	}
+
+	// Create a placeholder task from web generation
+	// We don't have all details, but we register it so callback is recognized
+	task := sunoTask{
+		ChatID:    0, // Will be filled by callback handler
+		UserID:    userID,
+		RequestID: 0, // Will be filled by callback handler
+		CreatedAt: time.Now(),
+		AudioURLs: []string{},
+	}
+	b.sunoTasks[taskID] = task
+	log.Printf("Suno task registered from web: %s for userID %d", taskID, userID)
+}
+
 // HandleSunoCallback обрабатывает callback от Suno с готовыми аудио (может быть несколько вариантов)
 func (b *Bot) HandleSunoCallback(taskID string, audioURLs []string) {
 	if taskID == "" || len(audioURLs) == 0 {
@@ -2729,6 +2757,8 @@ func (b *Bot) finalizeSunoTask(taskID string, reason string) {
 		if err := b.generationService.CompleteRequestByExternalTaskID(taskID, urls[0]); err != nil {
 			log.Printf("CompleteRequestByExternalTaskID error: %v", err)
 		}
+		// Notify web app about completed task
+		_ = notifyWebAppAboutSunoCompletion(taskID, urls)
 	}
 }
 
@@ -6626,4 +6656,49 @@ func truncate(s string, maxLen int) string {
 
 func (b *Bot) NotifyGenerationStatus(chatID int64, req *models.GenerationRequest) {
 	b.sendGenerationStatus(chatID, req)
+}
+
+// notifyWebAppAboutSunoCompletion sends a webhook to web app to update task status
+func notifyWebAppAboutSunoCompletion(taskID string, audioURLs []string) error {
+	webCallbackURL := os.Getenv("WEB_SUNO_CALLBACK_URL")
+	if webCallbackURL == "" {
+		// If no webhook URL configured, just skip
+		return nil
+	}
+
+	payload := map[string]any{
+		"taskId":    taskID,
+		"audioUrls": audioURLs,
+		"status":    "completed",
+	}
+
+	body, err := json.Marshal(payload)
+	if err != nil {
+		log.Printf("Error marshaling web callback payload: %v", err)
+		return err
+	}
+
+	req, err := http.NewRequest("POST", webCallbackURL, io.NopCloser(bytes.NewReader(body)))
+	if err != nil {
+		log.Printf("Error creating web callback request: %v", err)
+		return err
+	}
+	req.Header.Set("Content-Type", "application/json")
+
+	client := &http.Client{Timeout: 5 * time.Second}
+	resp, err := client.Do(req)
+	if err != nil {
+		log.Printf("Error sending callback to web app: %v", err)
+		return err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode >= 400 {
+		respBody, _ := io.ReadAll(resp.Body)
+		log.Printf("Web app returned error: status=%d body=%s", resp.StatusCode, string(respBody))
+		return fmt.Errorf("web app returned status %d", resp.StatusCode)
+	}
+
+	log.Printf("Web app notified about Suno completion: taskID=%s", taskID)
+	return nil
 }

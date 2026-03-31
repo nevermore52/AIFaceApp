@@ -202,6 +202,47 @@ func (b *Bot) startWebhookServer() {
 		w.WriteHeader(http.StatusOK)
 	})
 
+	mux.HandleFunc("/suno/register", func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost {
+			log.Printf("suno register bad method: %s from %s", r.Method, r.RemoteAddr)
+			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+			return
+		}
+
+		body, err := io.ReadAll(r.Body)
+		if err != nil {
+			http.Error(w, "bad request", http.StatusBadRequest)
+			return
+		}
+
+		var payload map[string]any
+		if err := json.Unmarshal(body, &payload); err != nil {
+			log.Printf("suno register parse error: %v body=%s", err, truncateForLog(string(body), 300))
+			http.Error(w, "bad request", http.StatusBadRequest)
+			return
+		}
+
+		taskID, ok := payload["taskId"].(string)
+		if !ok || taskID == "" {
+			log.Printf("suno register missing taskId body=%s", truncateForLog(string(body), 300))
+			http.Error(w, "bad request", http.StatusBadRequest)
+			return
+		}
+
+		userID, ok := payload["userId"].(float64)
+		if !ok {
+			userID = 0
+		}
+
+		// Register the task in the bot's Suno tasks map
+		// This ensures the bot recognizes it when callback arrives
+		b.tgBot.RegisterSunoTask(taskID, int64(userID))
+		log.Printf("suno task registered: taskId=%s userId=%d from %s", taskID, int64(userID), r.RemoteAddr)
+		w.WriteHeader(http.StatusOK)
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(map[string]string{"status": "ok"})
+	})
+
 	mux.HandleFunc("/suno/callback", func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodPost {
 			log.Printf("suno callback bad method: %s from %s", r.Method, r.RemoteAddr)

@@ -1,6 +1,7 @@
 package services
 
 import (
+	"bytes"
 	"database/sql"
 	"encoding/json"
 	"fmt"
@@ -495,6 +496,8 @@ func (s *WebGenerationService) processMusicGeneration(genReq *GenerationRequest,
 	// Если только taskID, сохраняем его для обработки callback
 	if taskID != "" {
 		_ = s.updateExternalTaskID(genReq.ID, taskID)
+		// Регистрируем задачу в боте чтобы он знал о ней когда придет callback
+		_ = s.registerSunoTaskInBot(taskID, genReq.UserID)
 		log.Printf("Music generation started with taskID: %s", taskID)
 		return
 	}
@@ -583,24 +586,34 @@ func (s *WebGenerationService) HandleCallback(payload kieapi.CallbackPayload) er
 }
 
 func (s *WebGenerationService) HandleSunoCallback(payload map[string]any) error {
+	// Log the raw payload
+	payloadJSON, _ := json.Marshal(payload)
+	log.Printf("HandleSunoCallback received: %s", string(payloadJSON))
+
 	// Извлекаем taskID из payload
 	taskID := findStringByKeys(payload, "taskId", "task_id", "id")
 	if taskID == "" {
+		log.Printf("ERROR: callback missing taskId. Payload keys: %v", getMapKeys(payload))
 		return fmt.Errorf("callback missing taskId")
 	}
+	log.Printf("Found taskID: %s", taskID)
 
 	genReq, err := s.getByExternalTaskID(taskID)
 	if err != nil {
+		log.Printf("ERROR: generation request not found for taskId %s: %v", taskID, err)
 		return fmt.Errorf("generation request not found for taskId %s: %w", taskID, err)
 	}
+	log.Printf("Found generation request: id=%d", genReq.ID)
 
 	// Проверяем статус
 	status := findStringByKeys(payload, "status", "state")
+	log.Printf("Status from callback: %s", status)
 	if status != "" && status != "success" && status != "completed" && status != "succeeded" {
 		reason := findStringByKeys(payload, "message", "msg", "error")
 		if reason == "" {
 			reason = fmt.Sprintf("status=%s", status)
 		}
+		log.Printf("Generation failed with status %s: %s", status, reason)
 		return s.updateStatus(genReq.ID, "failed", reason)
 	}
 
@@ -620,11 +633,14 @@ func (s *WebGenerationService) HandleSunoCallback(payload map[string]any) error 
 	}
 
 	if audioURL == "" {
+		log.Printf("ERROR: callback missing audio URL. Payload keys: %v", getMapKeys(payload))
 		return s.updateStatus(genReq.ID, "failed", "callback missing audio URL")
 	}
 
-	log.Printf("Suno callback processed: taskID=%s audioURL=%s", taskID, audioURL)
-	return s.completeRequest(genReq.ID, audioURL)
+	log.Printf("Suno callback processed: taskID=%s audioURL=%s, updating request=%d", taskID, audioURL, genReq.ID)
+	result := s.completeRequest(genReq.ID, audioURL)
+	log.Printf("completeRequest result: %v", result)
+	return result
 }
 
 func (s *WebGenerationService) GetByID(id int64) (*GenerationRequest, error) {
@@ -656,8 +672,10 @@ func (s *WebGenerationService) getByExternalTaskID(taskID string) (*GenerationRe
 		&genReq.TokensUsed, &genReq.Source, &genReq.CreatedAt, &genReq.CompletedAt,
 	)
 	if err != nil {
+		log.Printf("ERROR getByExternalTaskID: taskID=%s error=%v", taskID, err)
 		return nil, err
 	}
+	log.Printf("getByExternalTaskID found: taskID=%s id=%d", taskID, genReq.ID)
 	return genReq, nil
 }
 
@@ -674,16 +692,40 @@ func (s *WebGenerationService) updateStatus(id int64, status, errorMsg string) e
 }
 
 func (s *WebGenerationService) updateExternalTaskID(id int64, taskID string) error {
+	log.Printf("updateExternalTaskID: id=%d taskID=%s", id, taskID)
 	_, err := s.db.Exec(`UPDATE generation_requests SET external_task_id = $2 WHERE id = $1`, id, taskID)
+	if err != nil {
+		log.Printf("ERROR updateExternalTaskID: %v", err)
+	} else {
+		log.Printf("updateExternalTaskID success")
+	}
 	return err
 }
 
 func (s *WebGenerationService) completeRequest(id int64, resultURL string) error {
+	log.Printf("completeRequest: id=%d resultURL=%s", id, resultURL)
 	_, err := s.db.Exec(`UPDATE generation_requests SET status = 'completed', output = $2, completed_at = NOW() WHERE id = $1`, id, resultURL)
+	if err != nil {
+		log.Printf("ERROR completeRequest: %v", err)
+	} else {
+		log.Printf("completeRequest success")
+	}
 	return err
 }
 
 // Вспомогательные функции для парсинга ответов (используются в HandleSunoCallback)
+func getMapKeys(m any) []string {
+	switch val := m.(type) {
+	case map[string]any:
+		keys := make([]string, 0, len(val))
+		for k := range val {
+			keys = append(keys, k)
+		}
+		return keys
+	}
+	return nil
+}
+
 func findStringByKeys(v any, keys ...string) string {
 	switch val := v.(type) {
 	case map[string]any:
@@ -905,4 +947,51 @@ func (s *WebGenerationService) normalizeImageURLs(imageURLs []string) []string {
 		result = append(result, url)
 	}
 	return result
+}
+
+// registerSunoTaskInBot notifies the bot about a new Suno task
+// This ensures the bot recognizes the task when callback arrives
+func (s *WebGenerationService) registerSunoTaskInBot(taskID string, userID int64) error {
+	botWebhookURL := os.Getenv("BOT_SUNO_REGISTER_URL")
+	if botWebhookURL == "" {
+		// If no webhook URL configured, just log and continue
+		log.Printf("BOT_SUNO_REGISTER_URL not configured, skipping task registration in bot")
+		return nil
+	}
+
+	payload := map[string]any{
+		"taskId": taskID,
+		"userId": userID,
+		"source": "web",
+	}
+
+	body, err := json.Marshal(payload)
+	if err != nil {
+		log.Printf("Error marshaling task registration payload: %v", err)
+		return err
+	}
+
+	req, err := http.NewRequest("POST", botWebhookURL, io.NopCloser(bytes.NewReader(body)))
+	if err != nil {
+		log.Printf("Error creating task registration request: %v", err)
+		return err
+	}
+	req.Header.Set("Content-Type", "application/json")
+
+	client := &http.Client{Timeout: 5 * time.Second}
+	resp, err := client.Do(req)
+	if err != nil {
+		log.Printf("Error sending task registration to bot: %v", err)
+		return err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode >= 400 {
+		respBody, _ := io.ReadAll(resp.Body)
+		log.Printf("Bot returned error for task registration: status=%d body=%s", resp.StatusCode, string(respBody))
+		return fmt.Errorf("bot returned status %d", resp.StatusCode)
+	}
+
+	log.Printf("Task registered in bot: taskID=%s userID=%d", taskID, userID)
+	return nil
 }
