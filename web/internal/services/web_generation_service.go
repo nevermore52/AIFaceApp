@@ -85,7 +85,7 @@ func (s *WebGenerationService) GetAvailableModels() []ModelInfo {
 		{ID: "google/gemini-3-flash", Name: "Gemini 3 Flash", Type: "text", Description: "Текстовая модель", TokenCost: 1},
 		{ID: "openai/gpt-5-mini", Name: "GPT-5 mini", Type: "text", Description: "Текстовая модель", TokenCost: 1},
 		{ID: "openai/gpt-5-nano", Name: "GPT-5 nano", Type: "text", Description: "Текстовая модель", TokenCost: 1},
-		{ID: "chat-gpt-4.1mini", Name: "GPT-4.1 mini", Type: "text", Description: "Текстовая модель", TokenCost: 1},
+		{ID: "gpt-4.1-mini", Name: "GPT-4.1 mini", Type: "text", Description: "Текстовая модель", TokenCost: 1},
 	}
 }
 
@@ -256,7 +256,7 @@ func isTextModel(model string) bool {
 		model == "google/gemini-3-flash" ||
 		model == "openai/gpt-5-mini" ||
 		model == "openai/gpt-5-nano" ||
-		model == "chat-gpt-4.1mini"
+		model == "gpt-4.1-mini"
 }
 
 func (s *WebGenerationService) processMusicGeneration(genReq *GenerationRequest, req CreateGenerationRequest) {

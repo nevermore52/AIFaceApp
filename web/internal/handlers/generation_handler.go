@@ -146,12 +146,12 @@ func (h *GenerationHandler) CreateGeneration(c *gin.Context) {
 		return
 	}
 
-	// Проверяем подписку для текстовых моделей (chat-gpt-4.1mini доступна всем)
+	// Проверяем подписку для текстовых моделей (gpt-4.1-mini доступна всем)
 	textModelsRequireSubscription := map[string]bool{
 		"google/gemini-3-flash": true,
 		"openai/gpt-5-mini":     true,
 		"openai/gpt-5-nano":     true,
-		// "chat-gpt-4.1mini" убрана - теперь доступна без подписки
+		// "gpt-4.1-mini" убрана - теперь доступна без подписки
 	}
 
 	if textModelsRequireSubscription[req.Model] {
