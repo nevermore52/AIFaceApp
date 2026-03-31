@@ -19,20 +19,14 @@ type WebGenerationService struct {
 	kieClient   *kieapi.Client
 	callbackURL string
 	httpClient  *http.Client
-	defAPI      DefAPIClient
 }
 
-type DefAPIClient interface {
-	CreateChatCompletion(model string, messages []map[string]string) (string, error)
-}
-
-func NewWebGenerationService(db *sql.DB, kieClient *kieapi.Client, callbackURL string, defAPIClient DefAPIClient) *WebGenerationService {
+func NewWebGenerationService(db *sql.DB, kieClient *kieapi.Client, callbackURL string) *WebGenerationService {
 	return &WebGenerationService{
 		db:          db,
 		kieClient:   kieClient,
 		callbackURL: callbackURL,
 		httpClient:  &http.Client{Timeout: 30 * time.Second},
-		defAPI:      defAPIClient,
 	}
 }
 
@@ -49,6 +43,7 @@ type GenerationRequest struct {
 	ErrorMsg       *string    `json:"error_msg,omitempty"`
 	ExternalTaskID string     `json:"external_task_id,omitempty"`
 	TokensUsed     int        `json:"tokens_used"`
+	Source         string     `json:"source"`
 	CreatedAt      time.Time  `json:"created_at"`
 	CompletedAt    *time.Time `json:"completed_at,omitempty"`
 }
@@ -120,15 +115,15 @@ func (s *WebGenerationService) CreateGeneration(userID int64, username string, r
 	}
 
 	query := `
-		INSERT INTO generation_requests (user_id, username, model_type, model, status, input_image, prompt, tokens_used)
-		VALUES ($1, $2, $3, $4, 'pending', $5, $6, 1)
-		RETURNING id, user_id, username, model_type, model, status, input_image, output, prompt, error_msg, tokens_used, created_at, completed_at`
+		INSERT INTO generation_requests (user_id, username, model_type, model, status, input_image, prompt, tokens_used, source)
+		VALUES ($1, $2, $3, $4, 'pending', $5, $6, 1, 'web')
+		RETURNING id, user_id, username, model_type, model, status, input_image, output, prompt, error_msg, tokens_used, source, created_at, completed_at`
 
 	genReq := &GenerationRequest{}
 	err := s.db.QueryRow(query, userID, username, modelType, req.Model, inputImage, req.Prompt).Scan(
 		&genReq.ID, &genReq.UserID, &genReq.Username, &genReq.ModelType, &genReq.Model, &genReq.Status,
 		&genReq.InputImage, &genReq.Output, &genReq.Prompt, &genReq.ErrorMsg,
-		&genReq.TokensUsed, &genReq.CreatedAt, &genReq.CompletedAt,
+		&genReq.TokensUsed, &genReq.Source, &genReq.CreatedAt, &genReq.CompletedAt,
 	)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create generation request: %w", err)
@@ -393,14 +388,14 @@ func (s *WebGenerationService) HandleSunoCallback(payload map[string]any) error 
 
 func (s *WebGenerationService) GetByID(id int64) (*GenerationRequest, error) {
 	query := `
-		SELECT id, user_id, model_type, model, status, input_image, output, prompt, error_msg, tokens_used, created_at, completed_at
+		SELECT id, user_id, model_type, model, status, input_image, output, prompt, error_msg, tokens_used, source, created_at, completed_at
 		FROM generation_requests WHERE id = $1`
 
 	genReq := &GenerationRequest{}
 	err := s.db.QueryRow(query, id).Scan(
 		&genReq.ID, &genReq.UserID, &genReq.ModelType, &genReq.Model, &genReq.Status,
 		&genReq.InputImage, &genReq.Output, &genReq.Prompt, &genReq.ErrorMsg,
-		&genReq.TokensUsed, &genReq.CreatedAt, &genReq.CompletedAt,
+		&genReq.TokensUsed, &genReq.Source, &genReq.CreatedAt, &genReq.CompletedAt,
 	)
 	if err != nil {
 		return nil, err
@@ -410,14 +405,14 @@ func (s *WebGenerationService) GetByID(id int64) (*GenerationRequest, error) {
 
 func (s *WebGenerationService) getByExternalTaskID(taskID string) (*GenerationRequest, error) {
 	query := `
-		SELECT id, user_id, model_type, model, status, input_image, output, prompt, error_msg, tokens_used, created_at, completed_at
+		SELECT id, user_id, model_type, model, status, input_image, output, prompt, error_msg, tokens_used, source, created_at, completed_at
 		FROM generation_requests WHERE external_task_id = $1`
 
 	genReq := &GenerationRequest{}
 	err := s.db.QueryRow(query, taskID).Scan(
 		&genReq.ID, &genReq.UserID, &genReq.ModelType, &genReq.Model, &genReq.Status,
 		&genReq.InputImage, &genReq.Output, &genReq.Prompt, &genReq.ErrorMsg,
-		&genReq.TokensUsed, &genReq.CreatedAt, &genReq.CompletedAt,
+		&genReq.TokensUsed, &genReq.Source, &genReq.CreatedAt, &genReq.CompletedAt,
 	)
 	if err != nil {
 		return nil, err
@@ -445,6 +440,54 @@ func (s *WebGenerationService) updateExternalTaskID(id int64, taskID string) err
 func (s *WebGenerationService) completeRequest(id int64, resultURL string) error {
 	_, err := s.db.Exec(`UPDATE generation_requests SET status = 'completed', output = $2, completed_at = NOW() WHERE id = $1`, id, resultURL)
 	return err
+}
+
+// Вспомогательные функции для парсинга ответов (используются в HandleSunoCallback)
+func findStringByKeys(v any, keys ...string) string {
+	switch val := v.(type) {
+	case map[string]any:
+		for _, k := range keys {
+			if raw, ok := val[k]; ok {
+				if s, ok2 := raw.(string); ok2 && s != "" {
+					return s
+				}
+			}
+		}
+		for _, vv := range val {
+			if res := findStringByKeys(vv, keys...); res != "" {
+				return res
+			}
+		}
+	case []any:
+		for _, vv := range val {
+			if res := findStringByKeys(vv, keys...); res != "" {
+				return res
+			}
+		}
+	}
+	return ""
+}
+
+func findFirstURL(v any) string {
+	switch val := v.(type) {
+	case map[string]any:
+		for _, vv := range val {
+			if u := findFirstURL(vv); u != "" {
+				return u
+			}
+		}
+	case []any:
+		for _, vv := range val {
+			if u := findFirstURL(vv); u != "" {
+				return u
+			}
+		}
+	case string:
+		if strings.HasPrefix(val, "http") {
+			return val
+		}
+	}
+	return ""
 }
 
 // generateMusicSuno генерирует музыку через Suno API
@@ -534,58 +577,69 @@ func (s *WebGenerationService) generateMusicSuno(prompt, vocalGender string, ins
 	return "", "", fmt.Errorf("suno response missing audio url and taskId: %s", string(raw))
 }
 
-// generateChat генерирует текст через DefAPI (используя готовую систему из Telegram бота)
+// generateChat генерирует текст через DefAPI
 func (s *WebGenerationService) generateChat(model string, messages []map[string]string) (string, error) {
-	if s.defAPI == nil {
-		return "", fmt.Errorf("defapi client is not configured")
+	apiKey := os.Getenv("DEF_API_KEY")
+	if apiKey == "" {
+		return "", fmt.Errorf("DEF_API_KEY is not set")
 	}
-	return s.defAPI.CreateChatCompletion(model, messages)
-}
+	baseURL := os.Getenv("DEF_BASE_URL")
+	if baseURL == "" {
+		baseURL = "https://api.defapi.org"
+	}
 
-// Вспомогательные функции для парсинга ответов
-func findStringByKeys(v any, keys ...string) string {
-	switch val := v.(type) {
-	case map[string]any:
-		for _, k := range keys {
-			if raw, ok := val[k]; ok {
-				if s, ok2 := raw.(string); ok2 && s != "" {
-					return s
+	payload := map[string]any{
+		"model":             model,
+		"messages":          messages,
+		"stream":            false,
+		"temperature":       0.7,
+		"top_p":             1,
+		"frequency_penalty": 0,
+		"presence_penalty":  0,
+	}
+
+	body, err := json.Marshal(payload)
+	if err != nil {
+		return "", fmt.Errorf("marshal defapi payload: %w", err)
+	}
+
+	url := baseURL + "/api/v1/chat/completions"
+	req, err := http.NewRequest("POST", url, strings.NewReader(string(body)))
+	if err != nil {
+		return "", fmt.Errorf("create defapi request: %w", err)
+	}
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Authorization", "Bearer "+apiKey)
+
+	resp, err := s.httpClient.Do(req)
+	if err != nil {
+		return "", fmt.Errorf("defapi request failed: %w", err)
+	}
+	defer resp.Body.Close()
+
+	respBody, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return "", fmt.Errorf("read defapi response: %w", err)
+	}
+
+	if resp.StatusCode >= 400 {
+		return "", fmt.Errorf("defapi api error: %s", string(respBody))
+	}
+
+	var result map[string]any
+	if err := json.Unmarshal(respBody, &result); err != nil {
+		return "", fmt.Errorf("parse defapi response: %w", err)
+	}
+
+	if choices, ok := result["choices"].([]any); ok && len(choices) > 0 {
+		if choice, ok := choices[0].(map[string]any); ok {
+			if message, ok := choice["message"].(map[string]any); ok {
+				if content, ok := message["content"].(string); ok {
+					return content, nil
 				}
 			}
 		}
-		for _, vv := range val {
-			if res := findStringByKeys(vv, keys...); res != "" {
-				return res
-			}
-		}
-	case []any:
-		for _, vv := range val {
-			if res := findStringByKeys(vv, keys...); res != "" {
-				return res
-			}
-		}
 	}
-	return ""
-}
 
-func findFirstURL(v any) string {
-	switch val := v.(type) {
-	case map[string]any:
-		for _, vv := range val {
-			if u := findFirstURL(vv); u != "" {
-				return u
-			}
-		}
-	case []any:
-		for _, vv := range val {
-			if u := findFirstURL(vv); u != "" {
-				return u
-			}
-		}
-	case string:
-		if strings.HasPrefix(val, "http") {
-			return val
-		}
-	}
-	return ""
+	return "", fmt.Errorf("unexpected defapi response format: %s", string(respBody))
 }
