@@ -102,15 +102,15 @@ export function Layout() {
                 <Link
                   key={item.href}
                   to={item.href}
-                  className="relative -top-6 flex flex-col items-center gap-1 group"
+                  className="relative -top-3 flex flex-col items-center gap-1 group"
                 >
                   <div className={cn(
-                    "w-16 h-12 rounded-2xl flex items-center justify-center transition-transform duration-200 group-active:scale-95 shadow-lg shadow-yellow-500/20",
-                    "bg-gradient-to-b from-[#FFD700] via-[#FFB700] to-[#FFA000]"
+                    "w-[84px] h-12 rounded-[24px] flex items-center justify-center transition-all duration-300 group-hover:scale-105 group-active:scale-95 shadow-[0_8px_30px_rgba(255,183,0,0.4)]",
+                    "bg-gradient-to-br from-[#FFD700] via-[#FFB700] to-[#FF9000] border border-white/30"
                   )}>
-                    <item.icon className="h-6 w-6 text-black fill-black" />
+                    <item.icon className="h-7 w-7 text-black stroke-[2.5]" />
                   </div>
-                  <span className="text-[10px] font-medium text-white/90 uppercase tracking-wider">
+                  <span className="text-[10px] font-black text-white uppercase tracking-[0.2em] mt-1 drop-shadow-md">
                     {item.name}
                   </span>
                 </Link>
