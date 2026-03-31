@@ -3,6 +3,7 @@ package server
 import (
 	"context"
 	"database/sql"
+	"log"
 	"net/http"
 	"time"
 
@@ -46,7 +47,8 @@ func New(cfg *config.Config, db *sql.DB) *Server {
 	router.Use(func(c *gin.Context) {
 		// Увеличиваем лимит для JSON запросов
 		if c.ContentType() == "application/json" {
-			c.Request.Body = http.MaxBytesReader(c.Writer, c.Request.Body, 50*1024*1024) // 50MB
+			c.Request.Body = http.MaxBytesReader(c.Writer, c.Request.Body, 100*1024*1024) // 100MB
+			log.Printf("Processing JSON request for %s", c.Request.URL.Path)
 		}
 		c.Next()
 	})

@@ -3,8 +3,10 @@ package handlers
 import (
 	"encoding/json"
 	"io"
+	"log"
 	"net/http"
 	"strconv"
+	"strings"
 
 	"telegram-ai-face-bot/web/internal/kieapi"
 	"telegram-ai-face-bot/web/internal/models"
@@ -16,6 +18,13 @@ import (
 type GenerationHandler struct {
 	generationService    *services.GenerationService
 	webGenerationService *services.WebGenerationService
+}
+
+func min(a, b int) int {
+	if a < b {
+		return a
+	}
+	return b
 }
 
 func NewGenerationHandler(generationService *services.GenerationService, webGenerationService *services.WebGenerationService) *GenerationHandler {
@@ -182,8 +191,38 @@ func (h *GenerationHandler) CreateGeneration(c *gin.Context) {
 
 	var req services.CreateGenerationRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid request"})
+		log.Printf("CreateGeneration bind error: %v", err)
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid request", "details": err.Error()})
 		return
+	}
+
+	// Валидация запроса
+	if req.Model == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Model is required"})
+		return
+	}
+	if req.Prompt == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Prompt is required"})
+		return
+	}
+
+	// Логируем информацию о запросе для отладки
+	log.Printf("CreateGeneration request: model=%s, prompt_len=%d, image_urls_count=%d",
+		req.Model, len(req.Prompt), len(req.ImageURLs))
+
+	// Проверяем валидность URL изображений
+	for i, imgURL := range req.ImageURLs {
+		if imgURL == "" {
+			log.Printf("Empty image URL at index %d", i)
+			continue
+		}
+		// Проверяем что это base64 или URL
+		if len(imgURL) > 100 && (strings.HasPrefix(imgURL, "data:image/") ||
+			strings.HasPrefix(imgURL, "/9j/") || strings.HasPrefix(imgURL, "iVBORw0")) {
+			log.Printf("Base64 image detected at index %d, length: %d", i, len(imgURL))
+		} else {
+			log.Printf("Image URL at index %d: %s", i, imgURL[:min(100, len(imgURL))])
+		}
 	}
 
 	// Проверяем подписку для текстовых моделей
