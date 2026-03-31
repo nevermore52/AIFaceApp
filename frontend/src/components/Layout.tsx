@@ -18,11 +18,11 @@ export function Layout() {
 
   return (
     <div className="min-h-screen bg-[#030303] text-foreground selection:bg-primary/30">
-      <header className="sticky top-0 z-50 w-full border-b border-white/5 bg-[#030303]/80 backdrop-blur-xl">
-        <div className="container flex h-16 items-center justify-between">
+      <header className="sticky top-0 z-50 w-full border-b border-white/10 bg-[#030303] shadow-lg">
+        <div className="container flex h-16 items-center justify-between px-4">
           <div className="flex items-center gap-8">
             <Link to="/" className="flex items-center space-x-2">
-              <span className="font-bold text-2xl tracking-tight bg-gradient-to-br from-white via-white to-white/50 bg-clip-text text-transparent">
+              <span className="font-bold text-xl md:text-2xl tracking-tight text-white">
                 AIFACEAPP
               </span>
             </Link>
@@ -80,7 +80,7 @@ export function Layout() {
           </div>
         </div>
       </header>
-      <main className="container py-8">
+      <main className="container py-8 px-4">
         <Outlet />
       </main>
     </div>

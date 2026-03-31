@@ -5151,12 +5151,14 @@ func (b *Bot) sendModelMenu(chatID int64, userID int64, category ModelCategory, 
 	} else {
 		current = ""
 	}
+	// Если модель не выбрана, выбираем первую доступную
 	if current == "" {
 		for _, m := range modelOptions {
 			if containsCategory(enabledCats, m.Category) {
 				if !b.isModelVisibleToUser(userID, m) {
 					continue
 				}
+				// Пропускаем недоступные текстовые модели при автовыборе
 				if m.Category == ModelCategoryChat && !b.isChatModelAllowed(userID, m) {
 					continue
 				}
@@ -5165,6 +5167,7 @@ func (b *Bot) sendModelMenu(chatID int64, userID int64, category ModelCategory, 
 			}
 		}
 	}
+	// Проверяем, что текущая модель доступна пользователю
 	if current != "" {
 		if opt, ok := findModelOption(current); ok {
 			if opt.Category == ModelCategoryChat && !b.isChatModelAllowed(userID, opt) {
@@ -5196,10 +5199,12 @@ func (b *Bot) sendModelMenu(chatID int64, userID int64, category ModelCategory, 
 	options := modelOptionsByCategory(category)
 	row := []tgmodels.InlineKeyboardButton{}
 	for i, m := range options {
+		// Показываем все модели, кроме AdminOnly (которые видны только админам)
 		if !b.isModelVisibleToUser(userID, m) {
 			continue
 		}
 		label := m.Label
+		// Помечаем недоступные текстовые модели замком, но показываем их
 		if m.Category == ModelCategoryChat && !b.isChatModelAllowed(userID, m) {
 			label = "🔒 " + label
 		}
@@ -6264,7 +6269,7 @@ func (b *Bot) sendGenerationStatus(chatID int64, req *models.GenerationRequest) 
 		}
 	}
 
-	statusEmoji, statusText := b.statusInfo(req.Status)
+	statusEmoji, statusText := b.statusInfoForModel(req.Status, req.Model)
 	modelLabel := ""
 	modelHint := ""
 	if req != nil {
@@ -6528,6 +6533,38 @@ func (b *Bot) statusInfo(status string) (string, string) {
 	case "pending":
 		return "⏳", "В очереди"
 	case "processing":
+		return "🔄", "Генерируется"
+	case "completed":
+		return "<tg-emoji emoji-id=\"5206607081334906820\">✔️</tg-emoji>", "Завершено"
+	case "failed":
+		return "<tg-emoji emoji-id=\"5210952531676504517\">❌</tg-emoji>", "Ошибка"
+	default:
+		return "ℹ️", status
+	}
+}
+
+// statusInfoForModel возвращает emoji и текст статуса в зависимости от типа модели
+func (b *Bot) statusInfoForModel(status string, model string) (string, string) {
+	modelOpt, ok := findModelOption(model)
+
+	switch status {
+	case "pending":
+		return "⏳", "В очереди"
+	case "processing":
+		if ok {
+			switch modelOpt.Category {
+			case ModelCategoryPhoto:
+				return "🎨", "Нейросеть рисует..."
+			case ModelCategoryVideo:
+				return "🎬", "Нейросеть создает видео..."
+			case ModelCategoryMusic:
+				return "🎵", "Нейросеть генерирует музыку..."
+			case ModelCategoryChat:
+				return "💭", "Нейросеть думает..."
+			default:
+				return "🔄", "Генерируется"
+			}
+		}
 		return "🔄", "Генерируется"
 	case "completed":
 		return "<tg-emoji emoji-id=\"5206607081334906820\">✔️</tg-emoji>", "Завершено"

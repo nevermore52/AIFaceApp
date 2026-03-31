@@ -761,6 +761,14 @@ func (s *GenerationService) HandleKieAPICallback(payload kieapi.CallbackPayload)
 		return err
 	}
 
+	// Получаем telegram_id из таблицы users по user_id
+	var telegramID int64
+	if err := s.db.QueryRow(`SELECT telegram_id FROM users WHERE id = $1`, req.UserID).Scan(&telegramID); err != nil {
+		debugLog("HandleKieAPICallback: failed to get telegram_id for user_id=%d: %v", req.UserID, err)
+		// Продолжаем без уведомления, но обновляем статус
+		telegramID = 0
+	}
+
 	status := strings.ToLower(strings.TrimSpace(payload.StatusValue()))
 	if status != "success" && status != "completed" && status != "succeeded" {
 		reason := strings.TrimSpace(payload.Msg)
@@ -772,8 +780,8 @@ func (s *GenerationService) HandleKieAPICallback(payload kieapi.CallbackPayload)
 		req.ErrorMsg = &reason
 		req.Output = nil
 		req.CompletedAt = nil
-		if s.notify != nil {
-			s.notify(req.UserID, req)
+		if s.notify != nil && telegramID != 0 {
+			s.notify(telegramID, req)
 		}
 		s.markDone(req.ID)
 		return nil
@@ -790,8 +798,8 @@ func (s *GenerationService) HandleKieAPICallback(payload kieapi.CallbackPayload)
 		req.ErrorMsg = &reason
 		req.Output = nil
 		req.CompletedAt = nil
-		if s.notify != nil {
-			s.notify(req.UserID, req)
+		if s.notify != nil && telegramID != 0 {
+			s.notify(telegramID, req)
 		}
 		s.markDone(req.ID)
 		return nil
@@ -811,8 +819,8 @@ func (s *GenerationService) HandleKieAPICallback(payload kieapi.CallbackPayload)
 	req.Output = &url
 	now := time.Now()
 	req.CompletedAt = &now
-	if s.notify != nil {
-		s.notify(req.UserID, req)
+	if s.notify != nil && telegramID != 0 {
+		s.notify(telegramID, req)
 	}
 	s.markDone(req.ID)
 	return nil

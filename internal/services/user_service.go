@@ -737,7 +737,19 @@ func (s *UserService) AddReferralPurchaseBonus(referrerID int64, category models
 func (s *UserService) GetOrCreateUserQuota(telegramID int64) (*models.UserQuota, error) {
 	quota := &models.UserQuota{}
 
-	err := s.db.QueryRow(`
+	// Сначала проверяем существование пользователя
+	var userExists bool
+	err := s.db.QueryRow(`SELECT EXISTS(SELECT 1 FROM users WHERE telegram_id = $1)`, telegramID).Scan(&userExists)
+	if err != nil {
+		return nil, err
+	}
+
+	// Если пользователя нет, возвращаем ошибку
+	if !userExists {
+		return nil, fmt.Errorf("user with telegram_id %d does not exist", telegramID)
+	}
+
+	err = s.db.QueryRow(`
 		WITH inserted AS (
 			INSERT INTO user_quotas (telegram_id, text_daily, text_extra, image_weekly, image_extra, music_weekly, music_extra, video_weekly, video_extra)
 			VALUES ($1, 10, 0, 0, 0, 0, 0, 0, 0)
@@ -760,7 +772,18 @@ func (s *UserService) GetOrCreateUserQuota(telegramID int64) (*models.UserQuota,
 }
 
 func (s *UserService) UpdateUserQuota(telegramID int64, textDaily, imageWeekly, musicWeekly, videoWeekly int) error {
-	_, err := s.db.Exec(`
+	// Проверяем существование пользователя
+	var userExists bool
+	err := s.db.QueryRow(`SELECT EXISTS(SELECT 1 FROM users WHERE telegram_id = $1)`, telegramID).Scan(&userExists)
+	if err != nil {
+		return err
+	}
+
+	if !userExists {
+		return fmt.Errorf("user with telegram_id %d does not exist", telegramID)
+	}
+
+	_, err = s.db.Exec(`
 		INSERT INTO user_quotas (telegram_id, text_daily, image_weekly, music_weekly, video_weekly)
 		VALUES ($1, $2, $3, $4, $5)
 		ON CONFLICT (telegram_id) DO UPDATE

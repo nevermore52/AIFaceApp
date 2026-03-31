@@ -194,9 +194,8 @@ export function GeneratePage() {
     return MAX_IMAGES_PER_MODEL[selectedModel] || 4
   }
 
-  const handleFilesChange = (files: FileList | null) => {
+  const handleFilesChange = async (files: FileList | null) => {
     if (!files) return
-
     const maxImages = getMaxImages()
     const newFiles = Array.from(files).filter(f => f.type.startsWith('image/'))
     
@@ -219,21 +218,33 @@ export function GeneratePage() {
       setError(null)
     }
 
-    const newPreviews: string[] = []
-    let loadedCount = 0
+    try {
+      // Используем Promise.all для корректной работы во всех браузерах
+      const newPreviews = await Promise.all(
+        filesToAdd.map((file) => {
+          return new Promise<string>((resolve, reject) => {
+            const reader = new FileReader()
+            reader.onload = (e) => {
+              if (e.target?.result) {
+                resolve(e.target.result as string)
+              } else {
+                reject(new Error('Не удалось прочитать файл'))
+              }
+            }
+            reader.onerror = () => {
+              reject(new Error('Ошибка чтения файла'))
+            }
+            reader.readAsDataURL(file)
+          })
+        })
+      )
 
-    filesToAdd.forEach((file) => {
-      const reader = new FileReader()
-      reader.onloadend = () => {
-        newPreviews.push(reader.result as string)
-        loadedCount++
-        if (loadedCount === filesToAdd.length) {
-          setImageFiles([...imageFiles, ...filesToAdd])
-          setImagePreviews([...imagePreviews, ...newPreviews])
-        }
-      }
-      reader.readAsDataURL(file)
-    })
+      setImageFiles([...imageFiles, ...filesToAdd])
+      setImagePreviews([...imagePreviews, ...newPreviews])
+    } catch (err) {
+      console.error('Error reading files:', err)
+      setError('Ошибка загрузки изображений. Попробуйте снова.')
+    }
   }
 
   const handleFileChange = (e: ChangeEvent<HTMLInputElement>) => {

@@ -125,6 +125,21 @@ func (s *WebGenerationService) CreateGeneration(userID int64, username string, r
 func (s *WebGenerationService) processGeneration(genReq *GenerationRequest, req CreateGenerationRequest) {
 	_ = s.updateStatus(genReq.ID, "processing", "")
 
+	model := strings.ToLower(strings.TrimSpace(req.Model))
+
+	// Музыка через Suno API (не KieAPI)
+	if model == "music-suno" || strings.Contains(model, "suno") {
+		s.processMusicGeneration(genReq, req)
+		return
+	}
+
+	// Текстовые модели через chat API (не KieAPI)
+	if isTextModel(model) {
+		s.processTextGeneration(genReq, req)
+		return
+	}
+
+	// Остальные модели (фото, видео) через KieAPI
 	input := map[string]any{
 		"prompt": req.Prompt,
 	}
@@ -132,8 +147,6 @@ func (s *WebGenerationService) processGeneration(genReq *GenerationRequest, req 
 	if req.AspectRatio != "" {
 		input["aspect_ratio"] = req.AspectRatio
 	}
-
-	model := strings.ToLower(strings.TrimSpace(req.Model))
 
 	// Nano Banana 2: разрешение и Google поиск
 	if model == "nano-banana-2" {
@@ -193,12 +206,6 @@ func (s *WebGenerationService) processGeneration(genReq *GenerationRequest, req 
 		if len(req.ImageURLs) > 0 {
 			input["image_urls"] = req.ImageURLs
 		}
-	} else if model == "music-suno" {
-		// Suno Music: режим и голос
-		input["instrumental"] = req.Instrumental
-		if !req.Instrumental && req.VocalGender != "" {
-			input["vocal_gender"] = req.VocalGender
-		}
 	} else {
 		// Остальные модели
 		if len(req.ImageURLs) > 0 {
@@ -225,6 +232,31 @@ func (s *WebGenerationService) processGeneration(genReq *GenerationRequest, req 
 
 	_ = s.updateExternalTaskID(genReq.ID, taskID)
 	log.Printf("KieAPI task created: requestID=%d taskID=%s model=%s", genReq.ID, taskID, req.Model)
+}
+
+func isTextModel(model string) bool {
+	model = strings.ToLower(strings.TrimSpace(model))
+	return strings.Contains(model, "gpt") ||
+		strings.Contains(model, "gemini") ||
+		strings.Contains(model, "chat") ||
+		model == "google/gemini-3-flash" ||
+		model == "openai/gpt-5-mini" ||
+		model == "openai/gpt-5-nano" ||
+		model == "chat-gpt-4.1mini"
+}
+
+func (s *WebGenerationService) processMusicGeneration(genReq *GenerationRequest, req CreateGenerationRequest) {
+	// TODO: Implement Suno API integration
+	// For now, return error
+	log.Printf("Music generation requested but Suno API not yet integrated in web service")
+	_ = s.updateStatus(genReq.ID, "failed", "Music generation is not yet available in web interface. Please use Telegram bot.")
+}
+
+func (s *WebGenerationService) processTextGeneration(genReq *GenerationRequest, req CreateGenerationRequest) {
+	// TODO: Implement text model integration
+	// For now, return error
+	log.Printf("Text generation requested but chat API not yet integrated in web service")
+	_ = s.updateStatus(genReq.ID, "failed", "Text generation is not yet available in web interface. Please use Telegram bot.")
 }
 
 func (s *WebGenerationService) HandleCallback(payload kieapi.CallbackPayload) error {
