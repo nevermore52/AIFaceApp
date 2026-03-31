@@ -42,22 +42,35 @@ func NewWebGenerationService(db *sql.DB, kieClient *kieapi.Client, callbackURL s
 	}
 }
 
+type MediaOutput struct {
+	URL       string `json:"url"`
+	Type      string `json:"type"` // "audio", "video", "image"
+	Title     string `json:"title,omitempty"`
+	Duration  string `json:"duration,omitempty"`
+	Thumbnail string `json:"thumbnail,omitempty"`
+	Preview   string `json:"preview,omitempty"`
+	MimeType  string `json:"mime_type,omitempty"`
+	Size      int64  `json:"size,omitempty"`
+}
+
 type GenerationRequest struct {
-	ID             int64      `json:"id"`
-	UserID         int64      `json:"user_id"`
-	Username       string     `json:"username"`
-	Model          string     `json:"model"`
-	ModelType      string     `json:"model_type"`
-	Prompt         string     `json:"prompt"`
-	InputImage     string     `json:"input_image,omitempty"`
-	Status         string     `json:"status"`
-	Output         *string    `json:"output,omitempty"`
-	ErrorMsg       *string    `json:"error_msg,omitempty"`
-	ExternalTaskID string     `json:"external_task_id,omitempty"`
-	TokensUsed     int        `json:"tokens_used"`
-	Source         string     `json:"source"`
-	CreatedAt      time.Time  `json:"created_at"`
-	CompletedAt    *time.Time `json:"completed_at,omitempty"`
+	ID             int64        `json:"id"`
+	UserID         int64        `json:"user_id"`
+	Username       string       `json:"username"`
+	Model          string       `json:"model"`
+	ModelType      string       `json:"model_type"`
+	Prompt         string       `json:"prompt"`
+	InputImage     string       `json:"input_image,omitempty"`
+	Status         string       `json:"status"`
+	StatusMessage  string       `json:"status_message"`
+	Output         *string      `json:"output,omitempty"`
+	MediaOutput    *MediaOutput `json:"media_output,omitempty"`
+	ErrorMsg       *string      `json:"error_msg,omitempty"`
+	ExternalTaskID string       `json:"external_task_id,omitempty"`
+	TokensUsed     int          `json:"tokens_used"`
+	Source         string       `json:"source"`
+	CreatedAt      time.Time    `json:"created_at"`
+	CompletedAt    *time.Time   `json:"completed_at,omitempty"`
 }
 
 type CreateGenerationRequest struct {
@@ -91,22 +104,91 @@ type ModelInfo struct {
 	Type        string `json:"type"`
 	Description string `json:"description"`
 	TokenCost   int    `json:"token_cost"`
+	Placeholder string `json:"placeholder"`
+}
+
+// Вспомогательная функция для минимума
+func min(a, b int) int {
+	if a < b {
+		return a
+	}
+	return b
 }
 
 func (s *WebGenerationService) GetAvailableModels() []ModelInfo {
 	return []ModelInfo{
-		{ID: "google/nano-banana", Name: "Nano Banana", Type: "image", Description: "Генерация изображений", TokenCost: 1},
-		{ID: "google/nano-banana-pro", Name: "Nano Banana Pro", Type: "image", Description: "Продвинутая генерация изображений", TokenCost: 4},
-		{ID: "nano-banana-2", Name: "Nano Banana 2", Type: "image", Description: "Генерация и редактирование изображений", TokenCost: 2},
-		{ID: "seedream/4.5-edit", Name: "Seedream 4.5", Type: "image", Description: "Редактирование изображений", TokenCost: 3},
-		{ID: "veo3_fast", Name: "Veo 3.1 Fast", Type: "video", Description: "Генерация видео", TokenCost: 1},
-		{ID: "wan/2-6-image-to-video", Name: "Wan 2.6", Type: "video", Description: "Генерация видео из изображения", TokenCost: 2},
-		{ID: "kling-2.6/image-to-video", Name: "Kling 2.6", Type: "video", Description: "Генерация видео с звуком", TokenCost: 1},
-		{ID: "music-suno", Name: "Suno Music", Type: "music", Description: "Генерация музыки", TokenCost: 1},
-		{ID: "google/gemini-3-flash", Name: "Gemini 3 Flash", Type: "text", Description: "Текстовая модель", TokenCost: 1},
-		{ID: "openai/gpt-5-mini", Name: "GPT-5 mini", Type: "text", Description: "Текстовая модель", TokenCost: 1},
-		{ID: "openai/gpt-5-nano", Name: "GPT-5 nano", Type: "text", Description: "Текстовая модель", TokenCost: 1},
-		{ID: "gpt-4.1-mini", Name: "GPT-4.1 mini", Type: "text", Description: "Текстовая модель", TokenCost: 1},
+		{ID: "google/nano-banana", Name: "Nano Banana", Type: "image", Description: "Генерация изображений", TokenCost: 1, Placeholder: "Опишите, что вы хотите получить в изображении"},
+		{ID: "google/nano-banana-pro", Name: "Nano Banana Pro", Type: "image", Description: "Продвинутая генерация изображений", TokenCost: 4, Placeholder: "Опишите, что вы хотите получить в изображении"},
+		{ID: "nano-banana-2", Name: "Nano Banana 2", Type: "image", Description: "Генерация и редактирование изображений", TokenCost: 2, Placeholder: "Опишите, что вы хотите получить в изображении"},
+		{ID: "seedream/4.5-edit", Name: "Seedream 4.5", Type: "image", Description: "Редактирование изображений", TokenCost: 3, Placeholder: "Опишите, что вы хотите получить в изображении"},
+		{ID: "veo3_fast", Name: "Veo 3.1 Fast", Type: "video", Description: "Генерация видео", TokenCost: 1, Placeholder: "Опишите, что вы хотите получить в видео"},
+		{ID: "wan/2-6-image-to-video", Name: "Wan 2.6", Type: "video", Description: "Генерация видео из изображения", TokenCost: 2, Placeholder: "Опишите, что вы хотите получить в видео"},
+		{ID: "kling-2.6/image-to-video", Name: "Kling 2.6", Type: "video", Description: "Генерация видео с звуком", TokenCost: 1, Placeholder: "Опишите, что вы хотите получить в видео"},
+		{ID: "music-suno", Name: "Suno Music", Type: "music", Description: "Генерация музыки", TokenCost: 1, Placeholder: "Опишите, что вы хотите получить в песне"},
+		{ID: "google/gemini-3-flash", Name: "Gemini 3 Flash", Type: "text", Description: "Текстовая модель", TokenCost: 1, Placeholder: "Введите запрос"},
+		{ID: "openai/gpt-5-mini", Name: "GPT-5 mini", Type: "text", Description: "Текстовая модель", TokenCost: 1, Placeholder: "Введите запрос"},
+		{ID: "openai/gpt-5-nano", Name: "GPT-5 nano", Type: "text", Description: "Текстовая модель", TokenCost: 1, Placeholder: "Введите запрос"},
+		{ID: "gpt-4.1-mini", Name: "GPT-4.1 mini", Type: "text", Description: "Текстовая модель", TokenCost: 1, Placeholder: "Введите запрос"},
+	}
+}
+
+// getStatusMessage генерирует человекопонятное сообщение о статусе
+func (s *WebGenerationService) getStatusMessage(status, modelType string) string {
+	switch status {
+	case "pending":
+		switch modelType {
+		case "music":
+			return "🎵 Готовлюсь сочинить песню..."
+		case "video":
+			return "🎬 Готовлюсь создать видео..."
+		case "image":
+			return "🎨 Готовлюсь нарисовать изображение..."
+		case "text":
+			return "💭 Готовлюсь сгенерировать текст..."
+		default:
+			return "⏳ Ожидаю начала генерации..."
+		}
+	case "processing":
+		switch modelType {
+		case "music":
+			return "🎵 Сочиняю песню, это может занять время..."
+		case "video":
+			return "🎬 Создаю видео, это может занять время..."
+		case "image":
+			return "🎨 Рисую изображение, это может занять время..."
+		case "text":
+			return "💭 Генерирую текст, это может занять время..."
+		default:
+			return "⚡ Обрабатываю запрос..."
+		}
+	case "completed":
+		switch modelType {
+		case "music":
+			return "🎵 Песня готова!"
+		case "video":
+			return "🎬 Видео готово!"
+		case "image":
+			return "🎨 Изображение готово!"
+		case "text":
+			return "💭 Текст сгенерирован!"
+		default:
+			return "✅ Готово!"
+		}
+	case "failed":
+		switch modelType {
+		case "music":
+			return "❌ Не удалось сочинить песню"
+		case "video":
+			return "❌ Не удалось создать видео"
+		case "image":
+			return "❌ Не удалось нарисовать изображение"
+		case "text":
+			return "❌ Не удалось сгенерировать текст"
+		default:
+			return "❌ Ошибка генерации"
+		}
+	default:
+		return status
 	}
 }
 
@@ -487,9 +569,23 @@ func (s *WebGenerationService) processMusicGeneration(genReq *GenerationRequest,
 		return
 	}
 
-	// Если есть готовый audioURL, сразу завершаем
+	// Если есть готовый audioURL, сразу завершаем с MediaOutput
 	if audioURL != "" {
-		_ = s.completeGeneration(genReq.ID, audioURL)
+		title := "Музыка"
+		if req.Prompt != "" {
+			promptLength := min(50, len(req.Prompt))
+			if promptLength > 0 {
+				title = fmt.Sprintf("Музыка: %s", req.Prompt[:promptLength])
+			}
+		}
+
+		mediaOutput := &MediaOutput{
+			URL:      audioURL,
+			Type:     "audio",
+			Title:    title,
+			MimeType: "audio/mpeg",
+		}
+		_ = s.completeGenerationWithMedia(genReq.ID, audioURL, mediaOutput)
 		return
 	}
 
@@ -497,7 +593,9 @@ func (s *WebGenerationService) processMusicGeneration(genReq *GenerationRequest,
 	if taskID != "" {
 		_ = s.updateExternalTaskID(genReq.ID, taskID)
 		// Регистрируем задачу в боте чтобы он знал о ней когда придет callback
-		_ = s.registerSunoTaskInBot(taskID, genReq.UserID)
+		if err := s.registerSunoTaskInBot(taskID, genReq.UserID); err != nil {
+			log.Printf("ERROR registering Suno task in bot: %v", err)
+		}
 		log.Printf("Music generation started with taskID: %s", taskID)
 		return
 	}
@@ -554,6 +652,28 @@ func (s *WebGenerationService) completeGeneration(id int64, output string) error
 		SET status = 'completed', output = $1, completed_at = $2
 		WHERE id = $3
 	`, output, now, id)
+	return err
+}
+
+func (s *WebGenerationService) completeGenerationWithMedia(id int64, output string, mediaOutput *MediaOutput) error {
+	now := time.Now()
+
+	// Сериализуем MediaOutput в JSON
+	mediaJSON := ""
+	if mediaOutput != nil {
+		mediaBytes, err := json.Marshal(mediaOutput)
+		if err != nil {
+			log.Printf("Failed to marshal media output: %v", err)
+			return s.completeGeneration(id, output)
+		}
+		mediaJSON = string(mediaBytes)
+	}
+
+	_, err := s.db.Exec(`
+		UPDATE generation_requests
+		SET status = 'completed', output = $1, media_output = $2, completed_at = $3
+		WHERE id = $4
+	`, output, mediaJSON, now, id)
 	return err
 }
 
@@ -645,19 +765,82 @@ func (s *WebGenerationService) HandleSunoCallback(payload map[string]any) error 
 
 func (s *WebGenerationService) GetByID(id int64) (*GenerationRequest, error) {
 	query := `
-		SELECT id, user_id, model_type, model, status, input_image, output, prompt, error_msg, tokens_used, source, created_at, completed_at
+		SELECT id, user_id, model_type, model, status, input_image, output, media_output, prompt, error_msg, tokens_used, source, created_at, completed_at
 		FROM generation_requests WHERE id = $1`
 
 	genReq := &GenerationRequest{}
+	var mediaOutputJSON *string
 	err := s.db.QueryRow(query, id).Scan(
 		&genReq.ID, &genReq.UserID, &genReq.ModelType, &genReq.Model, &genReq.Status,
-		&genReq.InputImage, &genReq.Output, &genReq.Prompt, &genReq.ErrorMsg,
+		&genReq.InputImage, &genReq.Output, &mediaOutputJSON, &genReq.Prompt, &genReq.ErrorMsg,
 		&genReq.TokensUsed, &genReq.Source, &genReq.CreatedAt, &genReq.CompletedAt,
 	)
 	if err != nil {
 		return nil, err
 	}
+
+	// Генерируем динамическое сообщение о статусе
+	genReq.StatusMessage = s.getStatusMessage(genReq.Status, genReq.ModelType)
+
+	// Десериализуем media_output если есть
+	if mediaOutputJSON != nil && *mediaOutputJSON != "" {
+		var mediaOutput MediaOutput
+		if err := json.Unmarshal([]byte(*mediaOutputJSON), &mediaOutput); err == nil {
+			genReq.MediaOutput = &mediaOutput
+		}
+	}
+
 	return genReq, nil
+}
+
+func (s *WebGenerationService) GetByUserID(userID int64, limit, offset int) ([]*GenerationRequest, int, error) {
+	// Сначала получаем общее количество
+	var total int
+	err := s.db.QueryRow(`SELECT COUNT(*) FROM generation_requests WHERE user_id = $1`, userID).Scan(&total)
+	if err != nil {
+		return nil, 0, err
+	}
+
+	query := `
+		SELECT id, user_id, model_type, model, status, input_image, output, media_output, prompt, error_msg, tokens_used, source, created_at, completed_at
+		FROM generation_requests 
+		WHERE user_id = $1 
+		ORDER BY created_at DESC 
+		LIMIT $2 OFFSET $3`
+
+	rows, err := s.db.Query(query, userID, limit, offset)
+	if err != nil {
+		return nil, 0, err
+	}
+	defer rows.Close()
+
+	var generations []*GenerationRequest
+	for rows.Next() {
+		genReq := &GenerationRequest{}
+		var mediaOutputJSON *string
+		if err := rows.Scan(
+			&genReq.ID, &genReq.UserID, &genReq.ModelType, &genReq.Model, &genReq.Status,
+			&genReq.InputImage, &genReq.Output, &mediaOutputJSON, &genReq.Prompt, &genReq.ErrorMsg,
+			&genReq.TokensUsed, &genReq.Source, &genReq.CreatedAt, &genReq.CompletedAt,
+		); err != nil {
+			return nil, 0, err
+		}
+
+		// Генерируем динамическое сообщение о статусе
+		genReq.StatusMessage = s.getStatusMessage(genReq.Status, genReq.ModelType)
+
+		// Десериализуем media_output если есть
+		if mediaOutputJSON != nil && *mediaOutputJSON != "" {
+			var mediaOutput MediaOutput
+			if err := json.Unmarshal([]byte(*mediaOutputJSON), &mediaOutput); err == nil {
+				genReq.MediaOutput = &mediaOutput
+			}
+		}
+
+		generations = append(generations, genReq)
+	}
+
+	return generations, total, rows.Err()
 }
 
 func (s *WebGenerationService) getByExternalTaskID(taskID string) (*GenerationRequest, error) {
@@ -704,11 +887,70 @@ func (s *WebGenerationService) updateExternalTaskID(id int64, taskID string) err
 
 func (s *WebGenerationService) completeRequest(id int64, resultURL string) error {
 	log.Printf("completeRequest: id=%d resultURL=%s", id, resultURL)
-	_, err := s.db.Exec(`UPDATE generation_requests SET status = 'completed', output = $2, completed_at = NOW() WHERE id = $1`, id, resultURL)
+
+	// Получаем информацию о генерации для определения типа
+	genReq, err := s.GetByID(id)
+	if err != nil {
+		log.Printf("ERROR getting generation request: %v", err)
+		// Если не удалось получить, сохраняем как обычно
+		_, err = s.db.Exec(`UPDATE generation_requests SET status = 'completed', output = $2, completed_at = NOW() WHERE id = $1`, id, resultURL)
+		return err
+	}
+
+	// Создаем MediaOutput в зависимости от типа модели
+	var mediaOutput *MediaOutput
+	switch genReq.ModelType {
+	case "video":
+		title := "Видео"
+		if genReq.Prompt != "" {
+			promptLength := min(50, len(genReq.Prompt))
+			if promptLength > 0 {
+				title = fmt.Sprintf("Видео: %s", genReq.Prompt[:promptLength])
+			}
+		}
+		mediaOutput = &MediaOutput{
+			URL:       resultURL,
+			Type:      "video",
+			Title:     title,
+			MimeType:  "video/mp4",
+			Thumbnail: "", // Можно будет добавить генерацию thumbnail
+		}
+	case "image":
+		title := "Изображение"
+		if genReq.Prompt != "" {
+			promptLength := min(50, len(genReq.Prompt))
+			if promptLength > 0 {
+				title = fmt.Sprintf("Изображение: %s", genReq.Prompt[:promptLength])
+			}
+		}
+		mediaOutput = &MediaOutput{
+			URL:      resultURL,
+			Type:     "image",
+			Title:    title,
+			MimeType: "image/jpeg",
+		}
+	case "music":
+		title := "Музыка"
+		if genReq.Prompt != "" {
+			promptLength := min(50, len(genReq.Prompt))
+			if promptLength > 0 {
+				title = fmt.Sprintf("Музыка: %s", genReq.Prompt[:promptLength])
+			}
+		}
+		mediaOutput = &MediaOutput{
+			URL:      resultURL,
+			Type:     "audio",
+			Title:    title,
+			MimeType: "audio/mpeg",
+		}
+	}
+
+	// Используем новый метод с MediaOutput
+	err = s.completeGenerationWithMedia(id, resultURL, mediaOutput)
 	if err != nil {
 		log.Printf("ERROR completeRequest: %v", err)
 	} else {
-		log.Printf("completeRequest success")
+		log.Printf("completeRequest success with media output")
 	}
 	return err
 }

@@ -45,6 +45,24 @@ func (h *GenerationHandler) GetUserGenerations(c *gin.Context) {
 		limit = 100
 	}
 
+	// Используем WebGenerationService для получения генераций с динамическими статусами
+	if h.webGenerationService != nil {
+		generations, total, err := h.webGenerationService.GetByUserID(u.ID, limit, offset)
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to get generations"})
+			return
+		}
+
+		c.JSON(http.StatusOK, gin.H{
+			"generations": generations,
+			"total":       total,
+			"limit":       limit,
+			"offset":      offset,
+		})
+		return
+	}
+
+	// Fallback на основной сервис если веб-сервис недоступен
 	generations, total, err := h.generationService.GetByUserID(*u.TelegramID, limit, offset)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to get generations"})
@@ -52,10 +70,10 @@ func (h *GenerationHandler) GetUserGenerations(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusOK, gin.H{
-		"data":   generations,
-		"total":  total,
-		"limit":  limit,
-		"offset": offset,
+		"generations": generations,
+		"total":       total,
+		"limit":       limit,
+		"offset":      offset,
 	})
 }
 
@@ -73,6 +91,28 @@ func (h *GenerationHandler) GetGeneration(c *gin.Context) {
 		return
 	}
 
+	// Используем WebGenerationService для получения генерации с динамическим статусом
+	if h.webGenerationService != nil {
+		generation, err := h.webGenerationService.GetByID(id)
+		if err != nil {
+			c.JSON(http.StatusNotFound, gin.H{"error": "Generation not found"})
+			return
+		}
+
+		u := user.(*models.User)
+		if generation.UserID != u.ID {
+			isAdmin, _ := c.Get("is_admin")
+			if isAdmin != true {
+				c.JSON(http.StatusForbidden, gin.H{"error": "Access denied"})
+				return
+			}
+		}
+
+		c.JSON(http.StatusOK, generation)
+		return
+	}
+
+	// Fallback на основной сервис если веб-сервис недоступен
 	generation, err := h.generationService.GetByID(id)
 	if err != nil {
 		c.JSON(http.StatusNotFound, gin.H{"error": "Generation not found"})
