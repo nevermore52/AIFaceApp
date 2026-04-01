@@ -378,7 +378,7 @@ func (b *Bot) sendVideoTotalInfo(chatID int64, userID int64, modelID string) {
 }
 
 func (b *Bot) isChatModelAllowed(userID int64, model ModelOption) bool {
-	if model.ID != "google/gemini-3-flash" && model.ID != "openai/gpt-5-mini" && model.ID != "openai/gpt-5-nano" {
+	if model.ID != "google/gemini-3-flash" && model.ID != "openai/gpt-5-nano" {
 		return true
 	}
 	if isAdmin, err := b.userService.IsUserAdmin(userID); err == nil && isAdmin {
@@ -392,7 +392,7 @@ func (b *Bot) isChatModelAllowed(userID int64, model ModelOption) bool {
 	switch model.ID {
 	case "google/gemini-3-flash":
 		return label == "start" || label == "pro"
-	case "openai/gpt-5-mini", "openai/gpt-5-nano":
+	case "openai/gpt-5-nano":
 		return label == "mini" || label == "start" || label == "pro"
 	default:
 		return true
@@ -489,7 +489,7 @@ func (b *Bot) chatModelAccessMessage(modelID string) string {
 	switch modelID {
 	case "google/gemini-3-flash":
 		return "Модель доступна только с подпиской Start или Pro"
-	case "openai/gpt-5-mini", "openai/gpt-5-nano":
+	case "openai/gpt-5-nano":
 		return "Модель доступна только с подпиской Mini, Start или Pro"
 	default:
 		return "Модель доступна только с активной подпиской"
@@ -1195,7 +1195,6 @@ var modelOptions = []ModelOption{
 	{ID: "google/gemini-3-flash", Label: "Gemini 3 Flash", Desc: "", Category: ModelCategoryChat, RequestCost: 1, EmojiID: "5443038326535759644"},
 	{ID: "openai/gpt-5-mini", Label: "GPT-5 mini", Desc: locRU.ModelGPT5Mini, Category: ModelCategoryChat, RequestCost: 1, EmojiID: "5443038326535759644"},
 	{ID: "openai/gpt-5-nano", Label: "GPT-5 nano", Desc: locRU.ModelGPT5Nano, Category: ModelCategoryChat, RequestCost: 1, EmojiID: "5443038326535759644"},
-	{ID: "chat-gpt-4.1mini", ApiModel: "gpt-4.1-mini", Label: "GPT-4.1 mini", Desc: locRU.ModelGPT41Mini, Category: ModelCategoryChat, RequestCost: 1, TaskType: "chat", EmojiID: "5443038326535759644"},
 }
 
 var modelCategories = []ModelCategory{ModelCategoryPhoto, ModelCategoryVideo, ModelCategoryMusic, ModelCategoryChat}
@@ -3265,8 +3264,6 @@ func (b *Bot) modelDescriptionLoc(id string, loc *Localization) string {
 		return loc.ModelGPT5Mini
 	case "openai/gpt-5-nano":
 		return loc.ModelGPT5Nano
-	case "chat-gpt-4.1mini":
-		return loc.ModelGPT41Mini
 	default:
 		return id
 	}

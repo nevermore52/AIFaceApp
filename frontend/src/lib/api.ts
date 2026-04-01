@@ -119,6 +119,8 @@ export interface GenerationCreateParams {
   // Suno Music параметры
   instrumental?: boolean
   vocal_gender?: string
+  // История чата для текстовых моделей
+  messages?: { role: string; content: string }[]
 }
 
 export const generationApi = {

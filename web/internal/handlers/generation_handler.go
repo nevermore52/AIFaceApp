@@ -229,9 +229,7 @@ func (h *GenerationHandler) CreateGeneration(c *gin.Context) {
 	// Все текстовые модели видны, но доступны по подпискам
 	textModelsRequireSubscription := map[string][]string{
 		"google/gemini-3-flash": {"start", "pro"},
-		"openai/gpt-5-mini":     {"mini", "start", "pro"},
 		"openai/gpt-5-nano":     {"mini", "start", "pro"},
-		// "gpt-4.1-mini" доступна всем без подписки
 	}
 
 	if allowedSubs, requiresSubscription := textModelsRequireSubscription[req.Model]; requiresSubscription {

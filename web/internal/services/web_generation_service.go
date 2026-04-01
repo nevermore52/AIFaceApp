@@ -93,6 +93,8 @@ type CreateGenerationRequest struct {
 	// Suno Music параметры
 	Instrumental bool   `json:"instrumental"`
 	VocalGender  string `json:"vocal_gender"`
+	// История чата для текстовых моделей (опционально)
+	Messages []map[string]string `json:"messages"`
 	// Информация о потраченных квотах (заполняется сервером)
 	PrimaryUsed int `json:"primary_used"`
 	ExtraUsed   int `json:"extra_used"`
@@ -128,7 +130,6 @@ func (s *WebGenerationService) GetAvailableModels() []ModelInfo {
 		{ID: "google/gemini-3-flash", Name: "Gemini 3 Flash", Type: "text", Description: "Текстовая модель", TokenCost: 1, Placeholder: "Введите запрос"},
 		{ID: "openai/gpt-5-mini", Name: "GPT-5 mini", Type: "text", Description: "Текстовая модель", TokenCost: 1, Placeholder: "Введите запрос"},
 		{ID: "openai/gpt-5-nano", Name: "GPT-5 nano", Type: "text", Description: "Текстовая модель", TokenCost: 1, Placeholder: "Введите запрос"},
-		{ID: "gpt-4.1-mini", Name: "GPT-4.1 mini", Type: "text", Description: "Текстовая модель", TokenCost: 1, Placeholder: "Введите запрос"},
 	}
 }
 
@@ -209,7 +210,6 @@ func (s *WebGenerationService) getTokenCost(model string, req CreateGenerationRe
 		"google/gemini-3-flash":    1,
 		"openai/gpt-5-mini":        1,
 		"openai/gpt-5-nano":        1,
-		"gpt-4.1-mini":             1,
 	}
 
 	baseCost := baseCosts[model]
@@ -540,11 +540,9 @@ func isTextModel(model string) bool {
 	model = strings.ToLower(strings.TrimSpace(model))
 	return strings.Contains(model, "gpt") ||
 		strings.Contains(model, "gemini") ||
-		strings.Contains(model, "chat") ||
 		model == "google/gemini-3-flash" ||
 		model == "openai/gpt-5-mini" ||
-		model == "openai/gpt-5-nano" ||
-		model == "gpt-4.1-mini"
+		model == "openai/gpt-5-nano"
 }
 
 func (s *WebGenerationService) processMusicGeneration(genReq *GenerationRequest, req CreateGenerationRequest) {
@@ -618,9 +616,14 @@ func (s *WebGenerationService) processMusicGeneration(genReq *GenerationRequest,
 func (s *WebGenerationService) processTextGeneration(genReq *GenerationRequest, req CreateGenerationRequest) {
 	_ = s.updateStatus(genReq.ID, "processing", "")
 
-	// Формируем сообщения для chat API
-	messages := []map[string]string{
-		{"role": "user", "content": req.Prompt},
+	// Формируем сообщения для chat API (используем историю если передана)
+	var messages []map[string]string
+	if len(req.Messages) > 0 {
+		messages = req.Messages
+	} else {
+		messages = []map[string]string{
+			{"role": "user", "content": req.Prompt},
+		}
 	}
 
 	response, err := s.generateChat(req.Model, messages)

@@ -121,12 +121,10 @@ const MAX_IMAGES_PER_MODEL: Record<string, number> = {
   'seedream/4.5-edit': 4,
 }
 
-// Модели, требующие подписку (GPT-4.1 mini теперь доступна всем)
+// Модели, требующие подписку
 const SUBSCRIPTION_REQUIRED_MODELS: Record<string, string[]> = {
   'google/gemini-3-flash': ['start', 'pro'],
-  'openai/gpt-5-mini': ['mini', 'start', 'pro'],
   'openai/gpt-5-nano': ['mini', 'start', 'pro'],
-  // 'chat-gpt-4.1mini' убрана - теперь доступна без подписки
 }
 
 export function GeneratePage() {
@@ -144,6 +142,7 @@ export function GeneratePage() {
   const [sunoMode, setSunoMode] = useState('instrumental')
   const [sunoVoice, setSunoVoice] = useState('m')
   const [prompt, setPrompt] = useState('')
+  const [chatHistory, setChatHistory] = useState<{ role: string; content: string }[]>([])
   const [imageFiles, setImageFiles] = useState<File[]>([])
   const [imagePreviews, setImagePreviews] = useState<string[]>([])
   const [uploadingImage, setUploadingImage] = useState(false)
@@ -197,6 +196,7 @@ export function GeneratePage() {
     if (filteredModels.length > 0 && !filteredModels.find(m => m.id === selectedModel)) {
       setSelectedModel(filteredModels[0].id)
     }
+    setChatHistory([])
   }, [selectedCategory, filteredModels, selectedModel])
 
   // Устанавливаем дефолтные параметры при смене модели
@@ -424,6 +424,13 @@ export function GeneratePage() {
         }
       }
 
+      // Текстовые модели: передаём историю чата
+      const currentPrompt = prompt.trim()
+      if (selectedCategory === 'text') {
+        const newHistory = [...chatHistory, { role: 'user', content: currentPrompt }]
+        params.messages = newHistory
+      }
+
       const result = await generationApi.create(params)
 
       setCurrentGeneration({ id: result.id, status: result.status })
@@ -436,6 +443,15 @@ export function GeneratePage() {
           if (status.status === 'completed' || status.status === 'failed') {
             if (pollRef.current) clearInterval(pollRef.current)
             setGenerating(false)
+            // Добавляем сообщения в историю чата
+            if (selectedCategory === 'text' && status.status === 'completed' && status.output) {
+              setChatHistory(prev => [
+                ...prev,
+                { role: 'user', content: currentPrompt },
+                { role: 'assistant', content: status.output! },
+              ])
+              setPrompt('')
+            }
           }
         } catch (err) {
           console.error('Poll error:', err)
@@ -881,15 +897,41 @@ export function GeneratePage() {
         </div>
       </div>
 
+      {/* История чата для текстовых моделей */}
+      {selectedCategory === 'text' && chatHistory.length > 0 && (
+        <Card className="mt-8 border-white/5 bg-white/[0.01] overflow-hidden">
+          <CardHeader className="p-4 border-b border-white/5 flex flex-row items-center justify-between">
+            <CardTitle className="text-sm">История чата</CardTitle>
+            <button onClick={() => setChatHistory([])} className="p-1 hover:bg-white/5 rounded-md transition-colors">
+              <X className="w-4 h-4 text-white/40" />
+            </button>
+          </CardHeader>
+          <CardContent className="p-4 space-y-3 max-h-[400px] overflow-y-auto">
+            {chatHistory.map((msg, i) => (
+              <div key={i} className={cn('flex', msg.role === 'user' ? 'justify-end' : 'justify-start')}>
+                <div className={cn(
+                  'max-w-[85%] rounded-xl px-4 py-2.5 text-sm whitespace-pre-wrap leading-relaxed',
+                  msg.role === 'user'
+                    ? 'bg-primary/20 text-white border border-primary/20'
+                    : 'bg-white/[0.04] text-white/80 border border-white/5'
+                )}>
+                  {msg.content}
+                </div>
+              </div>
+            ))}
+          </CardContent>
+        </Card>
+      )}
+
       {/* Result Visualization - compact or modal style */}
       {(currentGeneration || generating) && (
-        <Card className="mt-8 border-white/5 bg-white/[0.01] overflow-hidden">
+        <Card className="mt-4 border-white/5 bg-white/[0.01] overflow-hidden">
           <CardHeader className="p-4 border-b border-white/5 flex flex-row items-center justify-between">
             <div>
               <CardTitle className="text-sm">Результат</CardTitle>
             </div>
             {currentGeneration?.status === 'completed' && (
-              <button 
+              <button
                 onClick={() => setCurrentGeneration(null)}
                 className="p-1 hover:bg-white/5 rounded-md transition-colors"
               >
