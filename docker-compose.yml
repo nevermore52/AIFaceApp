@@ -8,7 +8,7 @@ services:
       POSTGRES_USER: aifacebot_user
       POSTGRES_PASSWORD: aifacebot_password
     ports:
-      - "5432:5432"
+      - "127.0.0.1:5432:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
       - ./docker/init.sql:/docker-entrypoint-initdb.d/init.sql
@@ -23,8 +23,6 @@ services:
   redis:
     image: redis:7-alpine
     container_name: aifacebot_redis
-    ports:
-      - "6379:6379"
     volumes:
       - redis_data:/data
     networks:
