@@ -6323,7 +6323,7 @@ func (b *Bot) sendGenerationStatus(chatID int64, req *models.GenerationRequest) 
 
 	// Если есть картинка в data URL — отправляем как фото, чтобы не ловить "Request Entity Too Large"
 	if req.Status == "completed" && req.Output != nil && *req.Output != "" {
-		output := *req.Output
+		output := strings.TrimSpace(*req.Output)
 		caption := truncate(baseText, 900) // подпись к фото
 
 		// Кнопка "Оживить фото" для nano-banana, nano-banana-pro и nano-banana-2
@@ -6344,12 +6344,12 @@ func (b *Bot) sendGenerationStatus(chatID int64, req *models.GenerationRequest) 
 			photoBytes, fileName, err := decodeDataURL(output)
 			if err != nil {
 				log.Printf("Failed to decode data URL: %v", err)
-				b.sendText(chatID, truncate(baseText+"\n\n🖼️ Результат недоступен", 3800))
+				b.sendHTMLText(chatID, truncate(baseText+"\n\n🖼️ Результат недоступен", 3800))
 				return
 			}
 			if _, err := b.sendPhoto(chatID, &tgmodels.InputFileUpload{Filename: fileName, Data: bytes.NewReader(photoBytes)}, caption, "HTML", animateMarkup); err != nil {
 				log.Printf("Failed to send generation photo: %v", err)
-				b.sendText(chatID, truncate(baseText+"\n\n🖼️ Результат недоступен", 3800))
+				b.sendHTMLText(chatID, truncate(baseText+"\n\n🖼️ Результат недоступен", 3800))
 			}
 			return
 		}
@@ -6368,33 +6368,33 @@ func (b *Bot) sendGenerationStatus(chatID int64, req *models.GenerationRequest) 
 					if videoBytes, fileName, dlErr := downloadFileToBytes(output, "mp4"); dlErr == nil {
 						if _, sendErr := b.sendDocument(chatID, &tgmodels.InputFileUpload{Filename: fileName, Data: bytes.NewReader(videoBytes)}, caption); sendErr != nil {
 							log.Printf("Failed to send generation video bytes: %v", sendErr)
-							b.sendText(chatID, truncate(baseText+"\n\n🎬 Видео: "+output, 3800))
+							b.sendHTMLText(chatID, truncate(baseText+"\n\n🎬 <a href=\""+output+"\">Видео (открыть)</a>", 3800))
 						}
 					} else {
 						log.Printf("Failed to download generation video url: %v", dlErr)
-						b.sendText(chatID, truncate(baseText+"\n\n🎬 Видео: "+output, 3800))
+						b.sendHTMLText(chatID, truncate(baseText+"\n\n🎬 <a href=\""+output+"\">Видео (открыть)</a>", 3800))
 					}
 				}
 				return
 			}
 
 			if _, err := b.sendPhoto(chatID, &tgmodels.InputFileString{Data: output}, caption, "HTML", animateMarkup); err != nil {
-				log.Printf("Failed to send generation photo by URL: %v", err)
+				log.Printf("Failed to send generation photo by URL (url=%s): %v", output, err)
 				if photoBytes, fileName, dlErr := downloadFileToBytes(output, "png"); dlErr == nil {
 					if _, sendErr := b.sendPhoto(chatID, &tgmodels.InputFileUpload{Filename: fileName, Data: bytes.NewReader(photoBytes)}, caption, "HTML", animateMarkup); sendErr != nil {
 						log.Printf("Failed to send generation photo bytes: %v", sendErr)
-						b.sendText(chatID, truncate(baseText+"\n\n🖼️ Результат недоступен", 3800))
+						b.sendHTMLText(chatID, truncate(baseText+"\n\n🖼️ <a href=\""+output+"\">Результат (открыть)</a>", 3800))
 					}
 				} else {
-					log.Printf("Failed to download generation photo url: %v", dlErr)
-					b.sendText(chatID, truncate(baseText+"\n\n🖼️ Результат недоступен", 3800))
+					log.Printf("Failed to download generation photo url (url=%s): %v", output, dlErr)
+					b.sendHTMLText(chatID, truncate(baseText+"\n\n🖼️ <a href=\""+output+"\">Результат (открыть)</a>", 3800))
 				}
 			}
 			return
 		}
 
 		// Иной формат — отправляем текстом без ссылки
-		b.sendText(chatID, truncate(baseText+"\n\n🖼️ Результат недоступен", 3800))
+		b.sendHTMLText(chatID, truncate(baseText+"\n\n🖼️ Результат недоступен", 3800))
 		return
 	}
 
@@ -6426,6 +6426,15 @@ func (b *Bot) sendText(chatID int64, text string) {
 	msg := newMessageConfig(chatID, text)
 	if _, err := b.sendMsg(msg); err != nil {
 		log.Printf("Failed to send message: %v", err)
+	}
+}
+
+// sendHTMLText отправляет HTML-сообщение (с поддержкой tg-emoji и других тегов)
+func (b *Bot) sendHTMLText(chatID int64, text string) {
+	msg := newMessageConfig(chatID, text)
+	msg.ParseMode = "HTML"
+	if _, err := b.sendMsg(msg); err != nil {
+		log.Printf("Failed to send HTML message: %v", err)
 	}
 }
 
