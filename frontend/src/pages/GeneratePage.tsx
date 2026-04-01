@@ -19,7 +19,8 @@ interface Model {
 
 interface MediaOutput {
   url: string
-  type: string // "audio" | "video" | "image"
+  urls?: string[] // Несколько файлов (2 песни Suno)
+  type: string    // "audio" | "video" | "image"
   title?: string
   duration?: string
   thumbnail?: string
@@ -968,20 +969,30 @@ export function GeneratePage() {
 
                 // Аудио (музыка)
                 if (modelType === 'music' || mediaType === 'audio' || outputUrl.includes('.mp3') || outputUrl.includes('audio')) {
+                  const audioUrls = currentGeneration.media_output?.urls && currentGeneration.media_output.urls.length > 0
+                    ? currentGeneration.media_output.urls
+                    : [outputUrl]
                   return (
-                    <div className="w-full space-y-3">
+                    <div className="w-full space-y-4">
                       {currentGeneration.media_output?.title && (
                         <p className="text-sm font-medium text-white/70 px-1">{currentGeneration.media_output.title}</p>
                       )}
-                      <div className="rounded-xl border border-white/10 bg-white/[0.03] p-4">
-                        <audio controls className="w-full" src={outputUrl}>
-                          Ваш браузер не поддерживает аудио.
-                        </audio>
-                      </div>
-                      <a href={outputUrl} target="_blank" rel="noopener noreferrer"
-                        className="inline-flex items-center gap-2 text-xs text-primary hover:underline px-1">
-                        Скачать
-                      </a>
+                      {audioUrls.map((url, i) => (
+                        <div key={i} className="space-y-1">
+                          {audioUrls.length > 1 && (
+                            <p className="text-xs text-white/40 px-1">Вариант {i + 1}</p>
+                          )}
+                          <div className="rounded-xl border border-white/10 bg-white/[0.03] p-4">
+                            <audio controls className="w-full" src={url}>
+                              Ваш браузер не поддерживает аудио.
+                            </audio>
+                          </div>
+                          <a href={url} target="_blank" rel="noopener noreferrer"
+                            className="inline-flex items-center gap-2 text-xs text-primary hover:underline px-1">
+                            Скачать вариант {i + 1}
+                          </a>
+                        </div>
+                      ))}
                     </div>
                   )
                 }

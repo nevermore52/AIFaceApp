@@ -10,6 +10,7 @@ import (
 	"net/http"
 	"os"
 	"strings"
+	"sync"
 	"time"
 
 	"telegram-ai-face-bot/web/internal/kieapi"
@@ -30,6 +31,10 @@ type WebGenerationService struct {
 	callbackURL  string
 	httpClient   *http.Client
 	quotaService QuotaService
+	// Suno: накапливаем 2 песни перед завершением
+	sunoMu       sync.Mutex
+	sunoPartials map[int64][]string    // genID -> полученные audio URLs
+	sunoTimers   map[int64]*time.Timer // genID -> 6-мин таймер фоллбека
 }
 
 func NewWebGenerationService(db *sql.DB, kieClient *kieapi.Client, callbackURL string, quotaService QuotaService) *WebGenerationService {
@@ -39,18 +44,21 @@ func NewWebGenerationService(db *sql.DB, kieClient *kieapi.Client, callbackURL s
 		callbackURL:  callbackURL,
 		httpClient:   &http.Client{Timeout: 30 * time.Second},
 		quotaService: quotaService,
+		sunoPartials: make(map[int64][]string),
+		sunoTimers:   make(map[int64]*time.Timer),
 	}
 }
 
 type MediaOutput struct {
-	URL       string `json:"url"`
-	Type      string `json:"type"` // "audio", "video", "image"
-	Title     string `json:"title,omitempty"`
-	Duration  string `json:"duration,omitempty"`
-	Thumbnail string `json:"thumbnail,omitempty"`
-	Preview   string `json:"preview,omitempty"`
-	MimeType  string `json:"mime_type,omitempty"`
-	Size      int64  `json:"size,omitempty"`
+	URL       string   `json:"url"`
+	URLs      []string `json:"urls,omitempty"` // Несколько файлов (например, 2 песни Suno)
+	Type      string   `json:"type"`           // "audio", "video", "image"
+	Title     string   `json:"title,omitempty"`
+	Duration  string   `json:"duration,omitempty"`
+	Thumbnail string   `json:"thumbnail,omitempty"`
+	Preview   string   `json:"preview,omitempty"`
+	MimeType  string   `json:"mime_type,omitempty"`
+	Size      int64    `json:"size,omitempty"`
 }
 
 type GenerationRequest struct {
@@ -709,11 +717,9 @@ func (s *WebGenerationService) HandleCallback(payload kieapi.CallbackPayload) er
 }
 
 func (s *WebGenerationService) HandleSunoCallback(payload map[string]any) error {
-	// Log the raw payload
 	payloadJSON, _ := json.Marshal(payload)
 	log.Printf("HandleSunoCallback received: %s", string(payloadJSON))
 
-	// Извлекаем taskID из payload
 	taskID := findStringByKeys(payload, "taskId", "task_id", "id")
 	if taskID == "" {
 		log.Printf("ERROR: callback missing taskId. Payload keys: %v", getMapKeys(payload))
@@ -728,7 +734,7 @@ func (s *WebGenerationService) HandleSunoCallback(payload map[string]any) error 
 	}
 	log.Printf("Found generation request: id=%d", genReq.ID)
 
-	// Проверяем статус
+	// Проверяем статус: ошибка — завершаем сразу, не ждём 2 песни
 	status := findStringByKeys(payload, "status", "state")
 	log.Printf("Status from callback: %s", status)
 	if status != "" && status != "success" && status != "completed" && status != "succeeded" {
@@ -737,7 +743,20 @@ func (s *WebGenerationService) HandleSunoCallback(payload map[string]any) error 
 			reason = fmt.Sprintf("status=%s", status)
 		}
 		log.Printf("Generation failed with status %s: %s", status, reason)
+		s.sunoMu.Lock()
+		delete(s.sunoPartials, genReq.ID)
+		if t, ok := s.sunoTimers[genReq.ID]; ok {
+			t.Stop()
+			delete(s.sunoTimers, genReq.ID)
+		}
+		s.sunoMu.Unlock()
 		return s.updateStatus(genReq.ID, "failed", reason)
+	}
+
+	// Если генерация уже завершена — игнорируем дублирующийся callback
+	if genReq.Status == "completed" || genReq.Status == "failed" {
+		log.Printf("Suno callback ignored: genID=%d already %s", genReq.ID, genReq.Status)
+		return nil
 	}
 
 	// Извлекаем URL аудио
@@ -760,10 +779,64 @@ func (s *WebGenerationService) HandleSunoCallback(payload map[string]any) error 
 		return s.updateStatus(genReq.ID, "failed", "callback missing audio URL")
 	}
 
-	log.Printf("Suno callback processed: taskID=%s audioURL=%s, updating request=%d", taskID, audioURL, genReq.ID)
-	result := s.completeRequest(genReq.ID, audioURL)
-	log.Printf("completeRequest result: %v", result)
-	return result
+	log.Printf("Suno callback: genID=%d got audioURL=%s", genReq.ID, audioURL)
+
+	s.sunoMu.Lock()
+	urls := append(s.sunoPartials[genReq.ID], audioURL)
+	s.sunoPartials[genReq.ID] = urls
+
+	if len(urls) >= 2 {
+		// Получили обе песни — останавливаем таймер и завершаем
+		if t, ok := s.sunoTimers[genReq.ID]; ok {
+			t.Stop()
+			delete(s.sunoTimers, genReq.ID)
+		}
+		delete(s.sunoPartials, genReq.ID)
+		s.sunoMu.Unlock()
+		log.Printf("Suno genID=%d: got 2 songs, completing", genReq.ID)
+		return s.completeSunoGeneration(genReq.ID, genReq.Prompt, urls)
+	}
+
+	// Первая песня — запускаем 6-минутный фоллбек если ещё не запущен
+	if _, exists := s.sunoTimers[genReq.ID]; !exists {
+		genID := genReq.ID
+		genPrompt := genReq.Prompt
+		t := time.AfterFunc(6*time.Minute, func() {
+			s.sunoMu.Lock()
+			partialURLs := s.sunoPartials[genID]
+			delete(s.sunoPartials, genID)
+			delete(s.sunoTimers, genID)
+			s.sunoMu.Unlock()
+			if len(partialURLs) > 0 {
+				log.Printf("Suno genID=%d: 6-min timeout, completing with %d song(s)", genID, len(partialURLs))
+				_ = s.completeSunoGeneration(genID, genPrompt, partialURLs)
+			}
+		})
+		s.sunoTimers[genReq.ID] = t
+		log.Printf("Suno genID=%d: got 1st song, waiting 6 min for 2nd", genReq.ID)
+	}
+	s.sunoMu.Unlock()
+	return nil
+}
+
+// completeSunoGeneration завершает генерацию Suno с одной или двумя песнями
+func (s *WebGenerationService) completeSunoGeneration(id int64, prompt string, urls []string) error {
+	title := "Музыка"
+	if prompt != "" {
+		n := len(prompt)
+		if n > 50 {
+			n = 50
+		}
+		title = fmt.Sprintf("Музыка: %s", prompt[:n])
+	}
+	mediaOutput := &MediaOutput{
+		URL:      urls[0],
+		URLs:     urls,
+		Type:     "audio",
+		Title:    title,
+		MimeType: "audio/mpeg",
+	}
+	return s.completeGenerationWithMedia(id, urls[0], mediaOutput)
 }
 
 func (s *WebGenerationService) GetByID(id int64) (*GenerationRequest, error) {
