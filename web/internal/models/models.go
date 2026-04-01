@@ -24,6 +24,7 @@ type User struct {
 	CreatedAt             time.Time  `json:"created_at" db:"created_at"`
 	UpdatedAt             time.Time  `json:"updated_at" db:"updated_at"`
 	IsBlocked             bool       `json:"is_blocked" db:"is_blocked"`
+	ChannelBonusGiven     bool       `json:"channel_bonus_given" db:"channel_bonus_given"`
 }
 
 type UserQuota struct {

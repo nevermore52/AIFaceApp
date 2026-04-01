@@ -68,7 +68,7 @@ func New(cfg *config.Config, db *sql.DB) *Server {
 	var webGenerationService *services.WebGenerationService
 	if cfg.KieAPIKey != "" {
 		kieClient := kieapi.NewClient(cfg.KieAPIKey, cfg.KieAPIBaseURL)
-		webGenerationService = services.NewWebGenerationService(db, kieClient, cfg.KieCallbackURL, userService)
+		webGenerationService = services.NewWebGenerationService(db, kieClient, cfg.KieCallbackURL, userService, cfg.UploadDir)
 	}
 
 	// Web payment service (YooKassa)
@@ -83,7 +83,7 @@ func New(cfg *config.Config, db *sql.DB) *Server {
 
 	authTokenRepo := repository.NewAuthTokenRepository(db)
 	authHandler := handlers.NewAuthHandler(authService, cfg, authTokenRepo)
-	userHandler := handlers.NewUserHandler(userService)
+	userHandler := handlers.NewUserHandler(userService, cfg.TelegramBotToken)
 	generationHandler := handlers.NewGenerationHandler(generationService, webGenerationService, cfg.UploadDir, cfg.WebBaseURL)
 	paymentHandler := handlers.NewPaymentHandler(paymentService, webPaymentService)
 	adminHandler := handlers.NewAdminHandler(userService, generationService, paymentService)
@@ -124,6 +124,7 @@ func New(cfg *config.Config, db *sql.DB) *Server {
 			protected.GET("/me", userHandler.GetCurrentUser)
 			protected.PUT("/me", userHandler.UpdateProfile)
 			protected.GET("/me/quota", userHandler.GetQuota)
+			protected.POST("/me/channel-bonus/claim", userHandler.ClaimChannelBonus)
 			protected.GET("/me/history", generationHandler.GetUserHistory)
 
 			protected.GET("/generations", generationHandler.GetUserGenerations)

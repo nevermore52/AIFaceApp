@@ -1,6 +1,10 @@
 package services
 
 import (
+	"encoding/json"
+	"fmt"
+	"net/http"
+
 	"telegram-ai-face-bot/web/internal/models"
 	"telegram-ai-face-bot/web/internal/repository"
 )
@@ -59,4 +63,54 @@ func (s *UserService) GetStats() (map[string]interface{}, error) {
 
 func (s *UserService) IsAdmin(userID int64) (bool, error) {
 	return s.userRepo.IsAdmin(userID)
+}
+
+// ClaimChannelBonus проверяет подписку на канал через Telegram Bot API
+// и выдаёт бонусные запросы если ещё не выдавались.
+// Возвращает (subscribed, alreadyClaimed, error).
+func (s *UserService) ClaimChannelBonus(user *models.User, botToken string) (subscribed bool, alreadyClaimed bool, err error) {
+	if user.ChannelBonusGiven {
+		return false, true, nil
+	}
+	if user.TelegramID == nil {
+		return false, false, fmt.Errorf("telegram not linked")
+	}
+
+	url := fmt.Sprintf("https://api.telegram.org/bot%s/getChatMember?chat_id=@aifaceapps&user_id=%d", botToken, *user.TelegramID)
+	resp, err := http.Get(url)
+	if err != nil {
+		return false, false, fmt.Errorf("telegram api error: %w", err)
+	}
+	defer resp.Body.Close()
+
+	var result struct {
+		OK     bool `json:"ok"`
+		Result struct {
+			Status string `json:"status"`
+		} `json:"result"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+		return false, false, fmt.Errorf("parse telegram response: %w", err)
+	}
+
+	status := result.Result.Status
+	subscribed = status == "member" || status == "administrator" || status == "creator"
+	if !subscribed {
+		return false, false, nil
+	}
+
+	// Выдаём бонус: +2 к каждой категории
+	for _, cat := range []models.QuotaCategory{
+		models.QuotaCategoryImage,
+		models.QuotaCategoryText,
+		models.QuotaCategoryMusic,
+		models.QuotaCategoryVideo,
+	} {
+		_ = s.quotaRepo.AddExtra(*user.TelegramID, cat, 2)
+	}
+
+	if err := s.userRepo.MarkChannelBonusGiven(user.ID); err != nil {
+		return true, false, fmt.Errorf("mark bonus given: %w", err)
+	}
+	return true, false, nil
 }

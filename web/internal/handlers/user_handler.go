@@ -10,11 +10,12 @@ import (
 )
 
 type UserHandler struct {
-	userService *services.UserService
+	userService  *services.UserService
+	botToken     string
 }
 
-func NewUserHandler(userService *services.UserService) *UserHandler {
-	return &UserHandler{userService: userService}
+func NewUserHandler(userService *services.UserService, botToken string) *UserHandler {
+	return &UserHandler{userService: userService, botToken: botToken}
 }
 
 func (h *UserHandler) GetCurrentUser(c *gin.Context) {
@@ -77,6 +78,25 @@ func (h *UserHandler) UpdateProfile(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusOK, u)
+}
+
+func (h *UserHandler) ClaimChannelBonus(c *gin.Context) {
+	user, exists := c.Get("user")
+	if !exists {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "Not authenticated"})
+		return
+	}
+	u := user.(*models.User)
+
+	subscribed, alreadyClaimed, err := h.userService.ClaimChannelBonus(u, h.botToken)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{
+		"subscribed":     subscribed,
+		"already_claimed": alreadyClaimed,
+	})
 }
 
 func (h *UserHandler) GetQuota(c *gin.Context) {

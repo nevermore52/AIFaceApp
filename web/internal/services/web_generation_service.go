@@ -41,8 +41,8 @@ type WebGenerationService struct {
 	chatContexts map[string][]map[string]string // "userID:model" -> messages
 }
 
-func NewWebGenerationService(db *sql.DB, kieClient *kieapi.Client, callbackURL string, quotaService QuotaService) *WebGenerationService {
-	return &WebGenerationService{
+func NewWebGenerationService(db *sql.DB, kieClient *kieapi.Client, callbackURL string, quotaService QuotaService, uploadDir string) *WebGenerationService {
+	s := &WebGenerationService{
 		db:           db,
 		kieClient:    kieClient,
 		callbackURL:  callbackURL,
@@ -52,6 +52,10 @@ func NewWebGenerationService(db *sql.DB, kieClient *kieapi.Client, callbackURL s
 		sunoTimers:   make(map[int64]*time.Timer),
 		chatContexts: make(map[string][]map[string]string),
 	}
+	if uploadDir != "" {
+		go s.runUploadCleanup(uploadDir, 48*time.Hour, time.Hour)
+	}
+	return s
 }
 
 type MediaOutput struct {
@@ -1473,6 +1477,34 @@ func (s *WebGenerationService) SaveUploadedFile(file io.Reader, originalFilename
 	url := strings.TrimRight(baseURL, "/") + "/api/uploads/" + filename
 	log.Printf("Image saved locally: %s -> %s", fullPath, url)
 	return url, nil
+}
+
+// runUploadCleanup periodically deletes uploaded files older than maxAge.
+func (s *WebGenerationService) runUploadCleanup(uploadDir string, maxAge, interval time.Duration) {
+	ticker := time.NewTicker(interval)
+	defer ticker.Stop()
+	for range ticker.C {
+		entries, err := os.ReadDir(uploadDir)
+		if err != nil {
+			continue
+		}
+		cutoff := time.Now().Add(-maxAge)
+		for _, e := range entries {
+			if e.IsDir() {
+				continue
+			}
+			info, err := e.Info()
+			if err != nil {
+				continue
+			}
+			if info.ModTime().Before(cutoff) {
+				path := uploadDir + "/" + e.Name()
+				if err := os.Remove(path); err == nil {
+					log.Printf("Deleted expired upload: %s", path)
+				}
+			}
+		}
+	}
 }
 
 func generateUUID() (string, error) {

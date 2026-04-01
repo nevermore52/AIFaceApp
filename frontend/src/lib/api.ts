@@ -103,6 +103,8 @@ export const userApi = {
   getQuota: () => api.get('/me/quota'),
   getHistory: (limit = 10, offset = 0) =>
     api.get(`/me/history?limit=${limit}&offset=${offset}`),
+  claimChannelBonus: () =>
+    api.post<{ subscribed: boolean; already_claimed: boolean }>('/me/channel-bonus/claim'),
 }
 
 export interface GenerationCreateParams {
