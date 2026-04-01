@@ -477,7 +477,7 @@ func (b *Bot) sendStartTrialMenu(chatID int64) {
 	kb := newInlineKeyboardMarkup(
 		newInlineKeyboardRow(btn),
 	)
-	text := fmt.Sprintf("Чтобы получить 1 пробную генерацию фото — подпишитесь на канал %s\nи нажмите «Проверить подписку»\n%s", requiredChannelUsername, requiredChannelLink)
+	text := fmt.Sprintf("Чтобы получить 2 пробных генераций фото — подпишитесь на канал %s\nи нажмите «Проверить подписку»\n%s", requiredChannelUsername, requiredChannelLink)
 	msg := newMessageConfig(chatID, text)
 	msg.ReplyMarkup = kb
 	if _, err := b.sendMsg(msg); err != nil {
@@ -4164,7 +4164,7 @@ func (b *Bot) sendChannelTrialMenu(chatID int64) {
 	kb := newInlineKeyboardMarkup(
 		newInlineKeyboardRow(checkBtn),
 	)
-	text := "Подпишитесь на канал t.me/AIFaceApps, чтобы получить 1 пробную генерацию фото.\nПосле подписки нажмите «Проверить подписку» и попробуйте снова."
+	text := "Подпишитесь на канал t.me/AIFaceApps, чтобы получить 2 пробных генераций фото.\nПосле подписки нажмите «Проверить подписку» и попробуйте снова."
 	msg := newMessageConfig(chatID, text)
 	msg.ReplyMarkup = kb
 	if _, err := b.sendMsg(msg); err != nil {
