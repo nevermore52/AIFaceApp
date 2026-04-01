@@ -10,6 +10,7 @@ export function Layout() {
 
   const navigation = [
     { name: 'Главная', href: '/', icon: Home },
+    { name: 'Покупка', href: '/payments', icon: CreditCard },
     { name: 'Создать', href: '/generate', icon: Sparkles, isPrimary: true },
     { name: 'История', href: '/history', icon: History },
     { name: 'Профиль', href: '/profile', icon: User },
@@ -41,18 +42,6 @@ export function Layout() {
                   <span>{item.name}</span>
                 </Link>
               ))}
-              <Link
-                to="/payments"
-                className={cn(
-                  'flex items-center gap-2 px-4 py-2 rounded-full text-sm font-medium transition-all duration-200',
-                  location.pathname === '/payments'
-                    ? 'bg-white/10 text-white'
-                    : 'text-white/60 hover:text-white hover:bg-white/5'
-                )}
-              >
-                <CreditCard className="h-4 w-4" />
-                <span>Оплата</span>
-              </Link>
             </nav>
           </div>
           
