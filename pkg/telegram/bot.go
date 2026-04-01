@@ -4195,8 +4195,8 @@ func (b *Bot) checkAndGrantChannelTrial(userID int64) {
 		return
 	}
 
-	// Выдаём пробный запрос
-	if err := b.userService.AddExtraQuota(userID, models.QuotaCategoryImage, 1); err != nil {
+	// Выдаём 2 пробных запроса
+	if err := b.userService.AddExtraQuota(userID, models.QuotaCategoryImage, 2); err != nil {
 		log.Printf("checkAndGrantChannelTrial AddExtraQuota error: %v", err)
 		return
 	}
@@ -4340,7 +4340,7 @@ func (b *Bot) processGeneration(chatID int64, userID int64, photoURLs []string, 
 	// Списываем запросы согласно выбранной модели
 	primaryUsed, extraUsed, err := b.userService.ConsumeQuotaDetailed(userID, models.QuotaCategoryImage, requestCost)
 	if err != nil {
-		// 1 пробная генерация фото за подписку на канал (только 1 раз)
+		// 2 пробных генерации фото за подписку на канал (только 1 раз)
 		// Выдача происходит только по кнопке "Проверить подписку" (trial:check)
 		if requestCost == 1 {
 			claimed, cErr := b.userService.HasClaimedChannelTrial(userID)
@@ -4355,7 +4355,7 @@ func (b *Bot) processGeneration(chatID int64, userID int64, photoURLs []string, 
 					b.sendChannelTrialMenu(chatID)
 					return
 				}
-				b.sendText(chatID, "Чтобы получить 1 пробную генерацию, нажмите «Проверить подписку» в /start")
+				b.sendText(chatID, "Чтобы получить 2 пробных генерации, нажмите «Проверить подписку» в /start")
 			}
 		}
 		b.sendInsufficientQuotaMessage(chatID, models.QuotaCategoryImage, requestCost, err)
