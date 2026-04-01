@@ -35,6 +35,9 @@ type WebGenerationService struct {
 	sunoMu       sync.Mutex
 	sunoPartials map[int64][]string    // genID -> полученные audio URLs
 	sunoTimers   map[int64]*time.Timer // genID -> 6-мин таймер фоллбека
+	// Текстовые модели: серверный контекст диалога
+	chatMu      sync.Mutex
+	chatContexts map[string][]map[string]string // "userID:model" -> messages
 }
 
 func NewWebGenerationService(db *sql.DB, kieClient *kieapi.Client, callbackURL string, quotaService QuotaService) *WebGenerationService {
@@ -46,6 +49,7 @@ func NewWebGenerationService(db *sql.DB, kieClient *kieapi.Client, callbackURL s
 		quotaService: quotaService,
 		sunoPartials: make(map[int64][]string),
 		sunoTimers:   make(map[int64]*time.Timer),
+		chatContexts: make(map[string][]map[string]string),
 	}
 }
 
@@ -624,14 +628,31 @@ func (s *WebGenerationService) processMusicGeneration(genReq *GenerationRequest,
 func (s *WebGenerationService) processTextGeneration(genReq *GenerationRequest, req CreateGenerationRequest) {
 	_ = s.updateStatus(genReq.ID, "processing", "")
 
-	// Формируем сообщения для chat API (используем историю если передана)
+	ctxKey := fmt.Sprintf("%d:%s", genReq.UserID, req.Model)
+
+	// Если фронтенд прислал полную историю (2+ сообщений) — используем её и сохраняем как новый контекст.
+	// Если прислано только 1 сообщение или ничего — подгружаем серверный контекст.
 	var messages []map[string]string
-	if len(req.Messages) > 0 {
+	if len(req.Messages) >= 2 {
+		// Фронтенд прислал историю — используем её как есть
 		messages = req.Messages
+		// Синхронизируем серверный контекст (без последнего user-сообщения, оно добавится после ответа)
+		s.chatMu.Lock()
+		s.chatContexts[ctxKey] = req.Messages[:len(req.Messages)-1]
+		s.chatMu.Unlock()
 	} else {
-		messages = []map[string]string{
-			{"role": "user", "content": req.Prompt},
+		// Загружаем серверный контекст и добавляем текущее сообщение
+		s.chatMu.Lock()
+		stored := s.chatContexts[ctxKey]
+		s.chatMu.Unlock()
+
+		userMsg := req.Prompt
+		if len(req.Messages) == 1 {
+			if c, ok := req.Messages[0]["content"]; ok && c != "" {
+				userMsg = c
+			}
 		}
+		messages = append(stored, map[string]string{"role": "user", "content": userMsg})
 	}
 
 	response, err := s.generateChat(req.Model, messages)
@@ -652,6 +673,15 @@ func (s *WebGenerationService) processTextGeneration(genReq *GenerationRequest, 
 		}
 		return
 	}
+
+	// Сохраняем контекст диалога (последние 20 сообщений = 10 ходов)
+	s.chatMu.Lock()
+	updated := append(messages, map[string]string{"role": "assistant", "content": response})
+	if len(updated) > 20 {
+		updated = updated[len(updated)-20:]
+	}
+	s.chatContexts[ctxKey] = updated
+	s.chatMu.Unlock()
 
 	_ = s.completeGeneration(genReq.ID, response)
 }
@@ -759,31 +789,37 @@ func (s *WebGenerationService) HandleSunoCallback(payload map[string]any) error 
 		return nil
 	}
 
-	// Извлекаем URL аудио
-	audioURL := findStringByKeys(
-		payload,
-		"audio_url", "audioUrl", "audio",
-		"audioUrlHigh", "audio_url_high", "audio_high", "audio_high_url",
-		"download_url", "downloadUrl",
-		"result_url", "resultUrl",
-		"streaming_url", "streamingUrl",
-		"preview_url", "previewUrl",
-		"url",
-	)
-	if audioURL == "" {
-		audioURL = findFirstURL(payload)
+	// Извлекаем ВСЕ аудио-URL из payload (source_audio_url и другие поля)
+	newURLs := findAllAudioURLsFromPayload(payload)
+	if len(newURLs) == 0 {
+		// Последний шанс — findFirstURL
+		if u := findFirstURL(payload); u != "" {
+			newURLs = []string{u}
+		}
 	}
 
-	if audioURL == "" {
+	if len(newURLs) == 0 {
 		log.Printf("ERROR: callback missing audio URL. Payload keys: %v", getMapKeys(payload))
 		return s.updateStatus(genReq.ID, "failed", "callback missing audio URL")
 	}
 
-	log.Printf("Suno callback: genID=%d got audioURL=%s", genReq.ID, audioURL)
+	log.Printf("Suno callback: genID=%d got %d audio URL(s): %v", genReq.ID, len(newURLs), newURLs)
 
 	s.sunoMu.Lock()
-	urls := append(s.sunoPartials[genReq.ID], audioURL)
-	s.sunoPartials[genReq.ID] = urls
+	existing := s.sunoPartials[genReq.ID]
+	// Добавляем только уникальные URL
+	seen := make(map[string]bool)
+	for _, u := range existing {
+		seen[u] = true
+	}
+	for _, u := range newURLs {
+		if !seen[u] {
+			seen[u] = true
+			existing = append(existing, u)
+		}
+	}
+	s.sunoPartials[genReq.ID] = existing
+	urls := existing
 
 	if len(urls) >= 2 {
 		// Получили обе песни — останавливаем таймер и завершаем
@@ -793,11 +829,11 @@ func (s *WebGenerationService) HandleSunoCallback(payload map[string]any) error 
 		}
 		delete(s.sunoPartials, genReq.ID)
 		s.sunoMu.Unlock()
-		log.Printf("Suno genID=%d: got 2 songs, completing", genReq.ID)
+		log.Printf("Suno genID=%d: got %d songs, completing", genReq.ID, len(urls))
 		return s.completeSunoGeneration(genReq.ID, genReq.Prompt, urls)
 	}
 
-	// Первая песня — запускаем 6-минутный фоллбек если ещё не запущен
+	// Ещё не хватает песен — запускаем 6-минутный фоллбек если ещё не запущен
 	if _, exists := s.sunoTimers[genReq.ID]; !exists {
 		genID := genReq.ID
 		genPrompt := genReq.Prompt
@@ -813,7 +849,7 @@ func (s *WebGenerationService) HandleSunoCallback(payload map[string]any) error 
 			}
 		})
 		s.sunoTimers[genReq.ID] = t
-		log.Printf("Suno genID=%d: got 1st song, waiting 6 min for 2nd", genReq.ID)
+		log.Printf("Suno genID=%d: got %d song(s) so far, waiting 6 min for more", genReq.ID, len(urls))
 	}
 	s.sunoMu.Unlock()
 	return nil
@@ -1044,6 +1080,51 @@ func getMapKeys(m any) []string {
 	return nil
 }
 
+// findAllStringsByKey собирает ВСЕ значения указанного ключа из вложенной структуры
+func findAllStringsByKey(v any, key string) []string {
+	var results []string
+	switch val := v.(type) {
+	case map[string]any:
+		if raw, ok := val[key]; ok {
+			if s, ok2 := raw.(string); ok2 && s != "" {
+				results = append(results, s)
+			}
+		}
+		for k, vv := range val {
+			if k == key {
+				continue // уже обработали выше
+			}
+			results = append(results, findAllStringsByKey(vv, key)...)
+		}
+	case []any:
+		for _, vv := range val {
+			results = append(results, findAllStringsByKey(vv, key)...)
+		}
+	}
+	return results
+}
+
+// findAllAudioURLsFromPayload извлекает все аудио-URL из callback-payload Suno
+func findAllAudioURLsFromPayload(payload map[string]any) []string {
+	audioKeys := []string{
+		"source_audio_url", "audio_url", "audioUrl",
+		"audioUrlHigh", "audio_url_high", "audio_high_url",
+		"download_url", "downloadUrl",
+		"result_url", "resultUrl",
+	}
+	seen := make(map[string]bool)
+	var result []string
+	for _, k := range audioKeys {
+		for _, u := range findAllStringsByKey(payload, k) {
+			if strings.HasPrefix(u, "http") && !seen[u] {
+				seen[u] = true
+				result = append(result, u)
+			}
+		}
+	}
+	return result
+}
+
 func findStringByKeys(v any, keys ...string) string {
 	switch val := v.(type) {
 	case map[string]any:
@@ -1156,6 +1237,7 @@ func (s *WebGenerationService) generateMusicSuno(prompt, vocalGender string, ins
 	taskID := findStringByKeys(generic, "taskId", "task_id")
 	audio := findStringByKeys(
 		generic,
+		"source_audio_url",
 		"audio_url", "audioUrl", "audio",
 		"audioUrlHigh", "audio_url_high", "audio_high", "audio_high_url",
 		"download_url", "downloadUrl",
