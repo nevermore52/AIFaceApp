@@ -26,6 +26,8 @@ type Config struct {
 
 	FrontendURL string
 	Environment string
+	WebBaseURL  string
+	UploadDir   string
 
 	// KieAPI for image/video generation
 	KieAPIKey      string
@@ -63,6 +65,8 @@ func Load() (*Config, error) {
 
 		FrontendURL: getEnv("FRONTEND_URL", "http://localhost:5173"),
 		Environment: getEnv("ENVIRONMENT", "development"),
+		WebBaseURL:  getEnv("WEB_BASE_URL", ""),
+		UploadDir:   getEnv("UPLOAD_DIR", "/app/uploads"),
 
 		KieAPIKey:      getEnv("KIEAPI_API_KEY", ""),
 		KieAPIBaseURL:  getEnv("KIEAPI_BASE_URL", "https://api.kie.ai"),

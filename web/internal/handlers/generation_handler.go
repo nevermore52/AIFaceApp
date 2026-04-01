@@ -18,6 +18,8 @@ import (
 type GenerationHandler struct {
 	generationService    *services.GenerationService
 	webGenerationService *services.WebGenerationService
+	uploadDir            string
+	webBaseURL           string
 }
 
 func min(a, b int) int {
@@ -27,10 +29,12 @@ func min(a, b int) int {
 	return b
 }
 
-func NewGenerationHandler(generationService *services.GenerationService, webGenerationService *services.WebGenerationService) *GenerationHandler {
+func NewGenerationHandler(generationService *services.GenerationService, webGenerationService *services.WebGenerationService, uploadDir, webBaseURL string) *GenerationHandler {
 	return &GenerationHandler{
 		generationService:    generationService,
 		webGenerationService: webGenerationService,
+		uploadDir:            uploadDir,
+		webBaseURL:           webBaseURL,
 	}
 }
 
@@ -376,10 +380,9 @@ func (h *GenerationHandler) UploadImage(c *gin.Context) {
 		return
 	}
 
-	// Use webGenerationService to upload to imgur
-	tempImageURL, err := h.webGenerationService.UploadImageToImgur(file, header.Filename)
+	tempImageURL, err := h.webGenerationService.SaveUploadedFile(file, header.Filename, h.uploadDir, h.webBaseURL)
 	if err != nil {
-		log.Printf("Error uploading image for user %d: %v", u.ID, err)
+		log.Printf("Error saving image for user %d: %v", u.ID, err)
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to upload image"})
 		return
 	}

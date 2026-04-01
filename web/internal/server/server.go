@@ -84,12 +84,15 @@ func New(cfg *config.Config, db *sql.DB) *Server {
 	authTokenRepo := repository.NewAuthTokenRepository(db)
 	authHandler := handlers.NewAuthHandler(authService, cfg, authTokenRepo)
 	userHandler := handlers.NewUserHandler(userService)
-	generationHandler := handlers.NewGenerationHandler(generationService, webGenerationService)
+	generationHandler := handlers.NewGenerationHandler(generationService, webGenerationService, cfg.UploadDir, cfg.WebBaseURL)
 	paymentHandler := handlers.NewPaymentHandler(paymentService, webPaymentService)
 	adminHandler := handlers.NewAdminHandler(userService, generationService, paymentService)
 
 	// Используем middleware с userService для обновления информации о подписке при каждом запросе
 	authMiddleware := middleware.NewAuthMiddlewareWithUserService(authService, userService)
+
+	// Serve uploaded files (local storage, no external dependencies)
+	router.Static("/api/uploads", cfg.UploadDir)
 
 	api := router.Group("/api")
 	{
