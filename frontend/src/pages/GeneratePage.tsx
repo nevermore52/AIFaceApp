@@ -31,6 +31,20 @@ const CATEGORY_LABELS: Record<Category, string> = {
   text: 'Текст',
 }
 
+const CATEGORY_PLACEHOLDERS: Record<Category, string> = {
+  image: 'Опишите, что должно быть на изображении.',
+  video: 'Опишите сцену, которую должна создать нейросеть.',
+  music: 'Опишите, что должно быть в песне: жанр, настроение, тему.',
+  text: 'Введите ваш запрос.',
+}
+
+const CATEGORY_GENERATING_TEXT: Record<Category, string> = {
+  image: 'Нейросеть рисует...',
+  video: 'Нейросеть снимает видео...',
+  music: 'Нейросеть сочиняет...',
+  text: 'Нейросеть думает...',
+}
+
 const CATEGORY_ICONS: Record<Category, any> = {
   image: ImageIcon,
   video: Video,
@@ -598,7 +612,7 @@ export function GeneratePage() {
           <div className="relative">
             <textarea
               className="w-full rounded-xl border border-white/10 bg-white/[0.03] px-3.5 lg:px-4 py-3 lg:py-4 text-sm lg:text-base transition-all focus:border-primary/50 focus:ring-0 hover:bg-white/[0.05] min-h-[80px] lg:min-h-[100px] max-h-[120px] lg:max-h-[150px] resize-none"
-              placeholder="Опишите, что должно быть на изображении."
+              placeholder={CATEGORY_PLACEHOLDERS[selectedCategory]}
               value={prompt}
               onChange={(e: ChangeEvent<HTMLTextAreaElement>) => setPrompt(e.target.value)}
             />
@@ -880,7 +894,7 @@ export function GeneratePage() {
                   <div className="relative">
                     <div className="h-12 w-12 animate-spin rounded-full border-2 border-white/5 border-t-primary" />
                   </div>
-                  <p className="text-sm font-medium text-white/60">Нейросеть рисует...</p>
+                  <p className="text-sm font-medium text-white/60">{CATEGORY_GENERATING_TEXT[selectedCategory]}</p>
                 </div>
               )}
 

@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { BrowserRouter, Routes, Route, Navigate, useLocation } from 'react-router-dom'
 import { useAuthStore } from './store/auth'
-import { authApi } from './lib/api'
+import { authApi, userApi } from './lib/api'
 import { Layout } from './components/Layout'
 import { LoginPage } from './pages/LoginPage'
 import { DashboardPage } from './pages/DashboardPage'
@@ -25,13 +25,14 @@ function ProtectedRoute({ children }: { children: React.ReactNode }) {
 }
 
 function TelegramWebAppAuth({ children }: { children: React.ReactNode }) {
-  const { isAuthenticated, setAuth } = useAuthStore()
+  const { isAuthenticated, setAuth, updateUser } = useAuthStore()
   const [isChecking, setIsChecking] = useState(true)
 
   useEffect(() => {
     const checkTelegramAuth = async () => {
-      // Skip if already authenticated
+      // If already authenticated — refresh user data to get actual subscription
       if (isAuthenticated) {
+        userApi.getMe().then((data) => updateUser(data as Parameters<typeof updateUser>[0])).catch(() => {})
         setIsChecking(false)
         return
       }
