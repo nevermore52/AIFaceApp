@@ -17,10 +17,20 @@ interface Model {
   token_cost: number
 }
 
+interface MediaOutput {
+  url: string
+  type: string // "audio" | "video" | "image"
+  title?: string
+  duration?: string
+  thumbnail?: string
+}
+
 interface Generation {
   id: number
   status: string
+  model_type?: string
   output?: string
+  media_output?: MediaOutput
   error_msg?: string
 }
 
@@ -898,24 +908,71 @@ export function GeneratePage() {
                 </div>
               )}
 
-              {currentGeneration?.status === 'completed' && currentGeneration.output && (
-                <div className="w-full space-y-4">
-                  <div className="relative group rounded-xl overflow-hidden border border-white/10">
-                    {currentGeneration.output.includes('.mp4') || currentGeneration.output.includes('video') ? (
-                      <video src={currentGeneration.output} controls className="w-full h-auto" />
-                    ) : (
-                      <img src={currentGeneration.output} alt="Generated" className="w-full h-auto" />
-                    )}
-                    <div className="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-3">
-                      <Button asChild variant="secondary" size="sm" className="rounded-full">
-                        <a href={currentGeneration.output} target="_blank" rel="noopener noreferrer">
-                          Открыть
-                        </a>
-                      </Button>
+              {currentGeneration?.status === 'completed' && (currentGeneration.output || currentGeneration.media_output) && (() => {
+                const modelType = currentGeneration.model_type || selectedCategory
+                const mediaType = currentGeneration.media_output?.type
+                const outputUrl = currentGeneration.media_output?.url || currentGeneration.output || ''
+
+                // Текстовый результат
+                if (modelType === 'text') {
+                  return (
+                    <div className="w-full">
+                      <div className="rounded-xl border border-white/10 bg-white/[0.03] p-4 text-sm text-white/80 whitespace-pre-wrap leading-relaxed">
+                        {currentGeneration.output}
+                      </div>
+                    </div>
+                  )
+                }
+
+                // Аудио (музыка)
+                if (modelType === 'music' || mediaType === 'audio' || outputUrl.includes('.mp3') || outputUrl.includes('audio')) {
+                  return (
+                    <div className="w-full space-y-3">
+                      {currentGeneration.media_output?.title && (
+                        <p className="text-sm font-medium text-white/70 px-1">{currentGeneration.media_output.title}</p>
+                      )}
+                      <div className="rounded-xl border border-white/10 bg-white/[0.03] p-4">
+                        <audio controls className="w-full" src={outputUrl}>
+                          Ваш браузер не поддерживает аудио.
+                        </audio>
+                      </div>
+                      <a href={outputUrl} target="_blank" rel="noopener noreferrer"
+                        className="inline-flex items-center gap-2 text-xs text-primary hover:underline px-1">
+                        Скачать
+                      </a>
+                    </div>
+                  )
+                }
+
+                // Видео
+                if (modelType === 'video' || mediaType === 'video' || outputUrl.includes('.mp4') || outputUrl.includes('video')) {
+                  return (
+                    <div className="w-full space-y-2">
+                      <div className="rounded-xl overflow-hidden border border-white/10">
+                        <video src={outputUrl} controls className="w-full h-auto" />
+                      </div>
+                      <a href={outputUrl} target="_blank" rel="noopener noreferrer"
+                        className="inline-flex items-center gap-2 text-xs text-primary hover:underline px-1">
+                        Скачать
+                      </a>
+                    </div>
+                  )
+                }
+
+                // Изображение (default)
+                return (
+                  <div className="w-full space-y-2">
+                    <div className="relative group rounded-xl overflow-hidden border border-white/10">
+                      <img src={outputUrl} alt="Generated" className="w-full h-auto" />
+                      <div className="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-3">
+                        <Button asChild variant="secondary" size="sm" className="rounded-full">
+                          <a href={outputUrl} target="_blank" rel="noopener noreferrer">Открыть</a>
+                        </Button>
+                      </div>
                     </div>
                   </div>
-                </div>
-              )}
+                )
+              })()}
 
               {currentGeneration?.status === 'failed' && (
                 <div className="flex flex-col items-center gap-3 text-center p-4">
