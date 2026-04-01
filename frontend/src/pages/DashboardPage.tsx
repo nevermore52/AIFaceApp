@@ -137,7 +137,7 @@ export function DashboardPage() {
           <Send className="h-5 w-5 text-[#229ED9] flex-shrink-0" />
           <div className="flex-1 min-w-0">
             <p className="text-sm font-medium text-white/90">
-              Подпишитесь на канал и получите <span className="text-[#229ED9] font-bold">+2 бонусных запроса</span> в каждой категории
+              Подпишитесь на канал и получите <span className="text-[#229ED9] font-bold">+2 генерации фото</span>
             </p>
             {bonusChecking ? (
               <p className="text-xs text-white/40 mt-0.5 animate-pulse">Проверяем подписку...</p>

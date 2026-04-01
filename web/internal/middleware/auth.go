@@ -12,14 +12,15 @@ import (
 type AuthMiddleware struct {
 	authService *services.AuthService
 	userService *services.UserService
+	botToken    string
 }
 
 func NewAuthMiddleware(authService *services.AuthService) *AuthMiddleware {
 	return &AuthMiddleware{authService: authService}
 }
 
-func NewAuthMiddlewareWithUserService(authService *services.AuthService, userService *services.UserService) *AuthMiddleware {
-	return &AuthMiddleware{authService: authService, userService: userService}
+func NewAuthMiddlewareWithUserService(authService *services.AuthService, userService *services.UserService, botToken string) *AuthMiddleware {
+	return &AuthMiddleware{authService: authService, userService: userService, botToken: botToken}
 }
 
 func (m *AuthMiddleware) RequireAuth() gin.HandlerFunc {
@@ -52,6 +53,12 @@ func (m *AuthMiddleware) RequireAuth() gin.HandlerFunc {
 			if err == nil {
 				user = freshUser
 			}
+		}
+
+		// Асинхронно проверяем подписку на канал и выдаём бонус если ещё не получен
+		if m.userService != nil && m.botToken != "" && !user.ChannelTrialClaimed && user.TelegramID != nil {
+			u := user
+			go func() { m.userService.ClaimChannelBonus(u, m.botToken) }() //nolint:errcheck
 		}
 
 		c.Set("user", user)

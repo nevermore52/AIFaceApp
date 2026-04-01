@@ -89,7 +89,7 @@ func New(cfg *config.Config, db *sql.DB) *Server {
 	adminHandler := handlers.NewAdminHandler(userService, generationService, paymentService)
 
 	// Используем middleware с userService для обновления информации о подписке при каждом запросе
-	authMiddleware := middleware.NewAuthMiddlewareWithUserService(authService, userService)
+	authMiddleware := middleware.NewAuthMiddlewareWithUserService(authService, userService, cfg.TelegramBotToken)
 
 	// Serve uploaded files (local storage, no external dependencies)
 	router.Static("/api/uploads", cfg.UploadDir)
