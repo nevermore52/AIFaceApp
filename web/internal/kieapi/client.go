@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"mime/multipart"
 	"net/http"
 	"strings"
 	"time"
@@ -238,6 +239,70 @@ func (c *Client) CreateVeoTask(req CreateTaskRequest) (string, error) {
 		return "", fmt.Errorf("kieapi veo response missing taskId")
 	}
 	return taskID, nil
+}
+
+// UploadFile uploads image bytes to KieAPI's file storage and returns the hosted URL.
+// This avoids "Image fetch failed" errors when passing third-party image URLs.
+func (c *Client) UploadFile(data []byte, filename string) (string, error) {
+	if c == nil || c.apiKey == "" {
+		return "", fmt.Errorf("kieapi client not configured")
+	}
+
+	var buf bytes.Buffer
+	mw := multipart.NewWriter(&buf)
+	fw, err := mw.CreateFormFile("file", filename)
+	if err != nil {
+		return "", fmt.Errorf("create form file: %w", err)
+	}
+	if _, err = fw.Write(data); err != nil {
+		return "", fmt.Errorf("write form file: %w", err)
+	}
+	mw.Close()
+
+	url := c.baseURL + "/api/v1/upload"
+	httpReq, err := http.NewRequest(http.MethodPost, url, &buf)
+	if err != nil {
+		return "", fmt.Errorf("create upload request: %w", err)
+	}
+	httpReq.Header.Set("Authorization", "Bearer "+c.apiKey)
+	httpReq.Header.Set("Content-Type", mw.FormDataContentType())
+
+	resp, err := c.client.Do(httpReq)
+	if err != nil {
+		return "", fmt.Errorf("upload request failed: %w", err)
+	}
+	defer resp.Body.Close()
+
+	raw, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return "", fmt.Errorf("read upload response: %w", err)
+	}
+	if resp.StatusCode >= 400 {
+		return "", fmt.Errorf("kieapi upload error %d: %s", resp.StatusCode, truncate(string(raw), 256))
+	}
+
+	var parsed struct {
+		Code    int    `json:"code"`
+		Message string `json:"message"`
+		Msg     string `json:"msg"`
+		Data    struct {
+			URL string `json:"url"`
+		} `json:"data"`
+	}
+	if err := json.Unmarshal(raw, &parsed); err != nil {
+		return "", fmt.Errorf("parse upload response: %w", err)
+	}
+	if parsed.Code != 0 && parsed.Code != 200 {
+		msg := parsed.Message
+		if msg == "" {
+			msg = parsed.Msg
+		}
+		return "", fmt.Errorf("kieapi upload error: code=%d message=%s", parsed.Code, msg)
+	}
+	if parsed.Data.URL == "" {
+		return "", fmt.Errorf("kieapi upload returned empty URL, raw=%s", truncate(string(raw), 256))
+	}
+	return parsed.Data.URL, nil
 }
 
 func (c *Client) GetRecordInfo(taskID string) (*CallbackPayload, error) {

@@ -221,6 +221,10 @@ export function GeneratePage() {
     else if (selectedModel === 'wan/2-6-image-to-video') {
       setVideoDuration('5')
     }
+    // Veo 3.1 Fast: дефолт авто
+    if (selectedModel === 'veo3_fast') {
+      setSelectedAspectRatio('auto')
+    }
   }, [selectedModel])
 
   // Проверяем лимит фото при смене модели

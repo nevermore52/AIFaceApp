@@ -424,7 +424,7 @@ func (s *WebGenerationService) processGeneration(genReq *GenerationRequest, req 
 	// Nano Banana 2: разрешение и Google поиск
 	if model == "nano-banana-2" {
 		if len(req.ImageURLs) > 0 {
-			input["image_input"] = s.normalizeImageURLs(req.ImageURLs)
+			input["image_input"] = s.reuploadImagesToKie(req.ImageURLs)
 		} else {
 			input["image_input"] = []string{}
 		}
@@ -441,7 +441,7 @@ func (s *WebGenerationService) processGeneration(genReq *GenerationRequest, req 
 	} else if model == "google/nano-banana-pro" || model == "nano-banana-pro" {
 		// Nano Banana Pro: разрешение 2K или 5K
 		if len(req.ImageURLs) > 0 {
-			input["image_input"] = s.normalizeImageURLs(req.ImageURLs)
+			input["image_input"] = s.reuploadImagesToKie(req.ImageURLs)
 		} else {
 			input["image_input"] = []string{}
 		}
@@ -453,7 +453,7 @@ func (s *WebGenerationService) processGeneration(genReq *GenerationRequest, req 
 	} else if model == "wan/2-6-image-to-video" {
 		// Wan 2.6: длительность и разрешение 1080p
 		if len(req.ImageURLs) > 0 {
-			input["image_urls"] = s.normalizeImageURLs(req.ImageURLs)
+			input["image_urls"] = s.reuploadImagesToKie(req.ImageURLs)
 		}
 		duration := req.Duration
 		if duration == "" {
@@ -465,7 +465,7 @@ func (s *WebGenerationService) processGeneration(genReq *GenerationRequest, req 
 	} else if model == "kling-2.6/image-to-video" {
 		// Kling 2.6: длительность и звук
 		if len(req.ImageURLs) > 0 {
-			input["image_urls"] = s.normalizeImageURLs(req.ImageURLs)
+			input["image_urls"] = s.reuploadImagesToKie(req.ImageURLs)
 		}
 		duration := req.Duration
 		if duration == "" {
@@ -485,7 +485,7 @@ func (s *WebGenerationService) processGeneration(genReq *GenerationRequest, req 
 			if len(urls) > 2 {
 				urls = urls[:2]
 			}
-			input["imageUrls"] = s.normalizeImageURLs(urls)
+			input["imageUrls"] = s.reuploadImagesToKie(urls)
 		}
 		// Aspect ratio по умолчанию
 		aspectRatio := req.AspectRatio
@@ -513,7 +513,7 @@ func (s *WebGenerationService) processGeneration(genReq *GenerationRequest, req 
 	} else {
 		// Остальные модели
 		if len(req.ImageURLs) > 0 {
-			input["image_urls"] = s.normalizeImageURLs(req.ImageURLs)
+			input["image_urls"] = s.reuploadImagesToKie(req.ImageURLs)
 		}
 	}
 
@@ -1344,13 +1344,48 @@ func (s *WebGenerationService) normalizeImageURLs(imageURLs []string) []string {
 
 		// Only modify imgur.com URLs that aren't already i.imgur.com
 		if strings.Contains(url, "imgur.com") && !strings.Contains(url, "i.imgur.com") {
-			// Convert imgur.com URLs to direct download URLs
-			// Example: https://imgur.com/X6GS3XA -> https://i.imgur.com/X6GS3XA
 			url = strings.ReplaceAll(url, "imgur.com", "i.imgur.com")
 			log.Printf("Normalized imgur URL: %s -> %s", originalURL, url)
 		}
 
 		result = append(result, url)
+	}
+	return result
+}
+
+// reuploadImagesToKie downloads each URL and re-uploads it to KieAPI storage.
+// This avoids "Image fetch failed" errors caused by Imgur hotlink protection.
+func (s *WebGenerationService) reuploadImagesToKie(urls []string) []string {
+	if s.kieClient == nil {
+		return urls
+	}
+	result := make([]string, 0, len(urls))
+	for i, rawURL := range urls {
+		if rawURL == "" {
+			continue
+		}
+		resp, err := s.httpClient.Get(rawURL)
+		if err != nil {
+			log.Printf("reuploadImagesToKie: failed to download url[%d] %s: %v", i, rawURL, err)
+			result = append(result, rawURL) // keep original as fallback
+			continue
+		}
+		data, err := io.ReadAll(resp.Body)
+		resp.Body.Close()
+		if err != nil || resp.StatusCode >= 400 {
+			log.Printf("reuploadImagesToKie: error reading url[%d] status=%d err=%v", i, resp.StatusCode, err)
+			result = append(result, rawURL)
+			continue
+		}
+		filename := fmt.Sprintf("image%d.jpg", i)
+		kieURL, err := s.kieClient.UploadFile(data, filename)
+		if err != nil {
+			log.Printf("reuploadImagesToKie: KieAPI upload failed for url[%d]: %v, keeping original", i, err)
+			result = append(result, rawURL)
+			continue
+		}
+		log.Printf("reuploadImagesToKie: %s -> %s", rawURL, kieURL)
+		result = append(result, kieURL)
 	}
 	return result
 }
