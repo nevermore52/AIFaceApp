@@ -124,6 +124,12 @@ export function GenerationDetailPage() {
   }
 
   const Icon = getIcon(generation.model_type)
+  const modelType = generation.model_type
+  const isMusic = modelType === 'music'
+  const isVideo = modelType === 'video'
+  const isText = modelType === 'text' || modelType === 'chat'
+  const resultTitle = isMusic ? 'Песня' : isVideo ? 'Видео' : isText ? 'Ответ' : 'Изображение'
+  const audioUrls = generation.media_output?.urls ?? (generation.output ? [generation.output] : [])
 
   return (
     <div className="space-y-3 max-w-4xl mx-auto h-[calc(100vh-8rem)] flex flex-col">
@@ -154,70 +160,60 @@ export function GenerationDetailPage() {
         </CardContent>
       </Card>
 
-      {generation.status === 'completed' && (generation.output || generation.media_output) ? (() => {
-        const modelType = generation.model_type
-        const isMusic = modelType === 'music'
-        const isVideo = modelType === 'video'
-        const isText = modelType === 'text' || modelType === 'chat'
-        const title = isMusic ? 'Песня' : isVideo ? 'Видео' : isText ? 'Ответ' : 'Изображение'
-        const audioUrls = generation.media_output?.urls ?? (generation.output ? [generation.output] : [])
-
-        return (
-          <Card className="border-white/5 bg-white/[0.02] backdrop-blur-sm overflow-hidden flex-1 min-h-0 flex flex-col">
-            <CardHeader className="p-3 flex-shrink-0">
-              <div className="flex items-center justify-between">
-                <CardTitle className="text-sm">{title}</CardTitle>
-                {!isText && generation.output && (
-                  <Button asChild variant="secondary" size="sm" className="rounded-full h-7 text-xs">
-                    <a href={generation.output} target="_blank" rel="noopener noreferrer" download>
-                      <Download className="h-3 w-3 mr-1" />
-                      Скачать
-                    </a>
-                  </Button>
-                )}
-              </div>
-            </CardHeader>
-            <CardContent className="p-3 flex-1 min-h-0 overflow-auto">
-              {isText ? (
-                <div className="text-sm text-white/80 leading-relaxed whitespace-pre-wrap">
-                  {generation.output}
-                </div>
-              ) : isMusic ? (
-                <div className="space-y-3 w-full">
-                  {audioUrls.map((url, i) => (
-                    <div key={i} className="space-y-1">
-                      {audioUrls.length > 1 && (
-                        <p className="text-xs text-white/40">Вариант {i + 1}</p>
-                      )}
-                      <audio controls className="w-full" src={url} />
-                    </div>
-                  ))}
-                </div>
-              ) : isVideo ? (
-                <div className="flex items-center justify-center max-h-full">
-                  <div className="rounded-xl overflow-hidden border border-white/10 max-h-full max-w-full">
-                    <video
-                      src={generation.output!}
-                      controls
-                      className="w-full h-full object-contain max-h-[50vh]"
-                    />
-                  </div>
-                </div>
-              ) : (
-                <div className="flex items-center justify-center max-h-full">
-                  <div className="rounded-xl overflow-hidden border border-white/10 max-h-full max-w-full">
-                    <img
-                      src={generation.output!}
-                      alt="Generated content"
-                      className="w-full h-full object-contain max-h-[50vh]"
-                    />
-                  </div>
-                </div>
+      {generation.status === 'completed' && (generation.output || generation.media_output) ? (
+        <Card className="border-white/5 bg-white/[0.02] backdrop-blur-sm overflow-hidden flex-1 min-h-0 flex flex-col">
+          <CardHeader className="p-3 flex-shrink-0">
+            <div className="flex items-center justify-between">
+              <CardTitle className="text-sm">{resultTitle}</CardTitle>
+              {!isText && generation.output && (
+                <Button asChild variant="secondary" size="sm" className="rounded-full h-7 text-xs">
+                  <a href={generation.output} target="_blank" rel="noopener noreferrer" download>
+                    <Download className="h-3 w-3 mr-1" />
+                    Скачать
+                  </a>
+                </Button>
               )}
-            </CardContent>
-          </Card>
-        )
-      })()
+            </div>
+          </CardHeader>
+          <CardContent className="p-3 flex-1 min-h-0 overflow-auto">
+            {isText ? (
+              <div className="text-sm text-white/80 leading-relaxed whitespace-pre-wrap">
+                {generation.output}
+              </div>
+            ) : isMusic ? (
+              <div className="space-y-3 w-full">
+                {audioUrls.map((url, i) => (
+                  <div key={i} className="space-y-1">
+                    {audioUrls.length > 1 && (
+                      <p className="text-xs text-white/40">Вариант {i + 1}</p>
+                    )}
+                    <audio controls className="w-full" src={url} />
+                  </div>
+                ))}
+              </div>
+            ) : isVideo ? (
+              <div className="flex items-center justify-center max-h-full">
+                <div className="rounded-xl overflow-hidden border border-white/10 max-h-full max-w-full">
+                  <video
+                    src={generation.output!}
+                    controls
+                    className="w-full h-full object-contain max-h-[50vh]"
+                  />
+                </div>
+              </div>
+            ) : (
+              <div className="flex items-center justify-center max-h-full">
+                <div className="rounded-xl overflow-hidden border border-white/10 max-h-full max-w-full">
+                  <img
+                    src={generation.output!}
+                    alt="Generated content"
+                    className="w-full h-full object-contain max-h-[50vh]"
+                  />
+                </div>
+              </div>
+            )}
+          </CardContent>
+        </Card>
       ) : generation.status === 'failed' ? (
         <Card className="border-destructive/20 bg-destructive/5 flex-1">
           <CardContent className="p-6 flex items-center justify-center">
