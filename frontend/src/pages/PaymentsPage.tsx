@@ -251,7 +251,7 @@ export function PaymentsPage() {
                       <p className="text-[10px] uppercase tracking-wider text-white/25 flex items-center gap-1.5">
                         <Cpu className="h-3 w-3" /> Модели
                       </p>
-                      {sub.text_models.map((m) => (
+                      {sub.text_models.map((m: string) => (
                         <div key={m} className="flex items-center gap-2 text-xs text-white/60">
                           <Zap className="h-3 w-3 text-yellow-400 flex-shrink-0" />
                           {m}
@@ -263,7 +263,7 @@ export function PaymentsPage() {
                   {/* Доп. фичи */}
                   {sub.features?.length > 0 && (
                     <div className="space-y-1.5">
-                      {sub.features.map((f) => (
+                      {sub.features.map((f: string) => (
                         <div key={f} className="flex items-center gap-2 text-xs text-white/60">
                           <Check className="h-3 w-3 text-primary flex-shrink-0" />
                           {f}
