@@ -42,6 +42,24 @@ class ApiClient {
     const response = await fetch(`${this.baseUrl}${endpoint}`, config)
 
     if (!response.ok) {
+      if (response.status === 401) {
+        // Сбрасываем auth — TelegramWebAppAuth при следующем рендере переlogинит
+        try {
+          const storage = localStorage.getItem('auth-storage')
+          if (storage) {
+            const parsed = JSON.parse(storage)
+            parsed.state.isAuthenticated = false
+            parsed.state.accessToken = null
+            parsed.state.refreshToken = null
+            localStorage.setItem('auth-storage', JSON.stringify(parsed))
+          }
+        } catch {}
+        // Перезагружаем страницу чтобы TelegramWebAppAuth запустился заново
+        if (window.Telegram?.WebApp?.initData) {
+          window.location.reload()
+          return Promise.reject(new Error('Session expired')) as any
+        }
+      }
       const error = await response.json().catch(() => ({ error: 'Unknown error' }))
       throw new Error(error.error || 'Request failed')
     }

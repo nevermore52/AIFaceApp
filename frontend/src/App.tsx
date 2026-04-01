@@ -25,41 +25,54 @@ function ProtectedRoute({ children }: { children: React.ReactNode }) {
 }
 
 function TelegramWebAppAuth({ children }: { children: React.ReactNode }) {
-  const { isAuthenticated, setAuth, updateUser } = useAuthStore()
+  const { isAuthenticated, setAuth, updateUser, logout } = useAuthStore()
   const [isChecking, setIsChecking] = useState(true)
 
   useEffect(() => {
     const checkTelegramAuth = async () => {
-      // If already authenticated — refresh user data to get actual subscription
+      const tg = window.Telegram?.WebApp
+      const hasMiniAppData = !!(tg?.initData && tg.initData.length > 0)
+
       if (isAuthenticated) {
-        userApi.getMe().then((data) => updateUser(data as Parameters<typeof updateUser>[0])).catch(() => {})
-        setIsChecking(false)
-        return
+        try {
+          // Проверяем что токен актуален и пользователь существует в БД
+          const data = await userApi.getMe()
+          updateUser(data as Parameters<typeof updateUser>[0])
+          setIsChecking(false)
+          return
+        } catch {
+          // Токен протух или пользователя нет в БД — сбрасываем сессию
+          logout()
+          // Если открыто в мини-апп — перелогиниваем ниже
+          if (!hasMiniAppData) {
+            setIsChecking(false)
+            return
+          }
+        }
       }
 
-      const tg = window.Telegram?.WebApp
-      if (tg?.initData && tg.initData.length > 0) {
+      if (hasMiniAppData) {
         try {
-          tg.ready()
-          tg.expand()
-          
-          const response = await authApi.miniAppLogin(tg.initData) as {
+          tg!.ready()
+          tg!.expand()
+
+          const response = await authApi.miniAppLogin(tg!.initData) as {
             user: Parameters<typeof setAuth>[0]
             access_token: string
             refresh_token: string
           }
-          
+
           setAuth(response.user, response.access_token, response.refresh_token)
         } catch (error) {
           console.error('Mini App auto-login failed:', error)
         }
       }
-      
+
       setIsChecking(false)
     }
 
     checkTelegramAuth()
-  }, [isAuthenticated, setAuth])
+  }, [])
 
   if (isChecking) {
     return (
