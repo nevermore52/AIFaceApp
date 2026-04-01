@@ -4,8 +4,22 @@ import { useAuthStore } from '../store/auth'
 import { generationApi, GenerationCreateParams } from '../lib/api'
 import { Card, CardContent, CardHeader, CardTitle } from '../components/ui/card'
 import { Button } from '../components/ui/button'
-import { cn } from '../lib/utils'
+import { cn, humanizeError } from '../lib/utils'
 import { Sparkles, Image as ImageIcon, Video, Music, Type, ChevronDown, Info, X, ChevronRight, Mic, Download } from 'lucide-react'
+
+async function downloadFile(url: string, filename: string) {
+  try {
+    const res = await fetch(url)
+    const blob = await res.blob()
+    const a = document.createElement('a')
+    a.href = URL.createObjectURL(blob)
+    a.download = filename
+    a.click()
+    URL.revokeObjectURL(a.href)
+  } catch {
+    window.open(url, '_blank')
+  }
+}
 
 type Category = 'image' | 'video' | 'music' | 'text'
 
@@ -172,7 +186,7 @@ export function GeneratePage() {
         }
       })
       .catch((err) => {
-        setError('Не удалось загрузить модели')
+        setError(humanizeError(err, 'Не удалось загрузить модели. Попробуйте обновить страницу.'))
         console.error(err)
       })
       .finally(() => setLoading(false))
@@ -464,8 +478,7 @@ export function GeneratePage() {
         }
       }, 3000)
     } catch (err: unknown) {
-      const message = err instanceof Error ? err.message : 'Ошибка при создании генерации'
-      setError(message)
+      setError(humanizeError(err, 'Ошибка при создании генерации. Попробуйте ещё раз.'))
       setGenerating(false)
     }
   }
@@ -992,11 +1005,12 @@ export function GeneratePage() {
                               Ваш браузер не поддерживает аудио.
                             </audio>
                           </div>
-                          <a href={url} download target="_blank" rel="noopener noreferrer"
+                          <button
+                            onClick={() => downloadFile(url, `audio_${i + 1}.mp3`)}
                             className="inline-flex items-center gap-1.5 text-xs bg-white/5 hover:bg-white/10 border border-white/10 rounded-lg px-3 py-1.5 text-white/70 hover:text-white transition-colors mt-1">
                             <Download className="h-3 w-3" />
                             Скачать вариант {i + 1}
-                          </a>
+                          </button>
                         </div>
                       ))}
                     </div>
@@ -1010,11 +1024,12 @@ export function GeneratePage() {
                       <div className="rounded-xl overflow-hidden border border-white/10">
                         <video src={outputUrl} controls className="w-full h-auto" />
                       </div>
-                      <a href={outputUrl} download target="_blank" rel="noopener noreferrer"
+                      <button
+                        onClick={() => downloadFile(outputUrl, 'video.mp4')}
                         className="inline-flex items-center gap-1.5 text-xs bg-white/5 hover:bg-white/10 border border-white/10 rounded-lg px-3 py-1.5 text-white/70 hover:text-white transition-colors">
                         <Download className="h-3 w-3" />
                         Скачать видео
-                      </a>
+                      </button>
                     </div>
                   )
                 }
@@ -1022,19 +1037,22 @@ export function GeneratePage() {
                 // Изображение (default)
                 return (
                   <div className="w-full space-y-2">
-                    <div className="relative group rounded-xl overflow-hidden border border-white/10">
+                    <div className="flex items-center justify-between gap-2">
+                      <a href={outputUrl} target="_blank" rel="noopener noreferrer" className="text-xs text-white/40 hover:text-white/70 transition-colors">
+                        Открыть в полном размере ↗
+                      </a>
+                      <Button
+                        size="sm"
+                        variant="secondary"
+                        className="rounded-full h-7 text-xs bg-white/5 border border-white/10 hover:bg-white/10"
+                        onClick={() => downloadFile(outputUrl, 'generated.jpg')}
+                      >
+                        <Download className="h-3.5 w-3.5 mr-1" />
+                        Скачать
+                      </Button>
+                    </div>
+                    <div className="rounded-xl overflow-hidden border border-white/10">
                       <img src={outputUrl} alt="Generated" className="w-full h-auto" />
-                      <div className="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-3">
-                        <Button asChild variant="secondary" size="sm" className="rounded-full">
-                          <a href={outputUrl} target="_blank" rel="noopener noreferrer">Открыть</a>
-                        </Button>
-                        <Button asChild variant="secondary" size="sm" className="rounded-full">
-                          <a href={outputUrl} download target="_blank" rel="noopener noreferrer">
-                            <Download className="h-3.5 w-3.5 mr-1" />
-                            Скачать
-                          </a>
-                        </Button>
-                      </div>
                     </div>
                   </div>
                 )
@@ -1047,7 +1065,9 @@ export function GeneratePage() {
                   </div>
                   <p className="text-sm font-bold text-destructive">Ошибка генерации</p>
                   <p className="text-xs text-white/40 max-w-xs">
-                    {currentGeneration.error_msg || 'Попробуйте изменить запрос или выбрать другую модель.'}
+                    {currentGeneration.error_msg
+                      ? humanizeError(new Error(currentGeneration.error_msg), currentGeneration.error_msg)
+                      : 'Попробуйте изменить запрос или выбрать другую модель.'}
                   </p>
                 </div>
               )}

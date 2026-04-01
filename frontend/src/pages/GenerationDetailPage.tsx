@@ -3,9 +3,22 @@ import { useParams, useNavigate } from 'react-router-dom'
 import { generationApi } from '../lib/api'
 import { Card, CardContent, CardHeader, CardTitle } from '../components/ui/card'
 import { Button } from '../components/ui/button'
-import { formatDate } from '../lib/utils'
-import { cn } from '../lib/utils'
+import { formatDate, cn, humanizeError } from '../lib/utils'
 import { ChevronLeft, Image, Music, Video, MessageSquare, Download } from 'lucide-react'
+
+async function downloadFile(url: string, filename: string) {
+  try {
+    const res = await fetch(url)
+    const blob = await res.blob()
+    const a = document.createElement('a')
+    a.href = URL.createObjectURL(blob)
+    a.download = filename
+    a.click()
+    URL.revokeObjectURL(a.href)
+  } catch {
+    window.open(url, '_blank')
+  }
+}
 
 interface MediaOutput {
   url: string
@@ -44,7 +57,7 @@ export function GenerationDetailPage() {
         const response = await generationApi.getById(parseInt(id))
         setGeneration(response as Generation)
       } catch (err) {
-        setError(err instanceof Error ? err.message : 'Не удалось загрузить генерацию')
+        setError(humanizeError(err, 'Не удалось загрузить генерацию.'))
         console.error('Failed to load generation:', err)
       } finally {
         setLoading(false)
@@ -166,19 +179,17 @@ export function GenerationDetailPage() {
             <div className="flex items-center justify-between gap-2 flex-wrap">
               <CardTitle className="text-sm">{resultTitle}</CardTitle>
               {!isText && !isMusic && generation.output && (
-                <Button asChild variant="secondary" size="sm" className="rounded-full h-7 text-xs">
-                  <a href={generation.output} target="_blank" rel="noopener noreferrer" download>
-                    <Download className="h-3 w-3 mr-1" />
-                    Скачать
-                  </a>
+                <Button variant="secondary" size="sm" className="rounded-full h-7 text-xs"
+                  onClick={() => downloadFile(generation.output!, isVideo ? 'video.mp4' : 'image.jpg')}>
+                  <Download className="h-3 w-3 mr-1" />
+                  Скачать
                 </Button>
               )}
               {isMusic && audioUrls.length > 0 && audioUrls.map((url, i) => (
-                <Button key={i} asChild variant="secondary" size="sm" className="rounded-full h-7 text-xs">
-                  <a href={url} target="_blank" rel="noopener noreferrer" download>
-                    <Download className="h-3 w-3 mr-1" />
-                    {audioUrls.length > 1 ? `Вариант ${i + 1}` : 'Скачать'}
-                  </a>
+                <Button key={i} variant="secondary" size="sm" className="rounded-full h-7 text-xs"
+                  onClick={() => downloadFile(url, `audio_${i + 1}.mp3`)}>
+                  <Download className="h-3 w-3 mr-1" />
+                  {audioUrls.length > 1 ? `Вариант ${i + 1}` : 'Скачать'}
                 </Button>
               ))}
             </div>
@@ -228,7 +239,9 @@ export function GenerationDetailPage() {
             <div className="space-y-2 text-center">
               <p className="font-semibold text-destructive">Ошибка при генерации</p>
               {generation.error_msg && (
-                <p className="text-sm text-white/60">{generation.error_msg}</p>
+                <p className="text-sm text-white/60">
+                  {humanizeError(new Error(generation.error_msg), generation.error_msg)}
+                </p>
               )}
             </div>
           </CardContent>

@@ -38,13 +38,15 @@ type PackageInfo struct {
 }
 
 type SubscriptionInfo struct {
-	Name        string  `json:"name"`
-	Price       float64 `json:"price"`
-	TextDaily   int     `json:"text_daily"`
-	ImageWeekly int     `json:"image_weekly"`
-	MusicWeekly int     `json:"music_weekly"`
-	VideoWeekly int     `json:"video_weekly"`
-	Discount    int     `json:"discount"`
+	Name        string   `json:"name"`
+	Price       float64  `json:"price"`
+	TextDaily   int      `json:"text_daily"`
+	ImageWeekly int      `json:"image_weekly"`
+	MusicWeekly int      `json:"music_weekly"`
+	VideoWeekly int      `json:"video_weekly"`
+	Discount    int      `json:"discount"`
+	TextModels  []string `json:"text_models"`
+	Features    []string `json:"features"`
 }
 
 func (s *WebPaymentService) GetPackages() []PackageInfo {
@@ -82,31 +84,68 @@ func (s *WebPaymentService) GetSubscriptions() []SubscriptionInfo {
 		{
 			Name:        "mini",
 			Price:       299,
-			TextDaily:   10,
-			ImageWeekly: 5,
-			MusicWeekly: 1,
+			TextDaily:   50,
+			ImageWeekly: 25,
+			MusicWeekly: 3,
 			VideoWeekly: 0,
-			Discount:    0,
+			Discount:    10,
+			TextModels:  []string{"GPT-5 nano"},
+			Features:    []string{"Скидка 10% на все генерации"},
 		},
 		{
 			Name:        "start",
 			Price:       499,
-			TextDaily:   30,
-			ImageWeekly: 15,
-			MusicWeekly: 3,
-			VideoWeekly: 1,
-			Discount:    0,
+			TextDaily:   100,
+			ImageWeekly: 40,
+			MusicWeekly: 5,
+			VideoWeekly: 2,
+			Discount:    15,
+			TextModels:  []string{"Gemini 3 Flash", "GPT-5 nano"},
+			Features:    []string{"x2 контекст", "Скидка 15% на все генерации"},
 		},
 		{
 			Name:        "pro",
 			Price:       799,
-			TextDaily:   100,
-			ImageWeekly: 50,
+			TextDaily:   200,
+			ImageWeekly: 90,
 			MusicWeekly: 10,
 			VideoWeekly: 5,
-			Discount:    0,
+			Discount:    20,
+			TextModels:  []string{"Gemini 3 Flash", "GPT-5 nano"},
+			Features:    []string{"6 стилей общения GPT", "x3 контекст", "Без рекламы", "Скидка 20% на все генерации"},
 		},
 	}
+}
+
+// GetPhotoDiscount читает скидку на фото из app_settings (формат "percent:unix_timestamp")
+func (s *WebPaymentService) GetPhotoDiscount() (percent int, endTime int64) {
+	var raw string
+	err := s.db.QueryRow(`SELECT value FROM app_settings WHERE key = 'photo_discount'`).Scan(&raw)
+	if err != nil || raw == "" {
+		return 0, 0
+	}
+	var p int
+	var t int64
+	if _, err := fmt.Sscanf(raw, "%d:%d", &p, &t); err != nil {
+		return 0, 0
+	}
+	if time.Now().Unix() >= t {
+		return 0, 0
+	}
+	return p, t
+}
+
+// GetDiscountForSubscription возвращает процент скидки для типа подписки
+func GetDiscountForSubscription(subscriptionType string) int {
+	switch subscriptionType {
+	case "mini":
+		return 10
+	case "start":
+		return 15
+	case "pro":
+		return 20
+	}
+	return 0
 }
 
 func (s *WebPaymentService) GetPrice(category string, qty int) (float64, bool) {
@@ -131,12 +170,13 @@ func (s *WebPaymentService) GetPrice(category string, qty int) (float64, bool) {
 }
 
 type CreatePaymentRequest struct {
-	UserID    int64  `json:"user_id"`
-	Category  string `json:"category"`
-	Qty       int    `json:"qty"`
-	Username  string `json:"username"`
-	FirstName string `json:"first_name"`
-	LastName  string `json:"last_name"`
+	UserID           int64  `json:"user_id"`
+	Category         string `json:"category"`
+	Qty              int    `json:"qty"`
+	Username         string `json:"username"`
+	FirstName        string `json:"first_name"`
+	LastName         string `json:"last_name"`
+	SubscriptionType string `json:"subscription_type"`
 }
 
 type CreatePaymentResponse struct {
@@ -157,6 +197,20 @@ func (s *WebPaymentService) CreatePayment(req CreatePaymentRequest) (*CreatePaym
 	price, ok := s.GetPrice(req.Category, req.Qty)
 	if !ok {
 		return nil, fmt.Errorf("invalid package: %s x %d", req.Category, req.Qty)
+	}
+
+	// Применяем скидки для пакетов (не для самих подписок)
+	if !strings.HasPrefix(req.Category, "subscription:") {
+		// Скидка на фото из админки бота (photo_discount в app_settings)
+		if req.Category == "image" {
+			if photoPercent, _ := s.GetPhotoDiscount(); photoPercent > 0 {
+				price = price * float64(100-photoPercent) / 100
+			}
+		}
+		// Скидка по подписке
+		if discount := GetDiscountForSubscription(req.SubscriptionType); discount > 0 {
+			price = price * float64(100-discount) / 100
+		}
 	}
 
 	var description string

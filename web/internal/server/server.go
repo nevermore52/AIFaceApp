@@ -139,6 +139,7 @@ func New(cfg *config.Config, db *sql.DB) *Server {
 
 			protected.GET("/payments/packages", paymentHandler.GetPackages)
 			protected.GET("/payments/subscriptions", paymentHandler.GetSubscriptions)
+			protected.GET("/payments/photo-discount", paymentHandler.GetPhotoDiscount)
 			protected.POST("/payments/create", paymentHandler.CreatePayment)
 			protected.POST("/payments/subscription", paymentHandler.CreateSubscriptionPayment)
 			protected.GET("/payments/history", paymentHandler.GetPaymentHistory)

@@ -156,6 +156,7 @@ export const generationApi = {
 export const paymentApi = {
   getPackages: () => api.get('/payments/packages'),
   getSubscriptions: () => api.get('/payments/subscriptions'),
+  getPhotoDiscount: () => api.get<{ percent: number; end_time: number }>('/payments/photo-discount'),
   getHistory: (limit = 20, offset = 0) =>
     api.get(`/payments/history?limit=${limit}&offset=${offset}`),
   create: (category: string, qty: number) =>

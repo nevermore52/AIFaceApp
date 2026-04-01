@@ -29,9 +29,21 @@ func (h *PaymentHandler) GetPackages(c *gin.Context) {
 	c.JSON(http.StatusOK, packages)
 }
 
+func (h *PaymentHandler) GetPhotoDiscount(c *gin.Context) {
+	if h.webPaymentService == nil {
+		c.JSON(http.StatusOK, gin.H{"percent": 0, "end_time": 0})
+		return
+	}
+	percent, endTime := h.webPaymentService.GetPhotoDiscount()
+	c.JSON(http.StatusOK, gin.H{"percent": percent, "end_time": endTime})
+}
+
 func (h *PaymentHandler) GetSubscriptions(c *gin.Context) {
-	subscriptions := h.paymentService.GetSubscriptions()
-	c.JSON(http.StatusOK, subscriptions)
+	if h.webPaymentService != nil {
+		c.JSON(http.StatusOK, h.webPaymentService.GetSubscriptions())
+		return
+	}
+	c.JSON(http.StatusOK, h.paymentService.GetSubscriptions())
 }
 
 type CreatePaymentRequest struct {
@@ -68,12 +80,13 @@ func (h *PaymentHandler) CreatePayment(c *gin.Context) {
 	}
 
 	paymentReq := services.CreatePaymentRequest{
-		UserID:    *u.TelegramID,
-		Category:  req.Category,
-		Qty:       req.Qty,
-		Username:  u.Username,
-		FirstName: u.FirstName,
-		LastName:  u.LastName,
+		UserID:           *u.TelegramID,
+		Category:         req.Category,
+		Qty:              req.Qty,
+		Username:         u.Username,
+		FirstName:        u.FirstName,
+		LastName:         u.LastName,
+		SubscriptionType: u.SubscriptionType,
 	}
 
 	resp, err := h.webPaymentService.CreatePayment(paymentReq)

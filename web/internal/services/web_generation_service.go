@@ -330,7 +330,7 @@ func (s *WebGenerationService) CreateGeneration(userID int64, username string, r
 		// Списываем квоту (с правильной стоимостью)
 		primaryUsed, extraUsed, err := s.quotaService.ConsumeQuota(*user.TelegramID, category, tokenCost)
 		if err != nil {
-			return nil, fmt.Errorf("insufficient quota: %w", err)
+			return nil, err
 		}
 
 		log.Printf("Quota consumed: telegramID=%d category=%s amount=%d primary=%d extra=%d",
@@ -983,11 +983,41 @@ func (s *WebGenerationService) getByExternalTaskID(taskID string) (*GenerationRe
 	return genReq, nil
 }
 
+// humanizeGenerationError переводит технические ошибки генерации в понятные пользователю сообщения
+func humanizeGenerationError(raw string) string {
+	lower := strings.ToLower(raw)
+	switch {
+	case strings.Contains(lower, "playground task failed"),
+		strings.Contains(lower, "task failed"),
+		strings.Contains(lower, "generation failed"):
+		return "Нейросеть не смогла обработать запрос. Попробуйте изменить промпт или загрузить другое фото."
+	case strings.Contains(lower, "nsfw"), strings.Contains(lower, "safety"),
+		strings.Contains(lower, "content policy"), strings.Contains(lower, "blocked"):
+		return "Запрос заблокирован системой безопасности. Измените изображение или текст запроса."
+	case strings.Contains(lower, "timeout"), strings.Contains(lower, "timed out"):
+		return "Время ожидания истекло. Попробуйте ещё раз."
+	case strings.Contains(lower, "invalid image"), strings.Contains(lower, "image fetch failed"),
+		strings.Contains(lower, "cannot process image"), strings.Contains(lower, "image error"):
+		return "Не удалось обработать изображение. Убедитесь, что фото чёткое и попробуйте снова."
+	case strings.Contains(lower, "insufficient quota"), strings.Contains(lower, "quota"):
+		return "Недостаточно запросов. Пополните баланс."
+	case strings.Contains(lower, "no audio url"), strings.Contains(lower, "missing result"):
+		return "Нейросеть не вернула результат. Попробуйте ещё раз."
+	case strings.Contains(lower, "status=failed"), strings.Contains(lower, "status=error"):
+		return "Нейросеть не смогла обработать запрос. Попробуйте изменить промпт или фото."
+	case strings.Contains(lower, "music generation failed"):
+		return "Не удалось создать музыку. Попробуйте изменить описание."
+	case strings.Contains(lower, "text generation failed"):
+		return "Не удалось сгенерировать текст. Попробуйте изменить запрос."
+	}
+	return "Нейросеть не смогла обработать запрос. Попробуйте изменить промпт или фото."
+}
+
 func (s *WebGenerationService) updateStatus(id int64, status, errorMsg string) error {
 	var query string
 	if errorMsg != "" {
 		query = `UPDATE generation_requests SET status = $2, error_msg = $3, completed_at = NOW() WHERE id = $1`
-		_, err := s.db.Exec(query, id, status, errorMsg)
+		_, err := s.db.Exec(query, id, status, humanizeGenerationError(errorMsg))
 		return err
 	}
 	query = `UPDATE generation_requests SET status = $2 WHERE id = $1`
