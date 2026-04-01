@@ -12,6 +12,7 @@ interface User {
   is_admin: boolean
   subscription_type: string
   subscription_end?: string
+  channel_trial_claimed?: boolean
 }
 
 interface AuthState {

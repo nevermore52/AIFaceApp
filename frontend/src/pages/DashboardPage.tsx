@@ -48,18 +48,30 @@ export function DashboardPage() {
 
   useEffect(() => {
     if (user?.telegram_id) {
+      // Получаем актуальные данные пользователя с сервера (в т.ч. channel_trial_claimed)
+      userApi.getMe()
+        .then((data) => {
+          updateUser(data as any)
+          const claimed = !!(data as any)?.channel_trial_claimed
+          setBonusClaimed(claimed)
+          setShowBanner(shouldShowBanner(claimed))
+        })
+        .catch(() => {
+          const claimed = !!user?.channel_trial_claimed
+          setBonusClaimed(claimed)
+          setShowBanner(shouldShowBanner(claimed))
+        })
       userApi.getQuota()
         .then((data) => setQuota(data as Quota))
         .catch(console.error)
         .finally(() => setLoading(false))
     } else {
       setLoading(false)
+      const claimed = !!user?.channel_trial_claimed
+      setBonusClaimed(claimed)
+      setShowBanner(shouldShowBanner(claimed))
     }
-    // Показываем баннер если бонус ещё не получен
-    const claimed = !!(user as any)?.channel_bonus_given
-    setBonusClaimed(claimed)
-    setShowBanner(shouldShowBanner(claimed))
-  }, [user])
+  }, [user?.id])
 
   const dismissBanner = () => {
     localStorage.setItem(BANNER_DISMISS_KEY, Date.now().toString())

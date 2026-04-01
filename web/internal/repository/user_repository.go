@@ -28,7 +28,7 @@ func (r *UserRepository) GetByID(id int64) (*models.User, error) {
 		SELECT id, telegram_id, email, username, first_name, last_name, avatar_url,
 			   language_code, is_premium, is_admin, referrer_id, referral_code,
 			   referrals_count, subscription_type, subscription_started_at, subscription_end,
-			   created_at, updated_at, is_blocked, channel_bonus_given
+			   created_at, updated_at, is_blocked, channel_trial_claimed
 		FROM users WHERE id = $1`
 
 	user := &models.User{}
@@ -37,7 +37,7 @@ func (r *UserRepository) GetByID(id int64) (*models.User, error) {
 		&user.AvatarURL, &user.LanguageCode, &user.IsPremium, &user.IsAdmin,
 		&user.ReferrerID, &user.ReferralCode, &user.ReferralsCount,
 		&user.SubscriptionType, &user.SubscriptionStartedAt, &user.SubscriptionEnd,
-		&user.CreatedAt, &user.UpdatedAt, &user.IsBlocked, &user.ChannelBonusGiven,
+		&user.CreatedAt, &user.UpdatedAt, &user.IsBlocked, &user.ChannelTrialClaimed,
 	)
 	return user, err
 }
@@ -47,7 +47,7 @@ func (r *UserRepository) GetByTelegramID(telegramID int64) (*models.User, error)
 		SELECT id, telegram_id, email, username, first_name, last_name, avatar_url,
 			   language_code, is_premium, is_admin, referrer_id, referral_code,
 			   referrals_count, subscription_type, subscription_started_at, subscription_end,
-			   created_at, updated_at, is_blocked, channel_bonus_given
+			   created_at, updated_at, is_blocked, channel_trial_claimed
 		FROM users WHERE telegram_id = $1`
 
 	user := &models.User{}
@@ -56,7 +56,7 @@ func (r *UserRepository) GetByTelegramID(telegramID int64) (*models.User, error)
 		&user.AvatarURL, &user.LanguageCode, &user.IsPremium, &user.IsAdmin,
 		&user.ReferrerID, &user.ReferralCode, &user.ReferralsCount,
 		&user.SubscriptionType, &user.SubscriptionStartedAt, &user.SubscriptionEnd,
-		&user.CreatedAt, &user.UpdatedAt, &user.IsBlocked, &user.ChannelBonusGiven,
+		&user.CreatedAt, &user.UpdatedAt, &user.IsBlocked, &user.ChannelTrialClaimed,
 	)
 	return user, err
 }
@@ -89,7 +89,7 @@ func (r *UserRepository) CreateFromTelegram(telegramID int64, username, firstNam
 		RETURNING id, telegram_id, email, username, first_name, last_name, avatar_url,
 				  language_code, is_premium, is_admin, referrer_id, referral_code,
 				  referrals_count, subscription_type, subscription_started_at, subscription_end,
-				  created_at, updated_at, is_blocked, channel_bonus_given`
+				  created_at, updated_at, is_blocked, channel_trial_claimed`
 
 	user := &models.User{}
 	err := r.db.QueryRow(query, telegramID, username, firstName, lastName, languageCode, avatarURL, referralCode).Scan(
@@ -97,7 +97,7 @@ func (r *UserRepository) CreateFromTelegram(telegramID int64, username, firstNam
 		&user.AvatarURL, &user.LanguageCode, &user.IsPremium, &user.IsAdmin,
 		&user.ReferrerID, &user.ReferralCode, &user.ReferralsCount,
 		&user.SubscriptionType, &user.SubscriptionStartedAt, &user.SubscriptionEnd,
-		&user.CreatedAt, &user.UpdatedAt, &user.IsBlocked, &user.ChannelBonusGiven,
+		&user.CreatedAt, &user.UpdatedAt, &user.IsBlocked, &user.ChannelTrialClaimed,
 	)
 	return user, err
 }
@@ -112,7 +112,7 @@ func (r *UserRepository) CreateFromGoogle(email, firstName, lastName string, ava
 		RETURNING id, telegram_id, email, username, first_name, last_name, avatar_url,
 				  language_code, is_premium, is_admin, referrer_id, referral_code,
 				  referrals_count, subscription_type, subscription_started_at, subscription_end,
-				  created_at, updated_at, is_blocked, channel_bonus_given`
+				  created_at, updated_at, is_blocked, channel_trial_claimed`
 
 	user := &models.User{}
 	err := r.db.QueryRow(query, email, username, firstName, lastName, avatarURL, referralCode).Scan(
@@ -120,13 +120,13 @@ func (r *UserRepository) CreateFromGoogle(email, firstName, lastName string, ava
 		&user.AvatarURL, &user.LanguageCode, &user.IsPremium, &user.IsAdmin,
 		&user.ReferrerID, &user.ReferralCode, &user.ReferralsCount,
 		&user.SubscriptionType, &user.SubscriptionStartedAt, &user.SubscriptionEnd,
-		&user.CreatedAt, &user.UpdatedAt, &user.IsBlocked, &user.ChannelBonusGiven,
+		&user.CreatedAt, &user.UpdatedAt, &user.IsBlocked, &user.ChannelTrialClaimed,
 	)
 	return user, err
 }
 
-func (r *UserRepository) MarkChannelBonusGiven(userID int64) error {
-	_, err := r.db.Exec(`UPDATE users SET channel_bonus_given = TRUE WHERE id = $1`, userID)
+func (r *UserRepository) MarkChannelTrialClaimed(userID int64) error {
+	_, err := r.db.Exec(`UPDATE users SET channel_trial_claimed = TRUE WHERE id = $1`, userID)
 	return err
 }
 

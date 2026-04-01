@@ -69,7 +69,7 @@ func (s *UserService) IsAdmin(userID int64) (bool, error) {
 // и выдаёт бонусные запросы если ещё не выдавались.
 // Возвращает (subscribed, alreadyClaimed, error).
 func (s *UserService) ClaimChannelBonus(user *models.User, botToken string) (subscribed bool, alreadyClaimed bool, err error) {
-	if user.ChannelBonusGiven {
+	if user.ChannelTrialClaimed {
 		return false, true, nil
 	}
 	if user.TelegramID == nil {
@@ -109,7 +109,7 @@ func (s *UserService) ClaimChannelBonus(user *models.User, botToken string) (sub
 		_ = s.quotaRepo.AddExtra(*user.TelegramID, cat, 2)
 	}
 
-	if err := s.userRepo.MarkChannelBonusGiven(user.ID); err != nil {
+	if err := s.userRepo.MarkChannelTrialClaimed(user.ID); err != nil {
 		return true, false, fmt.Errorf("mark bonus given: %w", err)
 	}
 	return true, false, nil
