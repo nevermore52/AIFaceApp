@@ -114,10 +114,10 @@ export function DashboardPage() {
   useEffect(() => () => { if (pollRef.current) clearInterval(pollRef.current) }, [])
 
   const quotaCards = [
-    { title: 'Текст', icon: MessageSquare, daily: quota?.text_daily ?? 0, extra: quota?.text_extra ?? 0, color: 'text-blue-400', bgColor: 'bg-blue-500/10' },
-    { title: 'Картинки', icon: Image, daily: quota?.image_weekly ?? 0, extra: quota?.image_extra ?? 0, color: 'text-green-400', bgColor: 'bg-green-500/10' },
-    { title: 'Музыка', icon: Music, daily: quota?.music_weekly ?? 0, extra: quota?.music_extra ?? 0, color: 'text-purple-400', bgColor: 'bg-purple-500/10' },
+    { title: 'Фото', icon: Image, daily: quota?.image_weekly ?? 0, extra: quota?.image_extra ?? 0, color: 'text-green-400', bgColor: 'bg-green-500/10' },
     { title: 'Видео', icon: Video, daily: quota?.video_weekly ?? 0, extra: quota?.video_extra ?? 0, color: 'text-orange-400', bgColor: 'bg-orange-500/10' },
+    { title: 'Музыка', icon: Music, daily: quota?.music_weekly ?? 0, extra: quota?.music_extra ?? 0, color: 'text-purple-400', bgColor: 'bg-purple-500/10' },
+    { title: 'Текст', icon: MessageSquare, daily: quota?.text_daily ?? 0, extra: quota?.text_extra ?? 0, color: 'text-blue-400', bgColor: 'bg-blue-500/10' },
   ]
 
   const handleModelClick = () => {
