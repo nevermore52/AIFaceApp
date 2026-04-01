@@ -121,9 +121,10 @@ export function PaymentsPage() {
 
   // Итоговая скидка для пакета с учётом photo_discount и скидки подписки
   const getEffectivePrice = (pkg: Package): { final: number; hasDiscount: boolean } => {
+    if (pkg.category !== 'image') return { final: pkg.price, hasDiscount: false }
     let price = pkg.price
     let discounted = false
-    if (pkg.category === 'image' && photoDiscount && photoDiscount.percent > 0) {
+    if (photoDiscount && photoDiscount.percent > 0) {
       price = Math.round(price * (100 - photoDiscount.percent) / 100)
       discounted = true
     }

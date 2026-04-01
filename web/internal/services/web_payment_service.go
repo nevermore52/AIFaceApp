@@ -199,15 +199,11 @@ func (s *WebPaymentService) CreatePayment(req CreatePaymentRequest) (*CreatePaym
 		return nil, fmt.Errorf("invalid package: %s x %d", req.Category, req.Qty)
 	}
 
-	// Применяем скидки для пакетов (не для самих подписок)
-	if !strings.HasPrefix(req.Category, "subscription:") {
-		// Скидка на фото из админки бота (photo_discount в app_settings)
-		if req.Category == "image" {
-			if photoPercent, _ := s.GetPhotoDiscount(); photoPercent > 0 {
-				price = price * float64(100-photoPercent) / 100
-			}
+	// Применяем скидки только для фото пакетов
+	if req.Category == "image" {
+		if photoPercent, _ := s.GetPhotoDiscount(); photoPercent > 0 {
+			price = price * float64(100-photoPercent) / 100
 		}
-		// Скидка по подписке
 		if discount := GetDiscountForSubscription(req.SubscriptionType); discount > 0 {
 			price = price * float64(100-discount) / 100
 		}
