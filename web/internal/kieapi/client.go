@@ -168,7 +168,8 @@ func (c *Client) CreateTask(req CreateTaskRequest) (string, error) {
 	return taskID, nil
 }
 
-// CreateVeoTask creates a task using the Veo-specific endpoint
+// CreateVeoTask creates a task using the Veo-specific endpoint.
+// Veo API expects a flat request body (all fields at top level, not nested in "input").
 func (c *Client) CreateVeoTask(req CreateTaskRequest) (string, error) {
 	if c == nil {
 		return "", fmt.Errorf("kieapi client is nil")
@@ -180,7 +181,15 @@ func (c *Client) CreateVeoTask(req CreateTaskRequest) (string, error) {
 		return "", fmt.Errorf("KIEAPI_BASE_URL is not set")
 	}
 
-	body, err := json.Marshal(req)
+	// Veo API expects flat body: merge input fields with top-level model/callBackUrl
+	flat := make(map[string]any)
+	for k, v := range req.Input {
+		flat[k] = v
+	}
+	flat["model"] = req.Model
+	flat["callBackUrl"] = req.CallBackURL
+
+	body, err := json.Marshal(flat)
 	if err != nil {
 		return "", fmt.Errorf("marshal kieapi veo payload: %w", err)
 	}

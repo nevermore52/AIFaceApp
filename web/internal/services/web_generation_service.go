@@ -479,9 +479,13 @@ func (s *WebGenerationService) processGeneration(genReq *GenerationRequest, req 
 		}
 		input["sound"] = sound
 	} else if model == "veo3_fast" {
-		// Veo 3.1 Fast: используем imageUrls (camelCase) как в примере API
+		// Veo 3.1 Fast: imageUrls (camelCase), максимум 2 изображения
 		if len(req.ImageURLs) > 0 {
-			input["imageUrls"] = s.normalizeImageURLs(req.ImageURLs)
+			urls := req.ImageURLs
+			if len(urls) > 2 {
+				urls = urls[:2]
+			}
+			input["imageUrls"] = s.normalizeImageURLs(urls)
 		}
 		// Aspect ratio по умолчанию
 		aspectRatio := req.AspectRatio

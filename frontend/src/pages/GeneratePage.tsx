@@ -120,6 +120,7 @@ const MAX_IMAGES_PER_MODEL: Record<string, number> = {
   'google/nano-banana-pro': 4,
   'nano-banana-2': 4,
   'seedream/4.5-edit': 4,
+  'veo3_fast': 2,
 }
 
 // Модели, требующие подписку
