@@ -163,9 +163,9 @@ export function GenerationDetailPage() {
       {generation.status === 'completed' && (generation.output || generation.media_output) ? (
         <Card className="border-white/5 bg-white/[0.02] backdrop-blur-sm overflow-hidden flex-1 min-h-0 flex flex-col">
           <CardHeader className="p-3 flex-shrink-0">
-            <div className="flex items-center justify-between">
+            <div className="flex items-center justify-between gap-2 flex-wrap">
               <CardTitle className="text-sm">{resultTitle}</CardTitle>
-              {!isText && generation.output && (
+              {!isText && !isMusic && generation.output && (
                 <Button asChild variant="secondary" size="sm" className="rounded-full h-7 text-xs">
                   <a href={generation.output} target="_blank" rel="noopener noreferrer" download>
                     <Download className="h-3 w-3 mr-1" />
@@ -173,6 +173,14 @@ export function GenerationDetailPage() {
                   </a>
                 </Button>
               )}
+              {isMusic && audioUrls.length > 0 && audioUrls.map((url, i) => (
+                <Button key={i} asChild variant="secondary" size="sm" className="rounded-full h-7 text-xs">
+                  <a href={url} target="_blank" rel="noopener noreferrer" download>
+                    <Download className="h-3 w-3 mr-1" />
+                    {audioUrls.length > 1 ? `Вариант ${i + 1}` : 'Скачать'}
+                  </a>
+                </Button>
+              ))}
             </div>
           </CardHeader>
           <CardContent className="p-3 flex-1 min-h-0 overflow-auto">

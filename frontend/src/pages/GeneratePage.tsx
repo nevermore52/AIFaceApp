@@ -5,7 +5,7 @@ import { generationApi, GenerationCreateParams } from '../lib/api'
 import { Card, CardContent, CardHeader, CardTitle } from '../components/ui/card'
 import { Button } from '../components/ui/button'
 import { cn } from '../lib/utils'
-import { Sparkles, Image as ImageIcon, Video, Music, Type, ChevronDown, Info, X, ChevronRight, Mic } from 'lucide-react'
+import { Sparkles, Image as ImageIcon, Video, Music, Type, ChevronDown, Info, X, ChevronRight, Mic, Download } from 'lucide-react'
 
 type Category = 'image' | 'video' | 'music' | 'text'
 
@@ -992,8 +992,9 @@ export function GeneratePage() {
                               Ваш браузер не поддерживает аудио.
                             </audio>
                           </div>
-                          <a href={url} target="_blank" rel="noopener noreferrer"
-                            className="inline-flex items-center gap-2 text-xs text-primary hover:underline px-1">
+                          <a href={url} download target="_blank" rel="noopener noreferrer"
+                            className="inline-flex items-center gap-1.5 text-xs bg-white/5 hover:bg-white/10 border border-white/10 rounded-lg px-3 py-1.5 text-white/70 hover:text-white transition-colors mt-1">
+                            <Download className="h-3 w-3" />
                             Скачать вариант {i + 1}
                           </a>
                         </div>
@@ -1009,9 +1010,10 @@ export function GeneratePage() {
                       <div className="rounded-xl overflow-hidden border border-white/10">
                         <video src={outputUrl} controls className="w-full h-auto" />
                       </div>
-                      <a href={outputUrl} target="_blank" rel="noopener noreferrer"
-                        className="inline-flex items-center gap-2 text-xs text-primary hover:underline px-1">
-                        Скачать
+                      <a href={outputUrl} download target="_blank" rel="noopener noreferrer"
+                        className="inline-flex items-center gap-1.5 text-xs bg-white/5 hover:bg-white/10 border border-white/10 rounded-lg px-3 py-1.5 text-white/70 hover:text-white transition-colors">
+                        <Download className="h-3 w-3" />
+                        Скачать видео
                       </a>
                     </div>
                   )
@@ -1025,6 +1027,12 @@ export function GeneratePage() {
                       <div className="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-3">
                         <Button asChild variant="secondary" size="sm" className="rounded-full">
                           <a href={outputUrl} target="_blank" rel="noopener noreferrer">Открыть</a>
+                        </Button>
+                        <Button asChild variant="secondary" size="sm" className="rounded-full">
+                          <a href={outputUrl} download target="_blank" rel="noopener noreferrer">
+                            <Download className="h-3.5 w-3.5 mr-1" />
+                            Скачать
+                          </a>
                         </Button>
                       </div>
                     </div>
