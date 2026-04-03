@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"log"
 	"net/http"
 	"strconv"
 	"strings"
@@ -389,6 +390,27 @@ func (s *WebPaymentService) AddQuota(userID int64, category string, qty int) err
 		return err
 	}
 	return nil
+}
+
+// AddReferralBonus начисляет 20% от покупки рефереру. Не действует на подписки.
+func (s *WebPaymentService) AddReferralBonus(buyerID int64, category string, qty int) {
+	if strings.HasPrefix(category, "subscription:") {
+		return
+	}
+	bonus := qty * 20 / 100
+	if bonus <= 0 {
+		return
+	}
+	var referrerID sql.NullInt64
+	err := s.db.QueryRow(`SELECT referrer_id FROM users WHERE telegram_id = $1`, buyerID).Scan(&referrerID)
+	if err != nil || !referrerID.Valid || referrerID.Int64 == 0 {
+		return
+	}
+	if err := s.AddQuota(referrerID.Int64, category, bonus); err != nil {
+		log.Printf("referral bonus failed: buyer=%d referrer=%d category=%s bonus=%d err=%v", buyerID, referrerID.Int64, category, bonus, err)
+	} else {
+		log.Printf("referral bonus added: buyer=%d referrer=%d category=%s bonus=%d", buyerID, referrerID.Int64, category, bonus)
+	}
 }
 
 func (s *WebPaymentService) RecordPayment(data *WebhookData) error {

@@ -4687,9 +4687,13 @@ func (b *Bot) handleStart(msg *tgmodels.Message) {
 
 // handleStartWithReferral обрабатывает /start с реферальным кодом
 func (b *Bot) handleStartWithReferral(msg *tgmodels.Message, referralCode string) {
-	// Intercept auth-{token} for web login flow
+	// Intercept auth-{token} and link-{token} for web login/linking flow
 	if strings.HasPrefix(referralCode, "auth-") {
 		b.handleWebAuthToken(msg, strings.TrimPrefix(referralCode, "auth-"))
+		return
+	}
+	if strings.HasPrefix(referralCode, "link-") {
+		b.handleWebAuthToken(msg, strings.TrimPrefix(referralCode, "link-"))
 		return
 	}
 
@@ -4761,16 +4765,38 @@ func (b *Bot) handleWebAuthToken(msg *tgmodels.Message, token string) {
 		return
 	}
 	defer resp.Body.Close()
+	respBody, _ := io.ReadAll(resp.Body)
+
+	frontendURL := b.cfg.WebFrontendURL
+	if frontendURL == "" {
+		frontendURL = "https://app.aifaceapp.ru"
+	}
+	siteMarkup := &tgmodels.InlineKeyboardMarkup{
+		InlineKeyboard: [][]tgmodels.InlineKeyboardButton{
+			{newInlineKeyboardButtonURL("🌐 Войти на сайт", frontendURL)},
+		},
+	}
 
 	if resp.StatusCode == http.StatusOK {
-		b.sendText(chatID, "Авторизация прошла успешно! ✅\n\nМожете вернуться на сайт.")
+		var result struct {
+			Status string `json:"status"`
+		}
+		json.Unmarshal(respBody, &result)
+		text := "Авторизация прошла успешно! ✅"
+		if result.Status == "linked" {
+			text = "✅ Telegram аккаунт успешно привязан к вашему профилю!"
+		}
+		m := newMessageConfig(chatID, text)
+		m.ReplyMarkup = siteMarkup
+		b.sendMsg(m)
 	} else if resp.StatusCode == http.StatusGone {
 		b.sendText(chatID, "⏰ Ссылка для авторизации истекла. Запросите новую на сайте.")
 	} else if resp.StatusCode == http.StatusConflict {
-		b.sendText(chatID, "✅ Вы уже авторизованы. Можете вернуться на сайт.")
+		m := newMessageConfig(chatID, "✅ Вы уже авторизованы.")
+		m.ReplyMarkup = siteMarkup
+		b.sendMsg(m)
 	} else {
-		body, _ := io.ReadAll(resp.Body)
-		log.Printf("web auth token: unexpected status %d body=%s", resp.StatusCode, string(body))
+		log.Printf("web auth token: unexpected status %d body=%s", resp.StatusCode, string(respBody))
 		b.sendText(chatID, "❌ Ошибка авторизации. Попробуйте ещё раз.")
 	}
 }

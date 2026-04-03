@@ -103,6 +103,9 @@ export const authApi = {
   createWebToken: () =>
     api.post<{ token: string }>('/auth/telegram/web-token'),
 
+  createLinkToken: () =>
+    api.post<{ token: string }>('/me/telegram/link-token'),
+
   getWebTokenStatus: (token: string) =>
     api.get<{ status: string; access_token?: string; refresh_token?: string }>(
       `/auth/telegram/web-token/${token}/status`

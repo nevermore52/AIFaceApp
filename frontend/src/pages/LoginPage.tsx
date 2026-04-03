@@ -4,7 +4,7 @@ import { useAuthStore } from '../store/auth'
 import { authApi, API_BASE_URL } from '../lib/api'
 import { Button } from '../components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../components/ui/card'
-import { Sparkles } from 'lucide-react'
+import { Sparkles, Copy, Check } from 'lucide-react'
 
 export function LoginPage() {
   const navigate = useNavigate()
@@ -13,6 +13,7 @@ export function LoginPage() {
   const redirectTo = (location.state as { from?: string } | null)?.from || '/'
 
   const [tgStatus, setTgStatus] = useState<'idle' | 'waiting' | 'error' | 'expired'>('idle')
+  const [cmdCopied, setCmdCopied] = useState(false)
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null)
   const tokenRef = useRef<string | null>(null)
 
@@ -130,25 +131,49 @@ export function LoginPage() {
         </CardHeader>
         <CardContent className="space-y-6 pb-10">
           {tgStatus === 'waiting' ? (
-            <div className="text-center space-y-6 py-4 animate-in fade-in zoom-in-95 duration-500">
-              <div className="relative mx-auto w-16 h-16">
-                <div className="absolute inset-0 rounded-full border-2 border-white/5" />
-                <div className="absolute inset-0 rounded-full border-2 border-primary border-t-transparent animate-spin" />
+            <div className="space-y-4 py-4 animate-in fade-in zoom-in-95 duration-500">
+              <div className="text-center space-y-4">
+                <div className="relative mx-auto w-14 h-14">
+                  <div className="absolute inset-0 rounded-full border-2 border-white/5" />
+                  <div className="absolute inset-0 rounded-full border-2 border-primary border-t-transparent animate-spin" />
+                </div>
+                <div className="space-y-1">
+                  <p className="text-sm font-semibold text-white/90">Ожидание подтверждения...</p>
+                  <p className="text-[11px] text-white/30">Нажмите кнопку <span className="text-primary font-bold">Войти на сайт</span> в боте.</p>
+                </div>
               </div>
-              <div className="space-y-2">
-                <p className="text-sm font-semibold text-white/90">Ожидание подтверждения...</p>
-                <p className="text-[11px] text-white/30 leading-relaxed max-w-[200px] mx-auto">
-                  Нажмите <span className="text-primary font-bold">/start</span> в боте Telegram, <br />затем вернитесь на эту страницу.
-                </p>
+
+              {tokenRef.current && (
+                <div className="space-y-1.5">
+                  <p className="text-[10px] text-white/30 text-center uppercase tracking-wider">Или введите команду вручную в боте</p>
+                  <div className="flex gap-2 items-center p-2.5 rounded-xl border border-white/5 bg-white/[0.02]">
+                    <code className="flex-1 text-[11px] text-primary/80 truncate font-mono">
+                      /start auth-{tokenRef.current}
+                    </code>
+                    <button
+                      onClick={async () => {
+                        await navigator.clipboard.writeText(`/start auth-${tokenRef.current}`)
+                        setCmdCopied(true)
+                        setTimeout(() => setCmdCopied(false), 2000)
+                      }}
+                      className="flex-shrink-0 p-1.5 rounded-lg hover:bg-white/10 transition-colors"
+                    >
+                      {cmdCopied ? <Check className="h-3.5 w-3.5 text-green-400" /> : <Copy className="h-3.5 w-3.5 text-white/30" />}
+                    </button>
+                  </div>
+                </div>
+              )}
+
+              <div className="text-center">
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="rounded-full text-[10px] uppercase tracking-widest font-bold text-white/20 hover:text-white hover:bg-white/5"
+                  onClick={() => { stopPolling(); setTgStatus('idle') }}
+                >
+                  Отменить вход
+                </Button>
               </div>
-              <Button
-                variant="ghost"
-                size="sm"
-                className="rounded-full text-[10px] uppercase tracking-widest font-bold text-white/20 hover:text-white hover:bg-white/5"
-                onClick={() => { stopPolling(); setTgStatus('idle') }}
-              >
-                Отменить вход
-              </Button>
             </div>
           ) : (
             <Button

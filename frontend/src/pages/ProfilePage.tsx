@@ -1,32 +1,87 @@
-import { useState } from 'react'
+import { useState, useEffect, useRef, useCallback } from 'react'
 import { useAuthStore } from '../store/auth'
-import { userApi, authApi } from '../lib/api'
+import { userApi, authApi, API_BASE_URL } from '../lib/api'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../components/ui/card'
 import { Button } from '../components/ui/button'
+import { Copy, Check, Users } from 'lucide-react'
+import { useSearchParams } from 'react-router-dom'
 
 export function ProfilePage() {
-  const { user, updateUser } = useAuthStore()
+  const { user, updateUser, accessToken } = useAuthStore()
+  const [searchParams] = useSearchParams()
   const [saving, setSaving] = useState(false)
+  const [copied, setCopied] = useState(false)
+  const [linkNotice, setLinkNotice] = useState<{ type: 'success' | 'error'; msg: string } | null>(null)
+  const [tgLinkStatus, setTgLinkStatus] = useState<'idle' | 'waiting' | 'linked' | 'error'>('idle')
+  const tgPollRef = useRef<ReturnType<typeof setInterval> | null>(null)
+
+  const botName = (import.meta.env.VITE_TELEGRAM_BOT_NAME || 'aifaceappbot').replace('@', '')
+  const referralLink = user?.referral_code ? `https://t.me/${botName}?start=${user.referral_code}` : ''
+
   const [formData, setFormData] = useState({
     first_name: user?.first_name || '',
     last_name: user?.last_name || '',
     username: user?.username || '',
   })
 
+  // Detect redirect from Google link OAuth callback
+  useEffect(() => {
+    const linked = searchParams.get('linked')
+    const linkError = searchParams.get('link_error')
+    if (linked === 'google') {
+      setLinkNotice({ type: 'success', msg: 'Google аккаунт успешно привязан!' })
+      userApi.getMe().then((data) => updateUser(data as Parameters<typeof updateUser>[0])).catch(() => {})
+    } else if (linkError) {
+      setLinkNotice({ type: 'error', msg: 'Не удалось привязать Google аккаунт. Возможно, он уже используется другим профилем.' })
+    }
+  }, [])
+
+  useEffect(() => () => { if (tgPollRef.current) clearInterval(tgPollRef.current) }, [])
+
+  const stopTgPoll = useCallback(() => {
+    if (tgPollRef.current) { clearInterval(tgPollRef.current); tgPollRef.current = null }
+  }, [])
+
+  const handleCopyLink = async () => {
+    if (!referralLink) return
+    try {
+      await navigator.clipboard.writeText(referralLink)
+    } catch {
+      const el = document.createElement('textarea')
+      el.value = referralLink
+      document.body.appendChild(el)
+      el.select()
+      document.execCommand('copy')
+      document.body.removeChild(el)
+    }
+    setCopied(true)
+    setTimeout(() => setCopied(false), 2000)
+  }
+
   const handleLinkTelegram = async () => {
     try {
-      const { token } = await authApi.createWebToken()
-      const botName = (import.meta.env.VITE_TELEGRAM_BOT_NAME || 'aifaceappbot').replace('@', '')
+      const { token } = await authApi.createLinkToken()
       window.open(`https://t.me/${botName}?start=link-${token}`, '_blank', 'noopener,noreferrer')
-    } catch (error) {
-      console.error('Failed to create web token:', error)
+      setTgLinkStatus('waiting')
+      stopTgPoll()
+      tgPollRef.current = setInterval(async () => {
+        try {
+          const result = await authApi.getWebTokenStatus(token)
+          if (result.status === 'linked') {
+            stopTgPoll()
+            setTgLinkStatus('linked')
+            userApi.getMe().then((data) => updateUser(data as Parameters<typeof updateUser>[0])).catch(() => {})
+          }
+        } catch { /* keep polling */ }
+      }, 3000)
+      setTimeout(() => { stopTgPoll(); setTgLinkStatus((s) => s === 'waiting' ? 'error' : s) }, 5 * 60 * 1000)
+    } catch {
+      setTgLinkStatus('error')
     }
   }
 
   const handleLinkGoogle = () => {
-    // Для связывания Google нужно использовать текущий email из OAuth
-    // Пока что просто показываем сообщение
-    alert('Функция связывания Google аккаунта будет доступна в следующем обновлении. Используйте вход через Google для создания нового аккаунта.')
+    window.location.href = `${API_BASE_URL}/auth/google?link_token=${accessToken}`
   }
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -52,6 +107,17 @@ export function ProfilePage() {
           Управление вашими личными данными и подключенными аккаунтами
         </p>
       </div>
+
+      {/* Уведомление о привязке */}
+      {linkNotice && (
+        <div className={`rounded-xl border px-4 py-3 text-sm font-medium ${
+          linkNotice.type === 'success'
+            ? 'border-green-500/30 bg-green-500/10 text-green-300'
+            : 'border-red-500/30 bg-red-500/10 text-red-300'
+        }`}>
+          {linkNotice.msg}
+        </div>
+      )}
 
       <div className="grid gap-8 md:grid-cols-12">
         <div className="md:col-span-7 space-y-8">
@@ -107,8 +173,8 @@ export function ProfilePage() {
                   </div>
                   <p className="text-[10px] text-white/30 ml-1">Username не может быть изменен</p>
                 </div>
-                <Button 
-                  type="submit" 
+                <Button
+                  type="submit"
                   disabled={saving}
                   className="w-full py-6 rounded-xl font-bold transition-all shadow-[0_10px_30px_-10px_rgba(139,92,246,0.3)] hover:shadow-[0_15px_40px_-8px_rgba(139,92,246,0.4)]"
                 >
@@ -134,6 +200,8 @@ export function ProfilePage() {
               <CardDescription className="text-white/40 font-medium">Способы входа в ваш аккаунт</CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
+
+              {/* Telegram */}
               <div className="p-4 rounded-2xl border border-white/5 bg-white/[0.03] transition-all hover:bg-white/[0.05] group">
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-4">
@@ -145,18 +213,20 @@ export function ProfilePage() {
                     <div>
                       <p className="text-sm font-semibold text-white/90">Telegram</p>
                       <p className="text-[10px] uppercase tracking-wider text-white/20 font-medium mt-0.5">
-                        {user?.telegram_id ? `Linked (ID: ${user.telegram_id})` : 'Not linked'}
+                        {user?.telegram_id ? `ID: ${user.telegram_id}` : tgLinkStatus === 'waiting' ? 'Ожидание...' : tgLinkStatus === 'linked' ? 'Привязан!' : 'Not linked'}
                       </p>
                     </div>
                   </div>
-                  {user?.telegram_id ? (
+                  {user?.telegram_id || tgLinkStatus === 'linked' ? (
                     <div className="px-3 py-1 rounded-full bg-green-500/10 border border-green-500/20 text-green-500 text-[10px] font-bold uppercase tracking-widest">
                       Активен
                     </div>
+                  ) : tgLinkStatus === 'waiting' ? (
+                    <div className="h-4 w-4 animate-spin rounded-full border-2 border-white/10 border-t-primary" />
                   ) : (
-                    <Button 
-                      variant="outline" 
-                      size="sm" 
+                    <Button
+                      variant="outline"
+                      size="sm"
                       className="rounded-full h-8 text-[10px] font-bold uppercase tracking-widest border-white/10 hover:bg-white/10"
                       onClick={handleLinkTelegram}
                     >
@@ -164,8 +234,19 @@ export function ProfilePage() {
                     </Button>
                   )}
                 </div>
+                {tgLinkStatus === 'waiting' && (
+                  <p className="text-[10px] text-white/30 mt-2 ml-16 animate-pulse">
+                    Нажмите «Войти на сайт» в боте...
+                  </p>
+                )}
+                {tgLinkStatus === 'error' && (
+                  <p className="text-[10px] text-red-400/70 mt-2 ml-16">
+                    Время вышло. Попробуйте ещё раз.
+                  </p>
+                )}
               </div>
 
+              {/* Google */}
               <div className="p-4 rounded-2xl border border-white/5 bg-white/[0.03] transition-all hover:bg-white/[0.05] group">
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-4">
@@ -189,9 +270,9 @@ export function ProfilePage() {
                       Активен
                     </div>
                   ) : (
-                    <Button 
-                      variant="outline" 
-                      size="sm" 
+                    <Button
+                      variant="outline"
+                      size="sm"
                       className="rounded-full h-8 text-[10px] font-bold uppercase tracking-widest border-white/10 hover:bg-white/10"
                       onClick={handleLinkGoogle}
                     >
@@ -200,10 +281,61 @@ export function ProfilePage() {
                   )}
                 </div>
               </div>
+
             </CardContent>
           </Card>
         </div>
       </div>
+
+      {/* Реферальная программа */}
+      <Card className="border-white/5 bg-white/[0.02] backdrop-blur-sm">
+        <CardHeader className="pb-4">
+          <CardTitle className="text-lg flex items-center gap-2 text-white/90">
+            <div className="h-6 w-1 bg-primary rounded-full" />
+            Реферальная программа
+          </CardTitle>
+          <CardDescription className="text-white/40 font-medium">
+            Получайте 20% от покупок ваших рефералов
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <p className="text-sm text-white/50">
+            🎁 Вы будете получать <span className="text-white/80 font-semibold">20% от покупок</span> ваших рефералов!
+            Например, пользователь купил 10 генераций — вы получите 2 генерации бесплатно.
+            <span className="text-white/30"> Не действует на подписки.</span>
+          </p>
+
+          <div className="flex items-center gap-2 p-3 rounded-xl bg-white/[0.03] border border-white/5">
+            <Users className="h-4 w-4 text-primary flex-shrink-0" />
+            <span className="text-sm text-white/50">Приглашено пользователей:</span>
+            <span className="text-sm font-bold text-white ml-auto">{user?.referrals_count ?? 0}</span>
+          </div>
+
+          {referralLink && (
+            <div className="space-y-2">
+              <label className="text-xs font-semibold uppercase tracking-wider text-white/40 ml-1">
+                Ваша реферальная ссылка
+              </label>
+              <div className="flex gap-2">
+                <input
+                  readOnly
+                  value={referralLink}
+                  className="flex-1 min-w-0 px-3 py-2.5 rounded-xl border border-white/5 bg-white/[0.03] text-xs text-white/50 truncate"
+                />
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={handleCopyLink}
+                  className="rounded-xl border-white/10 hover:bg-white/5 flex-shrink-0 gap-1.5"
+                >
+                  {copied ? <Check className="h-3.5 w-3.5 text-green-400" /> : <Copy className="h-3.5 w-3.5" />}
+                  {copied ? 'Скопировано' : 'Копировать'}
+                </Button>
+              </div>
+            </div>
+          )}
+        </CardContent>
+      </Card>
     </div>
   )
 }

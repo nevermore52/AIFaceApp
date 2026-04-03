@@ -18,7 +18,8 @@ type Config struct {
 	Payment       PaymentConfig
 	Server        ServerConfig
 	DebugLogging  bool
-	WebBackendURL string
+	WebBackendURL  string
+	WebFrontendURL string
 }
 
 type RedisConfig struct {
@@ -105,6 +106,7 @@ func Load() (*Config, error) {
 	}
 
 	cfg.WebBackendURL = getEnv("WEB_BACKEND_URL", "http://web-backend:3000")
+	cfg.WebFrontendURL = getEnv("WEB_FRONTEND_URL", "https://app.aifaceapp.ru")
 
 	cfg.DebugLogging = getEnvBool("DEBUG_LOGGING", true)
 	if cfg.TelegramToken == "" {

@@ -13,6 +13,8 @@ interface User {
   subscription_type: string
   subscription_end?: string
   channel_trial_claimed?: boolean
+  referral_code?: string
+  referrals_count?: number
 }
 
 interface AuthState {

@@ -125,6 +125,7 @@ func New(cfg *config.Config, db *sql.DB) *Server {
 			protected.PUT("/me", userHandler.UpdateProfile)
 			protected.GET("/me/quota", userHandler.GetQuota)
 			protected.POST("/me/channel-bonus/claim", userHandler.ClaimChannelBonus)
+			protected.POST("/me/telegram/link-token", authHandler.CreateLinkToken)
 			protected.GET("/me/history", generationHandler.GetUserHistory)
 
 			protected.GET("/generations", generationHandler.GetUserGenerations)

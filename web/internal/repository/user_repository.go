@@ -167,6 +167,28 @@ func (r *UserRepository) MergeAccounts(keepUserID, deleteUserID int64) error {
 		return err
 	}
 
+	// Перенести подписку если у удаляемого аккаунта она лучше/активнее
+	_, err = tx.Exec(`
+		UPDATE users AS k
+		SET subscription_type = d.subscription_type,
+		    subscription_end = d.subscription_end,
+		    subscription_started_at = d.subscription_started_at
+		FROM users AS d
+		WHERE k.id = $1 AND d.id = $2
+		  AND d.subscription_end > NOW()
+		  AND (k.subscription_end IS NULL OR k.subscription_end <= NOW())
+	`, keepUserID, deleteUserID)
+	if err != nil {
+		return err
+	}
+
+	// Обнулить referrer_id у юзеров которые были приглашены удаляемым аккаунтом
+	// (они снова привяжутся через telegram_id после merge)
+	_, _ = tx.Exec(`
+		UPDATE users SET referrer_id = NULL
+		WHERE referrer_id = (SELECT telegram_id FROM users WHERE id = $1)
+	`, deleteUserID)
+
 	// Удалить старый аккаунт
 	_, err = tx.Exec(`DELETE FROM users WHERE id = $1`, deleteUserID)
 	if err != nil {

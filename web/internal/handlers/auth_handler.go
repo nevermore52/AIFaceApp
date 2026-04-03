@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"net/http"
+	"strings"
 
 	"telegram-ai-face-bot/web/internal/config"
 	"telegram-ai-face-bot/web/internal/models"
@@ -137,8 +138,11 @@ func (h *AuthHandler) GoogleLogin(c *gin.Context) {
 		return
 	}
 
-	// Use simple state for now - linking will be handled via separate flow
-	url := h.googleOAuth.AuthCodeURL("state", oauth2.AccessTypeOffline)
+	state := "login"
+	if linkToken := c.Query("link_token"); linkToken != "" {
+		state = "link:" + linkToken
+	}
+	url := h.googleOAuth.AuthCodeURL(state, oauth2.AccessTypeOffline)
 	c.Redirect(http.StatusTemporaryRedirect, url)
 }
 
@@ -183,6 +187,23 @@ func (h *AuthHandler) GoogleCallback(c *gin.Context) {
 	var avatarURL *string
 	if userInfo.Picture != "" {
 		avatarURL = &userInfo.Picture
+	}
+
+	// Check if this is an account-linking flow
+	state := c.Query("state")
+	if strings.HasPrefix(state, "link:") {
+		linkToken := strings.TrimPrefix(state, "link:")
+		linkUser, err := h.authService.ValidateToken(linkToken)
+		if err != nil {
+			c.Redirect(http.StatusTemporaryRedirect, h.cfg.FrontendURL+"/profile?link_error=auth")
+			return
+		}
+		if err := h.authService.LinkGoogleAccount(linkUser.ID, userInfo.Email); err != nil {
+			c.Redirect(http.StatusTemporaryRedirect, h.cfg.FrontendURL+"/profile?link_error=conflict")
+			return
+		}
+		c.Redirect(http.StatusTemporaryRedirect, h.cfg.FrontendURL+"/profile?linked=google")
+		return
 	}
 
 	user, accessToken, refreshToken, err := h.authService.LoginWithGoogle(
@@ -291,7 +312,12 @@ func (h *AuthHandler) GetWebTokenStatus(c *gin.Context) {
 		return
 	}
 
-	if t.Status == "confirmed" && t.AccessToken != nil && t.RefreshToken != nil {
+	if t.Status == "confirmed" {
+		// Link action: no tokens stored
+		if t.ActionType == "link" || t.AccessToken == nil || *t.AccessToken == "" {
+			c.JSON(http.StatusOK, gin.H{"status": "linked"})
+			return
+		}
 		c.JSON(http.StatusOK, gin.H{
 			"status":        "confirmed",
 			"access_token":  *t.AccessToken,
@@ -396,6 +422,23 @@ func (h *AuthHandler) ConfirmWebToken(c *gin.Context) {
 		"status": "confirmed",
 		"user":   user,
 	})
+}
+
+// CreateLinkToken creates a one-time token for linking Telegram to the current user (protected)
+func (h *AuthHandler) CreateLinkToken(c *gin.Context) {
+	user, exists := c.Get("user")
+	if !exists {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "Not authenticated"})
+		return
+	}
+	u := user.(*models.User)
+	userID := u.ID
+	t, err := h.authTokenRepo.CreateWithAction("link", &userID)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to create link token"})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"token": t.Token})
 }
 
 // LinkGoogleAccount links a Google account to the current authenticated user

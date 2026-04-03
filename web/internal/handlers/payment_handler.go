@@ -207,6 +207,8 @@ func (h *PaymentHandler) HandleYooKassaWebhook(c *gin.Context) {
 		return
 	}
 
+	h.webPaymentService.AddReferralBonus(data.UserID, data.Category, data.Qty)
+
 	if err := h.webPaymentService.RecordPayment(data); err != nil {
 		log.Printf("Failed to record payment: %v", err)
 	}

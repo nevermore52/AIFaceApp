@@ -44,6 +44,7 @@ services:
       SERVER_HOST: 0.0.0.0
       SERVER_PORT: 8080
       WEB_BACKEND_URL: http://web-backend:3000
+      WEB_FRONTEND_URL: https://app.aifaceapp.ru
     depends_on:
       postgres:
         condition: service_healthy
