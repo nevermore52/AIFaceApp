@@ -156,9 +156,9 @@ func (h *PaymentHandler) GetPaymentHistory(c *gin.Context) {
 	}
 
 	u := user.(*models.User)
-	if u.TelegramID == nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "Telegram account not linked"})
-		return
+	historyUserID := u.ID
+	if u.TelegramID != nil {
+		historyUserID = *u.TelegramID
 	}
 
 	limit, _ := strconv.Atoi(c.DefaultQuery("limit", "20"))
@@ -168,7 +168,7 @@ func (h *PaymentHandler) GetPaymentHistory(c *gin.Context) {
 		limit = 100
 	}
 
-	payments, total, err := h.paymentService.GetByUserID(*u.TelegramID, limit, offset)
+	payments, total, err := h.paymentService.GetByUserID(historyUserID, limit, offset)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to get payment history"})
 		return

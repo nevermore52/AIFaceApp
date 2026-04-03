@@ -46,8 +46,8 @@ export function PaymentsPage() {
     Promise.all([
       paymentApi.getPackages(),
       paymentApi.getSubscriptions(),
-      paymentApi.getHistory(10, 0),
-      paymentApi.getPhotoDiscount(),
+      paymentApi.getHistory(10, 0).catch(() => ({ data: [] })),
+      paymentApi.getPhotoDiscount().catch(() => ({ percent: 0, end_time: 0 })),
     ])
       .then(([pkgs, subs, hist, pd]) => {
         setPackages(pkgs as Package[])
