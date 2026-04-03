@@ -52,31 +52,31 @@ type SubscriptionInfo struct {
 
 func (s *WebPaymentService) GetPackages() []PackageInfo {
 	return []PackageInfo{
-		// Image packages (from bot payment_service.go)
-		{Category: "image", Qty: 10, Price: 99},
-		{Category: "image", Qty: 50, Price: 389},
-		{Category: "image", Qty: 100, Price: 669},
-		{Category: "image", Qty: 250, Price: 1499},
-		{Category: "image", Qty: 500, Price: 2899},
+		// Image packages
+		{Category: "image", Qty: 10, Price: 10},
+		{Category: "image", Qty: 50, Price: 10},
+		{Category: "image", Qty: 100, Price: 10},
+		{Category: "image", Qty: 250, Price: 10},
+		{Category: "image", Qty: 500, Price: 10},
 		// Text packages
 		{Category: "text", Qty: 10, Price: 10},
-		{Category: "text", Qty: 50, Price: 45},
-		{Category: "text", Qty: 100, Price: 80},
-		{Category: "text", Qty: 250, Price: 200},
-		{Category: "text", Qty: 500, Price: 345},
+		{Category: "text", Qty: 50, Price: 10},
+		{Category: "text", Qty: 100, Price: 10},
+		{Category: "text", Qty: 250, Price: 10},
+		{Category: "text", Qty: 500, Price: 10},
 		// Music packages
-		{Category: "music", Qty: 1, Price: 25},
-		{Category: "music", Qty: 5, Price: 119},
-		{Category: "music", Qty: 10, Price: 202},
-		{Category: "music", Qty: 50, Price: 812},
-		{Category: "music", Qty: 100, Price: 1599},
+		{Category: "music", Qty: 1, Price: 10},
+		{Category: "music", Qty: 5, Price: 10},
+		{Category: "music", Qty: 10, Price: 10},
+		{Category: "music", Qty: 50, Price: 10},
+		{Category: "music", Qty: 100, Price: 10},
 		// Video packages
-		{Category: "video", Qty: 1, Price: 99},
-		{Category: "video", Qty: 5, Price: 379},
-		{Category: "video", Qty: 10, Price: 699},
-		{Category: "video", Qty: 25, Price: 1650},
-		{Category: "video", Qty: 50, Price: 3100},
-		{Category: "video", Qty: 100, Price: 5900},
+		{Category: "video", Qty: 1, Price: 10},
+		{Category: "video", Qty: 5, Price: 10},
+		{Category: "video", Qty: 10, Price: 10},
+		{Category: "video", Qty: 25, Price: 10},
+		{Category: "video", Qty: 50, Price: 10},
+		{Category: "video", Qty: 100, Price: 10},
 	}
 }
 
@@ -84,7 +84,7 @@ func (s *WebPaymentService) GetSubscriptions() []SubscriptionInfo {
 	return []SubscriptionInfo{
 		{
 			Name:        "mini",
-			Price:       299,
+			Price:       10,
 			TextDaily:   50,
 			ImageWeekly: 25,
 			MusicWeekly: 3,
@@ -95,7 +95,7 @@ func (s *WebPaymentService) GetSubscriptions() []SubscriptionInfo {
 		},
 		{
 			Name:        "start",
-			Price:       499,
+			Price:       10,
 			TextDaily:   100,
 			ImageWeekly: 40,
 			MusicWeekly: 5,
@@ -106,7 +106,7 @@ func (s *WebPaymentService) GetSubscriptions() []SubscriptionInfo {
 		},
 		{
 			Name:        "pro",
-			Price:       799,
+			Price:       10,
 			TextDaily:   200,
 			ImageWeekly: 90,
 			MusicWeekly: 10,

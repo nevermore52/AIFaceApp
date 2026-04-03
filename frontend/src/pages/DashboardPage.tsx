@@ -41,14 +41,13 @@ export function DashboardPage() {
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null)
 
   const refreshQuota = useCallback(() => {
-    if (user?.telegram_id) {
+    if (isAuthenticated) {
       userApi.getQuota().then((data) => setQuota(data as Quota)).catch(console.error)
     }
-  }, [user?.telegram_id])
+  }, [isAuthenticated])
 
   useEffect(() => {
-    if (user?.telegram_id) {
-      // Получаем актуальные данные пользователя с сервера (в т.ч. channel_trial_claimed)
+    if (isAuthenticated) {
       userApi.getMe()
         .then((data) => {
           updateUser(data as any)
@@ -193,16 +192,6 @@ export function DashboardPage() {
         </Card>
       )}
 
-      {isAuthenticated && !user?.telegram_id && (
-        <Card className="border-yellow-500/20 bg-yellow-500/5 backdrop-blur-sm">
-          <CardContent className="pt-4 pb-4">
-            <p className="text-yellow-200/80 text-sm flex items-center gap-3">
-              <span className="h-2 w-2 rounded-full bg-yellow-500 animate-pulse flex-shrink-0" />
-              Привяжите Telegram аккаунт в настройках профиля для доступа к генерации.
-            </p>
-          </CardContent>
-        </Card>
-      )}
 
       {/* Компактные карточки квоты — всегда 4 в ряд */}
       <div className="grid grid-cols-4 gap-2">

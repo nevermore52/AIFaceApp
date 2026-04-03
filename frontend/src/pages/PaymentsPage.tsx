@@ -76,8 +76,8 @@ export function PaymentsPage() {
   }
 
   const handlePurchase = async (category: string, qty: number) => {
-    if (!isAuthenticated || !user?.telegram_id) {
-      alert('Для покупки необходимо авторизоваться и привязать Telegram аккаунт')
+    if (!isAuthenticated) {
+      alert('Для покупки необходимо авторизоваться')
       return
     }
 
@@ -97,8 +97,8 @@ export function PaymentsPage() {
   }
 
   const handleSubscriptionPurchase = async (subscriptionName: string) => {
-    if (!isAuthenticated || !user?.telegram_id) {
-      alert('Для покупки необходимо авторизоваться и привязать Telegram аккаунт.')
+    if (!isAuthenticated) {
+      alert('Для покупки необходимо авторизоваться.')
       return
     }
 
@@ -151,25 +151,6 @@ export function PaymentsPage() {
     )
   }
 
-  if (!user?.telegram_id) {
-    return (
-      <div className="space-y-6">
-        <div>
-          <h1 className="text-3xl font-bold">Платежи</h1>
-          <p className="text-muted-foreground mt-1">
-            Управляйте подписками и покупайте дополнительные запросы
-          </p>
-        </div>
-        <Card className="border-yellow-200 bg-yellow-50 dark:bg-yellow-950 dark:border-yellow-800">
-          <CardContent className="pt-6">
-            <p className="text-yellow-800 dark:text-yellow-200">
-              Для покупки пакетов необходимо привязать Telegram аккаунт.
-            </p>
-          </CardContent>
-        </Card>
-      </div>
-    )
-  }
 
   return (
     <div className="space-y-10 max-w-6xl mx-auto">
@@ -337,7 +318,7 @@ export function PaymentsPage() {
                               variant="secondary"
                               className="h-8 min-w-[90px] rounded-lg bg-white/5 border border-white/5 hover:bg-primary hover:text-white transition-all text-xs font-bold"
                               onClick={() => handlePurchase(pkg.category, pkg.qty)}
-                              disabled={isPurchasing || !user?.telegram_id}
+                              disabled={isPurchasing || !isAuthenticated}
                             >
                               {isPurchasing ? (
                                 <span className="h-3 w-3 animate-spin rounded-full border-2 border-white/20 border-t-white" />

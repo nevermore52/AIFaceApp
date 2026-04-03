@@ -68,9 +68,9 @@ func (h *PaymentHandler) CreatePayment(c *gin.Context) {
 	}
 
 	u := user.(*models.User)
-	if u.TelegramID == nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "Telegram account not linked"})
-		return
+	paymentUserID := u.ID
+	if u.TelegramID != nil {
+		paymentUserID = *u.TelegramID
 	}
 
 	var req CreatePaymentRequest
@@ -80,7 +80,7 @@ func (h *PaymentHandler) CreatePayment(c *gin.Context) {
 	}
 
 	paymentReq := services.CreatePaymentRequest{
-		UserID:           *u.TelegramID,
+		UserID:           paymentUserID,
 		Category:         req.Category,
 		Qty:              req.Qty,
 		Username:         u.Username,
@@ -115,9 +115,9 @@ func (h *PaymentHandler) CreateSubscriptionPayment(c *gin.Context) {
 	}
 
 	u := user.(*models.User)
-	if u.TelegramID == nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "Telegram account not linked"})
-		return
+	paymentUserID := u.ID
+	if u.TelegramID != nil {
+		paymentUserID = *u.TelegramID
 	}
 
 	var req CreateSubscriptionPaymentRequest
@@ -127,7 +127,7 @@ func (h *PaymentHandler) CreateSubscriptionPayment(c *gin.Context) {
 	}
 
 	paymentReq := services.CreatePaymentRequest{
-		UserID:    *u.TelegramID,
+		UserID:    paymentUserID,
 		Category:  "subscription:" + req.SubscriptionName,
 		Qty:       7,
 		Username:  u.Username,

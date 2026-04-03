@@ -46,10 +46,6 @@ func (h *GenerationHandler) GetUserGenerations(c *gin.Context) {
 	}
 
 	u := user.(*models.User)
-	if u.TelegramID == nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "Telegram account not linked"})
-		return
-	}
 
 	limit, _ := strconv.Atoi(c.DefaultQuery("limit", "20"))
 	offset, _ := strconv.Atoi(c.DefaultQuery("offset", "0"))

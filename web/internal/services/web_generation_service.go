@@ -308,8 +308,9 @@ func (s *WebGenerationService) CreateGeneration(userID int64, username string, r
 			return nil, fmt.Errorf("failed to get user: %w", err)
 		}
 
-		if user.TelegramID == nil {
-			return nil, fmt.Errorf("telegram account not linked")
+		quotaUserID := user.ID
+		if user.TelegramID != nil {
+			quotaUserID = *user.TelegramID
 		}
 
 		// Определяем категорию квоты
@@ -328,13 +329,13 @@ func (s *WebGenerationService) CreateGeneration(userID int64, username string, r
 		}
 
 		// Списываем квоту (с правильной стоимостью)
-		primaryUsed, extraUsed, err := s.quotaService.ConsumeQuota(*user.TelegramID, category, tokenCost)
+		primaryUsed, extraUsed, err := s.quotaService.ConsumeQuota(quotaUserID, category, tokenCost)
 		if err != nil {
 			return nil, err
 		}
 
-		log.Printf("Quota consumed: telegramID=%d category=%s amount=%d primary=%d extra=%d",
-			*user.TelegramID, category, tokenCost, primaryUsed, extraUsed)
+		log.Printf("Quota consumed: userID=%d category=%s amount=%d primary=%d extra=%d",
+			quotaUserID, category, tokenCost, primaryUsed, extraUsed)
 
 		// Сохраняем информацию о потраченных квотах для возврата при ошибке
 		req.PrimaryUsed = primaryUsed
@@ -378,7 +379,11 @@ func (s *WebGenerationService) processGeneration(genReq *GenerationRequest, req 
 		if s.quotaService != nil && (primaryUsed > 0 || extraUsed > 0) {
 			// Получаем пользователя для получения telegram_id
 			user, err := s.quotaService.GetByID(genReq.UserID)
-			if err == nil && user.TelegramID != nil {
+			if err == nil {
+				refundID := user.ID
+				if user.TelegramID != nil {
+					refundID = *user.TelegramID
+				}
 				// Определяем категорию квоты
 				var category models.QuotaCategory
 				switch genReq.ModelType {
@@ -394,12 +399,12 @@ func (s *WebGenerationService) processGeneration(genReq *GenerationRequest, req 
 
 				// Возвращаем квоты в те же типы, откуда были потрачены
 				if primaryUsed > 0 {
-					_ = s.quotaService.AddPrimaryQuota(*user.TelegramID, category, primaryUsed)
-					log.Printf("Refunded primary quota: telegramID=%d category=%s amount=%d", *user.TelegramID, category, primaryUsed)
+					_ = s.quotaService.AddPrimaryQuota(refundID, category, primaryUsed)
+					log.Printf("Refunded primary quota: userID=%d category=%s amount=%d", refundID, category, primaryUsed)
 				}
 				if extraUsed > 0 {
-					_ = s.quotaService.AddExtraQuota(*user.TelegramID, category, extraUsed)
-					log.Printf("Refunded extra quota: telegramID=%d category=%s amount=%d", *user.TelegramID, category, extraUsed)
+					_ = s.quotaService.AddExtraQuota(refundID, category, extraUsed)
+					log.Printf("Refunded extra quota: userID=%d category=%s amount=%d", refundID, category, extraUsed)
 				}
 			}
 		}
@@ -576,12 +581,16 @@ func (s *WebGenerationService) processMusicGeneration(genReq *GenerationRequest,
 		// Возвращаем квоту
 		if s.quotaService != nil {
 			user, err := s.quotaService.GetByID(genReq.UserID)
-			if err == nil && user.TelegramID != nil {
+			if err == nil {
+				refundID := user.ID
+				if user.TelegramID != nil {
+					refundID = *user.TelegramID
+				}
 				if req.PrimaryUsed > 0 {
-					_ = s.quotaService.AddPrimaryQuota(*user.TelegramID, models.QuotaCategoryMusic, req.PrimaryUsed)
+					_ = s.quotaService.AddPrimaryQuota(refundID, models.QuotaCategoryMusic, req.PrimaryUsed)
 				}
 				if req.ExtraUsed > 0 {
-					_ = s.quotaService.AddExtraQuota(*user.TelegramID, models.QuotaCategoryMusic, req.ExtraUsed)
+					_ = s.quotaService.AddExtraQuota(refundID, models.QuotaCategoryMusic, req.ExtraUsed)
 				}
 			}
 		}
@@ -623,12 +632,16 @@ func (s *WebGenerationService) processMusicGeneration(genReq *GenerationRequest,
 	// Возвращаем квоту
 	if s.quotaService != nil {
 		user, err := s.quotaService.GetByID(genReq.UserID)
-		if err == nil && user.TelegramID != nil {
+		if err == nil {
+			refundID := user.ID
+			if user.TelegramID != nil {
+				refundID = *user.TelegramID
+			}
 			if req.PrimaryUsed > 0 {
-				_ = s.quotaService.AddPrimaryQuota(*user.TelegramID, models.QuotaCategoryMusic, req.PrimaryUsed)
+				_ = s.quotaService.AddPrimaryQuota(refundID, models.QuotaCategoryMusic, req.PrimaryUsed)
 			}
 			if req.ExtraUsed > 0 {
-				_ = s.quotaService.AddExtraQuota(*user.TelegramID, models.QuotaCategoryMusic, req.ExtraUsed)
+				_ = s.quotaService.AddExtraQuota(refundID, models.QuotaCategoryMusic, req.ExtraUsed)
 			}
 		}
 	}
@@ -671,12 +684,16 @@ func (s *WebGenerationService) processTextGeneration(genReq *GenerationRequest, 
 		// Возвращаем квоту
 		if s.quotaService != nil {
 			user, err := s.quotaService.GetByID(genReq.UserID)
-			if err == nil && user.TelegramID != nil {
+			if err == nil {
+				refundID := user.ID
+				if user.TelegramID != nil {
+					refundID = *user.TelegramID
+				}
 				if req.PrimaryUsed > 0 {
-					_ = s.quotaService.AddPrimaryQuota(*user.TelegramID, models.QuotaCategoryText, req.PrimaryUsed)
+					_ = s.quotaService.AddPrimaryQuota(refundID, models.QuotaCategoryText, req.PrimaryUsed)
 				}
 				if req.ExtraUsed > 0 {
-					_ = s.quotaService.AddExtraQuota(*user.TelegramID, models.QuotaCategoryText, req.ExtraUsed)
+					_ = s.quotaService.AddExtraQuota(refundID, models.QuotaCategoryText, req.ExtraUsed)
 				}
 			}
 		}

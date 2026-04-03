@@ -107,12 +107,12 @@ func (h *UserHandler) GetQuota(c *gin.Context) {
 	}
 
 	u := user.(*models.User)
-	if u.TelegramID == nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "Telegram account not linked"})
-		return
+	quotaUserID := u.ID
+	if u.TelegramID != nil {
+		quotaUserID = *u.TelegramID
 	}
 
-	quota, err := h.userService.GetQuota(*u.TelegramID)
+	quota, err := h.userService.GetQuota(quotaUserID)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to get quota"})
 		return
