@@ -172,6 +172,7 @@ func (s *WebPaymentService) GetPrice(category string, qty int) (float64, bool) {
 
 type CreatePaymentRequest struct {
 	UserID           int64  `json:"user_id"`
+	InternalUserID   int64  `json:"internal_user_id"`
 	Category         string `json:"category"`
 	Qty              int    `json:"qty"`
 	Username         string `json:"username"`
@@ -229,13 +230,14 @@ func (s *WebPaymentService) CreatePayment(req CreatePaymentRequest) (*CreatePaym
 			"return_url": s.returnURL,
 		},
 		"metadata": map[string]any{
-			"user_id":    req.UserID,
-			"category":   req.Category,
-			"qty":        req.Qty,
-			"username":   req.Username,
-			"first_name": req.FirstName,
-			"last_name":  req.LastName,
-			"source":     "web",
+			"user_id":          req.UserID,
+			"internal_user_id": req.InternalUserID,
+			"category":         req.Category,
+			"qty":              req.Qty,
+			"username":         req.Username,
+			"first_name":       req.FirstName,
+			"last_name":        req.LastName,
+			"source":           "web",
 		},
 	}
 
@@ -288,14 +290,15 @@ func (s *WebPaymentService) CreatePayment(req CreatePaymentRequest) (*CreatePaym
 }
 
 type WebhookData struct {
-	PaymentID string
-	UserID    int64
-	Category  string
-	Qty       int
-	Amount    float64
-	Username  string
-	FirstName string
-	LastName  string
+	PaymentID      string
+	UserID         int64
+	InternalUserID int64
+	Category       string
+	Qty            int
+	Amount         float64
+	Username       string
+	FirstName      string
+	LastName       string
 }
 
 func (s *WebPaymentService) ParseWebhook(body []byte) (*WebhookData, error) {
@@ -350,16 +353,51 @@ func (s *WebPaymentService) ParseWebhook(body []byte) (*WebhookData, error) {
 		amount, _ = strconv.ParseFloat(v, 64)
 	}
 
+	// Parse internal_user_id (present for web payments); fall back to user_id
+	var internalUserID int64
+	if v, ok := md["internal_user_id"]; ok {
+		if parsed, err := parseInt64(v); err == nil && parsed > 0 {
+			internalUserID = parsed
+		}
+	}
+	if internalUserID == 0 {
+		internalUserID = userID
+	}
+
 	return &WebhookData{
-		PaymentID: payload.Object.ID,
-		UserID:    userID,
-		Category:  category,
-		Qty:       int(qty),
-		Amount:    amount,
-		Username:  username,
-		FirstName: firstName,
-		LastName:  lastName,
+		PaymentID:      payload.Object.ID,
+		UserID:         userID,
+		InternalUserID: internalUserID,
+		Category:       category,
+		Qty:            int(qty),
+		Amount:         amount,
+		Username:       username,
+		FirstName:      firstName,
+		LastName:       lastName,
 	}, nil
+}
+
+// ApplySubscription activates a subscription for a user identified by internal ID.
+func (s *WebPaymentService) ApplySubscription(internalUserID int64, subscriptionName string, days int) error {
+	subscriptionName = strings.ToLower(strings.TrimSpace(subscriptionName))
+	// Validate known subscription names
+	valid := map[string]bool{"mini": true, "start": true, "pro": true}
+	if !valid[subscriptionName] {
+		return fmt.Errorf("unknown subscription: %s", subscriptionName)
+	}
+	if days <= 0 {
+		days = 7
+	}
+	endTime := time.Now().UTC().Add(time.Duration(days) * 24 * time.Hour)
+	_, err := s.db.Exec(`
+		UPDATE users
+		SET subscription_type = $2,
+		    subscription_started_at = NOW(),
+		    subscription_end = $3,
+		    updated_at = CURRENT_TIMESTAMP
+		WHERE id = $1
+	`, internalUserID, subscriptionName, endTime)
+	return err
 }
 
 func (s *WebPaymentService) AddQuota(userID int64, category string, qty int) error {

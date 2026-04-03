@@ -1,9 +1,11 @@
 package bot
 
 import (
+	"bytes"
 	"context"
 	"database/sql"
 	"encoding/json"
+	"fmt"
 	"io"
 	"log"
 	"net/http"
@@ -30,6 +32,7 @@ type Bot struct {
 	paymentService    *services.PaymentService
 	server            *http.Server
 	shutdownOnce      sync.Once
+	cfg               *config.Config
 }
 
 func NewBot(cfg *config.Config, db *sql.DB) (*Bot, error) {
@@ -64,6 +67,7 @@ func NewBot(cfg *config.Config, db *sql.DB) (*Bot, error) {
 		userService:       userService,
 		generationService: generationService,
 		paymentService:    paymentService,
+		cfg:               cfg,
 	}, nil
 }
 
@@ -123,6 +127,15 @@ func (b *Bot) startWebhookServer() {
 		body, err := io.ReadAll(r.Body)
 		if err != nil {
 			http.Error(w, "bad request", http.StatusBadRequest)
+			return
+		}
+		// Web payments must be processed by the web backend (they use internal user IDs, not telegram IDs)
+		if isWebPayment(body) {
+			log.Printf("yookassa webhook: web payment detected, forwarding to web backend from %s", r.RemoteAddr)
+			if fwdErr := b.forwardToWebBackend(body); fwdErr != nil {
+				log.Printf("yookassa web forward error: %v", fwdErr)
+			}
+			w.WriteHeader(http.StatusOK)
 			return
 		}
 		auth := r.Header.Get("Authorization")
@@ -449,4 +462,35 @@ func truncateForLog(s string, maxLen int) string {
 		return s
 	}
 	return s[:maxLen] + "..."
+}
+
+// isWebPayment returns true if the YooKassa webhook payload has metadata.source == "web"
+func isWebPayment(body []byte) bool {
+	var payload struct {
+		Object struct {
+			Metadata map[string]any `json:"metadata"`
+		} `json:"object"`
+	}
+	if err := json.Unmarshal(body, &payload); err != nil {
+		return false
+	}
+	source, _ := payload.Object.Metadata["source"].(string)
+	return source == "web"
+}
+
+// forwardToWebBackend forwards a YooKassa webhook body to the web backend for processing
+func (b *Bot) forwardToWebBackend(body []byte) error {
+	if b.cfg == nil || b.cfg.WebBackendURL == "" {
+		return nil
+	}
+	url := strings.TrimRight(b.cfg.WebBackendURL, "/") + "/api/callbacks/yookassa"
+	resp, err := http.Post(url, "application/json", bytes.NewReader(body))
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode >= 400 {
+		return fmt.Errorf("web backend returned %d", resp.StatusCode)
+	}
+	return nil
 }

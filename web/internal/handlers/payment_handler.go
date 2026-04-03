@@ -5,6 +5,7 @@ import (
 	"log"
 	"net/http"
 	"strconv"
+	"strings"
 
 	"telegram-ai-face-bot/web/internal/models"
 	"telegram-ai-face-bot/web/internal/services"
@@ -81,6 +82,7 @@ func (h *PaymentHandler) CreatePayment(c *gin.Context) {
 
 	paymentReq := services.CreatePaymentRequest{
 		UserID:           paymentUserID,
+		InternalUserID:   u.ID,
 		Category:         req.Category,
 		Qty:              req.Qty,
 		Username:         u.Username,
@@ -127,12 +129,13 @@ func (h *PaymentHandler) CreateSubscriptionPayment(c *gin.Context) {
 	}
 
 	paymentReq := services.CreatePaymentRequest{
-		UserID:    paymentUserID,
-		Category:  "subscription:" + req.SubscriptionName,
-		Qty:       7,
-		Username:  u.Username,
-		FirstName: u.FirstName,
-		LastName:  u.LastName,
+		UserID:         paymentUserID,
+		InternalUserID: u.ID,
+		Category:       "subscription:" + req.SubscriptionName,
+		Qty:            7,
+		Username:       u.Username,
+		FirstName:      u.FirstName,
+		LastName:       u.LastName,
 	}
 
 	resp, err := h.webPaymentService.CreatePayment(paymentReq)
@@ -201,20 +204,28 @@ func (h *PaymentHandler) HandleYooKassaWebhook(c *gin.Context) {
 		return
 	}
 
-	if err := h.webPaymentService.AddQuota(data.UserID, data.Category, data.Qty); err != nil {
-		log.Printf("Failed to add quota for user %d: %v", data.UserID, err)
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to add quota"})
-		return
+	if strings.HasPrefix(data.Category, "subscription:") {
+		subscriptionName := strings.TrimPrefix(data.Category, "subscription:")
+		if err := h.webPaymentService.ApplySubscription(data.InternalUserID, subscriptionName, data.Qty); err != nil {
+			log.Printf("Failed to apply subscription for user %d (internal %d): %v", data.UserID, data.InternalUserID, err)
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to apply subscription"})
+			return
+		}
+	} else {
+		if err := h.webPaymentService.AddQuota(data.UserID, data.Category, data.Qty); err != nil {
+			log.Printf("Failed to add quota for user %d: %v", data.UserID, err)
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to add quota"})
+			return
+		}
+		h.webPaymentService.AddReferralBonus(data.UserID, data.Category, data.Qty)
 	}
-
-	h.webPaymentService.AddReferralBonus(data.UserID, data.Category, data.Qty)
 
 	if err := h.webPaymentService.RecordPayment(data); err != nil {
 		log.Printf("Failed to record payment: %v", err)
 	}
 
-	log.Printf("YooKassa payment processed: user=%d category=%s qty=%d amount=%.2f",
-		data.UserID, data.Category, data.Qty, data.Amount)
+	log.Printf("YooKassa payment processed: user=%d internal=%d category=%s qty=%d amount=%.2f",
+		data.UserID, data.InternalUserID, data.Category, data.Qty, data.Amount)
 
 	c.JSON(http.StatusOK, gin.H{"status": "ok"})
 }
