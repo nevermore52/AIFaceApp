@@ -1,0 +1,5 @@
+vendor/
+frontend/
+web/
+.git/
+*.md
