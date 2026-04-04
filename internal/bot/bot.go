@@ -148,6 +148,63 @@ func (b *Bot) startWebhookServer() {
 		w.WriteHeader(http.StatusOK)
 	})
 
+	// Web generation result notification — sends the result to user's TG chat
+	mux.HandleFunc("/web/generation/notify", func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost {
+			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+			return
+		}
+		body, err := io.ReadAll(r.Body)
+		if err != nil {
+			http.Error(w, "bad request", http.StatusBadRequest)
+			return
+		}
+		var payload struct {
+			TelegramID        int64  `json:"telegram_id"`
+			Status            string `json:"status"`
+			Model             string `json:"model"`
+			ModelType         string `json:"model_type"`
+			Output            string `json:"output"`
+			ErrorMsg          string `json:"error_msg"`
+			TokensUsed        int    `json:"tokens_used"`
+			TokensPrimaryUsed int    `json:"tokens_primary_used"`
+			TokensExtraUsed   int    `json:"tokens_extra_used"`
+		}
+		if err := json.Unmarshal(body, &payload); err != nil {
+			log.Printf("web gen notify parse error: %v", err)
+			http.Error(w, "bad request", http.StatusBadRequest)
+			return
+		}
+		if payload.TelegramID == 0 {
+			http.Error(w, "missing telegram_id", http.StatusBadRequest)
+			return
+		}
+
+		var output, errorMsg *string
+		if payload.Output != "" {
+			output = &payload.Output
+		}
+		if payload.ErrorMsg != "" {
+			errorMsg = &payload.ErrorMsg
+		}
+
+		req := &models.GenerationRequest{
+			UserID:            payload.TelegramID,
+			Model:             payload.Model,
+			ModelType:         payload.ModelType,
+			Status:            payload.Status,
+			Output:            output,
+			ErrorMsg:          errorMsg,
+			TokensUsed:        payload.TokensUsed,
+			TokensPrimaryUsed: payload.TokensPrimaryUsed,
+			TokensExtraUsed:   payload.TokensExtraUsed,
+		}
+
+		b.tgBot.NotifyGenerationStatus(payload.TelegramID, req)
+		log.Printf("web gen notify sent to user %d model=%s status=%s", payload.TelegramID, payload.Model, payload.Status)
+		w.WriteHeader(http.StatusOK)
+	})
+
 	mux.HandleFunc("/defapi/callback", func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodPost {
 			log.Printf("defapi callback bad method: %s from %s", r.Method, r.RemoteAddr)

@@ -30,6 +30,7 @@ type WebGenerationService struct {
 	db           *sql.DB
 	kieClient    *kieapi.Client
 	callbackURL  string
+	botWebhookURL string // URL бота для уведомлений о завершении генераций
 	httpClient   *http.Client
 	quotaService QuotaService
 	// Suno: накапливаем 2 песни перед завершением
@@ -42,12 +43,17 @@ type WebGenerationService struct {
 }
 
 func NewWebGenerationService(db *sql.DB, kieClient *kieapi.Client, callbackURL string, quotaService QuotaService, uploadDir string) *WebGenerationService {
+	botURL := os.Getenv("BOT_WEBHOOK_URL")
+	if botURL == "" {
+		botURL = os.Getenv("WEB_BACKEND_URL") // fallback; may be empty
+	}
 	s := &WebGenerationService{
-		db:           db,
-		kieClient:    kieClient,
-		callbackURL:  callbackURL,
-		httpClient:   &http.Client{Timeout: 30 * time.Second},
-		quotaService: quotaService,
+		db:            db,
+		kieClient:     kieClient,
+		callbackURL:   callbackURL,
+		botWebhookURL: botURL,
+		httpClient:    &http.Client{Timeout: 30 * time.Second},
+		quotaService:  quotaService,
 		sunoPartials: make(map[int64][]string),
 		sunoTimers:   make(map[int64]*time.Timer),
 		chatContexts: make(map[string][]map[string]string),
@@ -719,7 +725,71 @@ func (s *WebGenerationService) completeGeneration(id int64, output string) error
 		SET status = 'completed', output = $1, completed_at = $2
 		WHERE id = $3
 	`, output, now, id)
+	if err == nil {
+		go s.notifyBotAboutCompletion(id)
+	}
 	return err
+}
+
+// notifyBotAboutCompletion sends the completed generation result to the bot's
+// Telegram notification endpoint so the user receives it in their TG chat.
+func (s *WebGenerationService) notifyBotAboutCompletion(genID int64) {
+	if s.botWebhookURL == "" {
+		return
+	}
+
+	// Load the generation request
+	var userID int64
+	var model, modelType, status string
+	var output, errorMsg sql.NullString
+	var tokensUsed, tokensPrimaryUsed, tokensExtraUsed int
+	err := s.db.QueryRow(`
+		SELECT user_id, model, model_type, status, output, error_msg,
+		       tokens_used, COALESCE(tokens_primary_used,0), COALESCE(tokens_extra_used,0)
+		FROM generation_requests WHERE id = $1
+	`, genID).Scan(&userID, &model, &modelType, &status, &output, &errorMsg,
+		&tokensUsed, &tokensPrimaryUsed, &tokensExtraUsed)
+	if err != nil {
+		log.Printf("notifyBot: failed to load gen %d: %v", genID, err)
+		return
+	}
+
+	// Skip text generations — they are streaming chat responses shown on the web
+	if modelType == "text" {
+		return
+	}
+
+	// Look up user's telegram_id
+	if s.quotaService == nil {
+		return
+	}
+	user, err := s.quotaService.GetByID(userID)
+	if err != nil || user.TelegramID == nil {
+		return
+	}
+
+	payload, _ := json.Marshal(map[string]any{
+		"telegram_id":        *user.TelegramID,
+		"status":             status,
+		"model":              model,
+		"model_type":         modelType,
+		"output":             output.String,
+		"error_msg":          errorMsg.String,
+		"tokens_used":        tokensUsed,
+		"tokens_primary_used": tokensPrimaryUsed,
+		"tokens_extra_used":  tokensExtraUsed,
+	})
+
+	url := strings.TrimRight(s.botWebhookURL, "/") + "/web/generation/notify"
+	resp, err := s.httpClient.Post(url, "application/json", bytes.NewReader(payload))
+	if err != nil {
+		log.Printf("notifyBot: POST failed for gen %d: %v", genID, err)
+		return
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode >= 400 {
+		log.Printf("notifyBot: bot returned %d for gen %d", resp.StatusCode, genID)
+	}
 }
 
 func (s *WebGenerationService) completeGenerationWithMedia(id int64, output string, mediaOutput *MediaOutput) error {
@@ -741,6 +811,9 @@ func (s *WebGenerationService) completeGenerationWithMedia(id int64, output stri
 		SET status = 'completed', output = $1, media_output = $2, completed_at = $3
 		WHERE id = $4
 	`, output, mediaJSON, now, id)
+	if err == nil {
+		go s.notifyBotAboutCompletion(id)
+	}
 	return err
 }
 
