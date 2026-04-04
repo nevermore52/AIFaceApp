@@ -377,27 +377,59 @@ func (s *WebPaymentService) ParseWebhook(body []byte) (*WebhookData, error) {
 	}, nil
 }
 
-// ApplySubscription activates a subscription for a user identified by internal ID.
+// ApplySubscription activates a subscription for a user identified by internal ID
+// and provisions the corresponding generation quotas.
 func (s *WebPaymentService) ApplySubscription(internalUserID int64, subscriptionName string, days int) error {
 	subscriptionName = strings.ToLower(strings.TrimSpace(subscriptionName))
-	// Validate known subscription names
-	valid := map[string]bool{"mini": true, "start": true, "pro": true}
-	if !valid[subscriptionName] {
+
+	type quotas struct{ textDaily, imageWeekly, musicWeekly, videoWeekly int }
+	planQuotas := map[string]quotas{
+		"mini":  {50, 25, 3, 0},
+		"start": {100, 40, 5, 2},
+		"pro":   {200, 90, 10, 5},
+	}
+	q, ok := planQuotas[subscriptionName]
+	if !ok {
 		return fmt.Errorf("unknown subscription: %s", subscriptionName)
 	}
 	if days <= 0 {
 		days = 7
 	}
 	endTime := time.Now().UTC().Add(time.Duration(days) * 24 * time.Hour)
-	_, err := s.db.Exec(`
+
+	tx, err := s.db.Begin()
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+
+	// Update subscription status in users table
+	if _, err := tx.Exec(`
 		UPDATE users
 		SET subscription_type = $2,
 		    subscription_started_at = NOW(),
 		    subscription_end = $3,
 		    updated_at = CURRENT_TIMESTAMP
 		WHERE id = $1
-	`, internalUserID, subscriptionName, endTime)
-	return err
+	`, internalUserID, subscriptionName, endTime); err != nil {
+		return err
+	}
+
+	// Provision quotas — upsert so it works whether the row exists or not
+	if _, err := tx.Exec(`
+		INSERT INTO user_quotas (telegram_id, text_daily, image_weekly, music_weekly, video_weekly)
+		VALUES ($1, $2, $3, $4, $5)
+		ON CONFLICT (telegram_id) DO UPDATE
+		SET text_daily   = EXCLUDED.text_daily,
+		    image_weekly = EXCLUDED.image_weekly,
+		    music_weekly = EXCLUDED.music_weekly,
+		    video_weekly = EXCLUDED.video_weekly,
+		    updated_at   = CURRENT_TIMESTAMP
+	`, internalUserID, q.textDaily, q.imageWeekly, q.musicWeekly, q.videoWeekly); err != nil {
+		return err
+	}
+
+	return tx.Commit()
 }
 
 func (s *WebPaymentService) AddQuota(userID int64, category string, qty int) error {
