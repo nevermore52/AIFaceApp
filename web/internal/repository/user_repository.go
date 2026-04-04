@@ -143,17 +143,40 @@ func (r *UserRepository) Update(user *models.User) error {
 }
 
 func (r *UserRepository) LinkTelegramID(userID, telegramID int64, username, firstName, lastName string) error {
+	tx, err := r.db.Begin()
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+
 	// Always set username from TG (may be empty if user has no @username).
 	// Only override first/last name when TG has a non-empty value.
-	query := `UPDATE users SET
+	_, err = tx.Exec(`UPDATE users SET
 		telegram_id = $2,
 		username    = $3,
 		first_name  = CASE WHEN $4 <> '' THEN $4 ELSE first_name END,
 		last_name   = CASE WHEN $5 <> '' THEN $5 ELSE last_name  END,
 		updated_at  = CURRENT_TIMESTAMP
-	WHERE id = $1`
-	_, err := r.db.Exec(query, userID, telegramID, username, firstName, lastName)
-	return err
+	WHERE id = $1`, userID, telegramID, username, firstName, lastName)
+	if err != nil {
+		return err
+	}
+
+	// Migrate the quota row from internal-ID key to telegram_id key.
+	// Before linking TG the effectiveUserID was the internal user ID, so the
+	// quota row is stored with telegram_id = internalUserID.  After linking it
+	// will be looked up by the real telegram_id — rename the row in place so
+	// existing quotas are not lost.
+	_, err = tx.Exec(`
+		UPDATE user_quotas SET telegram_id = $2
+		WHERE telegram_id = $1
+		  AND NOT EXISTS (SELECT 1 FROM user_quotas WHERE telegram_id = $2)
+	`, userID, telegramID)
+	if err != nil {
+		return err
+	}
+
+	return tx.Commit()
 }
 
 func (r *UserRepository) LinkEmail(userID int64, email string) error {

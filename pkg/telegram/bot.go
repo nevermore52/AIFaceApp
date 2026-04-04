@@ -4172,6 +4172,30 @@ func (b *Bot) sendChannelTrialMenu(chatID int64) {
 	}
 }
 
+// checkAndGrantChannelTrialOnStart проверяет подписку на канал при /start.
+// Если уже подписан — выдаёт 2 пробные генерации и отправляет уведомление, возвращает true.
+// Если не подписан — возвращает false (вызывающий должен показать меню подписки).
+func (b *Bot) checkAndGrantChannelTrialOnStart(chatID, userID int64) bool {
+	member, err := b.isChannelMember(userID)
+	if err != nil {
+		log.Printf("checkAndGrantChannelTrialOnStart isChannelMember error: %v", err)
+		return false
+	}
+	if !member {
+		return false
+	}
+	if err := b.userService.AddExtraQuota(userID, models.QuotaCategoryImage, 2); err != nil {
+		log.Printf("checkAndGrantChannelTrialOnStart AddExtraQuota error: %v", err)
+		return false
+	}
+	if err := b.userService.MarkChannelTrialClaimed(userID); err != nil {
+		log.Printf("checkAndGrantChannelTrialOnStart MarkChannelTrialClaimed error: %v", err)
+	}
+	b.sendText(chatID, "🎁 Вам выданы 2 пробные фото генерации!")
+	log.Printf("Granted channel trial on start to user %d", userID)
+	return true
+}
+
 // checkAndGrantChannelTrial проверяет подписку на канал и выдаёт пробный запрос
 // если пользователь ещё не получал его (channel_trial_claimed = false)
 func (b *Bot) checkAndGrantChannelTrial(userID int64) {
@@ -4681,7 +4705,9 @@ func (b *Bot) handleStart(msg *tgmodels.Message) {
 		return
 	}
 	if !claimed {
-		b.sendStartTrialMenu(msg.Chat.ID)
+		if !b.checkAndGrantChannelTrialOnStart(msg.Chat.ID, msg.From.ID) {
+			b.sendStartTrialMenu(msg.Chat.ID)
+		}
 	}
 }
 
@@ -4726,7 +4752,9 @@ func (b *Bot) handleStartWithReferral(msg *tgmodels.Message, referralCode string
 		return
 	}
 	if !claimed {
-		b.sendStartTrialMenu(msg.Chat.ID)
+		if !b.checkAndGrantChannelTrialOnStart(msg.Chat.ID, user.ID) {
+			b.sendStartTrialMenu(msg.Chat.ID)
+		}
 	}
 }
 
