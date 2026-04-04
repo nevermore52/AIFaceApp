@@ -452,16 +452,31 @@ func (b *Bot) sendMarkdownLong(chatID int64, text string) error {
 }
 
 func convertBroadcastMarkupToHTML(text string) string {
-	// Extract [emoji:ID] placeholders before escaping
-	emojiRe := regexp.MustCompile(`\[emoji:(\d+)\]`)
-	type emojiPlaceholder struct{ placeholder, replacement string }
-	var emojis []emojiPlaceholder
-	for _, m := range emojiRe.FindAllStringSubmatch(text, -1) {
-		ph := m[0]
-		id := m[1]
-		replacement := fmt.Sprintf(`<tg-emoji emoji-id="%s">⭐</tg-emoji>`, id)
-		emojis = append(emojis, emojiPlaceholder{ph, replacement})
+	type placeholder struct{ ph, html string }
+	var placeholders []placeholder
+	phIdx := 0
+	nextPH := func(htmlTag string) string {
+		ph := fmt.Sprintf("BCASTPH%d", phIdx)
+		phIdx++
+		placeholders = append(placeholders, placeholder{ph, htmlTag})
+		return ph
 	}
+
+	// Extract [emoji:ID] before escaping
+	emojiRe := regexp.MustCompile(`\[emoji:(\d+)\]`)
+	text = emojiRe.ReplaceAllStringFunc(text, func(m string) string {
+		sub := emojiRe.FindStringSubmatch(m)
+		return nextPH(fmt.Sprintf(`<tg-emoji emoji-id="%s">⭐</tg-emoji>`, sub[1]))
+	})
+
+	// Extract [text](url) hyperlinks before escaping
+	linkRe := regexp.MustCompile(`\[([^\]]+)\]\((https?://[^)]+)\)`)
+	text = linkRe.ReplaceAllStringFunc(text, func(m string) string {
+		sub := linkRe.FindStringSubmatch(m)
+		linkText := html.EscapeString(sub[1])
+		linkURL := html.EscapeString(sub[2])
+		return nextPH(fmt.Sprintf(`<a href="%s">%s</a>`, linkURL, linkText))
+	})
 
 	text = html.EscapeString(text)
 
@@ -480,9 +495,9 @@ func convertBroadcastMarkupToHTML(text string) string {
 	strikeRe := regexp.MustCompile(`~~(.+?)~~`)
 	text = strikeRe.ReplaceAllString(text, "<s>$1</s>")
 
-	// Restore premium emoji tags (they survive html.EscapeString as-is since [emoji:digits] has no HTML chars)
-	for _, e := range emojis {
-		text = strings.ReplaceAll(text, e.placeholder, e.replacement)
+	// Restore all placeholders
+	for _, p := range placeholders {
+		text = strings.ReplaceAll(text, p.ph, p.html)
 	}
 
 	return text
@@ -6296,6 +6311,7 @@ func (b *Bot) handleAdminHelp(chatID int64) {
 /admin nano - Переключение Nano Banana API
 /admin broadcast <текст> - Рассылка сообщения всем пользователям
   Форматирование: **жирный**, __курсив__, ~~зачёркнутый~~
+  Ссылка: [текст](https://example.com)
   Премиум эмодзи: [emoji:ID] — ID узнать через /emoji
 /admin sub_set <user_id> <mini|start|pro> <days> - Выдать подписку
 /admin sub_remove <user_id> - Убрать подписку
