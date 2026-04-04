@@ -106,7 +106,7 @@ func (s *WebPaymentService) GetSubscriptions() []SubscriptionInfo {
 		},
 		{
 			Name:        "pro",
-			Price:       10,
+			Price:       799,
 			TextDaily:   200,
 			ImageWeekly: 90,
 			MusicWeekly: 10,
