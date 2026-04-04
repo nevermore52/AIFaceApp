@@ -161,8 +161,18 @@ func (r *UserRepository) MergeAccounts(keepUserID, deleteUserID int64) error {
 	}
 	defer tx.Rollback()
 
-	// Перенести все генерации с deleteUserID на keepUserID
+	// Перенести генерации хранящиеся по внутреннему ID (веб-генерации)
 	_, err = tx.Exec(`UPDATE generation_requests SET user_id = $1 WHERE user_id = $2`, keepUserID, deleteUserID)
+	if err != nil {
+		return err
+	}
+
+	// Перенести генерации хранящиеся по telegram_id (бот-генерации),
+	// чтобы они не удалились через CASCADE при удалении аккаунта
+	_, err = tx.Exec(`
+		UPDATE generation_requests SET user_id = $1
+		WHERE user_id = (SELECT telegram_id FROM users WHERE id = $2 AND telegram_id IS NOT NULL)
+	`, keepUserID, deleteUserID)
 	if err != nil {
 		return err
 	}
@@ -181,6 +191,27 @@ func (r *UserRepository) MergeAccounts(keepUserID, deleteUserID int64) error {
 	if err != nil {
 		return err
 	}
+
+	// Перенести квоты: суммируем extra-квоты удаляемого аккаунта к keepUser
+	// Ищем по внутреннему ID и по telegram_id удаляемого аккаунта
+	_, _ = tx.Exec(`
+		INSERT INTO user_quotas (telegram_id, text_extra, image_extra, music_extra, video_extra)
+		SELECT $1,
+		       COALESCE(src.text_extra, 0),
+		       COALESCE(src.image_extra, 0),
+		       COALESCE(src.music_extra, 0),
+		       COALESCE(src.video_extra, 0)
+		FROM user_quotas src
+		WHERE src.telegram_id = $2
+		   OR src.telegram_id = (SELECT telegram_id FROM users WHERE id = $2 AND telegram_id IS NOT NULL)
+		LIMIT 1
+		ON CONFLICT (telegram_id) DO UPDATE SET
+		    text_extra  = user_quotas.text_extra  + EXCLUDED.text_extra,
+		    image_extra = user_quotas.image_extra + EXCLUDED.image_extra,
+		    music_extra = user_quotas.music_extra + EXCLUDED.music_extra,
+		    video_extra = user_quotas.video_extra + EXCLUDED.video_extra,
+		    updated_at  = CURRENT_TIMESTAMP
+	`, keepUserID, deleteUserID)
 
 	// Обнулить referrer_id у юзеров которые были приглашены удаляемым аккаунтом
 	// (они снова привяжутся через telegram_id после merge)
