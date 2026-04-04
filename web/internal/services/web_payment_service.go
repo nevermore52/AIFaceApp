@@ -106,7 +106,7 @@ func (s *WebPaymentService) GetSubscriptions() []SubscriptionInfo {
 		},
 		{
 			Name:        "pro",
-			Price:       799,
+			Price:       10,
 			TextDaily:   200,
 			ImageWeekly: 90,
 			MusicWeekly: 10,
@@ -415,7 +415,7 @@ func (s *WebPaymentService) AddQuota(userID int64, category string, qty int) err
 		return fmt.Errorf("unknown category: %s", category)
 	}
 
-	query := fmt.Sprintf(`UPDATE user_quotas SET %s = %s + $2 WHERE user_id = $1`, column, column)
+	query := fmt.Sprintf(`UPDATE user_quotas SET %s = %s + $2 WHERE telegram_id = $1`, column, column)
 	result, err := s.db.Exec(query, userID, qty)
 	if err != nil {
 		return err
@@ -423,7 +423,7 @@ func (s *WebPaymentService) AddQuota(userID int64, category string, qty int) err
 
 	rows, _ := result.RowsAffected()
 	if rows == 0 {
-		insertQuery := fmt.Sprintf(`INSERT INTO user_quotas (user_id, %s) VALUES ($1, $2) ON CONFLICT (user_id) DO UPDATE SET %s = user_quotas.%s + $2`, column, column, column)
+		insertQuery := fmt.Sprintf(`INSERT INTO user_quotas (telegram_id, %s) VALUES ($1, $2) ON CONFLICT (telegram_id) DO UPDATE SET %s = user_quotas.%s + $2`, column, column, column)
 		_, err = s.db.Exec(insertQuery, userID, qty)
 		return err
 	}

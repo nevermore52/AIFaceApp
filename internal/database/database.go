@@ -181,6 +181,9 @@ func RunMigrations(db *sql.DB) error {
 	CREATE INDEX IF NOT EXISTS idx_completed_payments_telegram_id ON completed_payments(telegram_id);
 	CREATE INDEX IF NOT EXISTS idx_completed_payments_created_at ON completed_payments(created_at);`
 
+	// Drop FK on user_quotas.telegram_id so internal user IDs (non-TG users) can be used as quota keys
+	dropUserQuotasFKSQL := `ALTER TABLE user_quotas DROP CONSTRAINT IF EXISTS user_quotas_telegram_id_fkey;`
+
 	tables := []string{
 		userTableSQL,
 		generationRequestTableSQL,
@@ -200,6 +203,7 @@ func RunMigrations(db *sql.DB) error {
 		completedPaymentsColumnsSQL,
 		selectedModelSQL,
 		indexesSQL,
+		dropUserQuotasFKSQL,
 	}
 
 	for _, sql := range tables {
