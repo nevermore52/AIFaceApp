@@ -71,7 +71,7 @@ func (s *UserService) GetOrCreateUserWithReferrer(telegramID int64, username, fi
 
 func (s *UserService) GetUserByTelegramID(telegramID int64) (*models.User, error) {
 	query := `
-		SELECT id, telegram_id, username, first_name, last_name, language_code,
+		SELECT id, telegram_id, username, first_name, last_name, COALESCE(language_code, ''),
 			   is_premium, is_admin, COALESCE(referrer_id, 0), COALESCE(referral_code, ''), 
 			   COALESCE(referrals_count, 0), created_at, updated_at, is_blocked
 		FROM users WHERE telegram_id = $1`
@@ -94,7 +94,7 @@ func (s *UserService) GetUserByTelegramID(telegramID int64) (*models.User, error
 
 func (s *UserService) GetUserByReferralCode(code string) (*models.User, error) {
 	query := `
-		SELECT id, telegram_id, username, first_name, last_name, language_code,
+		SELECT id, telegram_id, username, first_name, last_name, COALESCE(language_code, ''),
 			   is_premium, is_admin, COALESCE(referrer_id, 0), COALESCE(referral_code, ''), 
 			   COALESCE(referrals_count, 0), created_at, updated_at, is_blocked
 		FROM users WHERE referral_code = $1`
@@ -121,7 +121,7 @@ func (s *UserService) CreateUser(telegramID int64, username, firstName, lastName
 	query := `
 		INSERT INTO users (telegram_id, username, first_name, last_name, language_code, referrer_id, referral_code, referrals_count)
 		VALUES ($1, $2, $3, $4, $5, $6, $7, 0)
-		RETURNING id, telegram_id, username, first_name, last_name, language_code,
+		RETURNING id, telegram_id, username, first_name, last_name, COALESCE(language_code, ''),
 				  is_premium, is_admin, created_at, updated_at, is_blocked`
 
 	user := &models.User{}
@@ -153,7 +153,7 @@ func (s *UserService) UpdateUserInfo(telegramID int64, username, firstName, last
 		UPDATE users
 		SET username = $2, first_name = $3, last_name = $4, language_code = $5, updated_at = CURRENT_TIMESTAMP
 		WHERE telegram_id = $1
-		RETURNING id, telegram_id, username, first_name, last_name, language_code,
+		RETURNING id, telegram_id, username, first_name, last_name, COALESCE(language_code, ''),
 				  is_premium, is_admin, created_at, updated_at, is_blocked`
 
 	user := &models.User{}
@@ -1084,7 +1084,7 @@ func (s *UserService) SetUserAdmin(telegramID int64, isAdmin bool) error {
 
 func (s *UserService) GetAllUsers(limit, offset int) ([]*models.User, error) {
 	query := `
-		SELECT id, telegram_id, username, first_name, last_name, language_code,
+		SELECT id, telegram_id, username, first_name, last_name, COALESCE(language_code, ''),
 			   is_premium, is_admin, COALESCE(referrer_id, 0), COALESCE(referral_code, ''),
 			   COALESCE(referrals_count, 0), created_at, updated_at, is_blocked
 		FROM users
@@ -1138,7 +1138,7 @@ func (s *UserService) GetUsersForTrialReminder() ([]*models.User, error) {
 	}
 
 	query := `
-		SELECT id, telegram_id, username, first_name, last_name, language_code,
+		SELECT id, telegram_id, username, first_name, last_name, COALESCE(language_code, ''),
 			   is_premium, is_admin, COALESCE(referrer_id, 0), COALESCE(referral_code, ''),
 			   COALESCE(referrals_count, 0), created_at, updated_at, is_blocked
 		FROM users
