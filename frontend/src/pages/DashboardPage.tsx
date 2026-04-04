@@ -130,6 +130,17 @@ export function DashboardPage() {
   return (
     <div className="space-y-4 max-w-6xl mx-auto">
 
+      {/* Баннер: нет TG — пробные запросы недоступны */}
+      {isAuthenticated && !user?.telegram_id && !user?.channel_trial_claimed && (
+        <div className="rounded-xl border border-yellow-500/30 bg-yellow-500/10 px-4 py-3 flex items-center gap-3">
+          <Send className="h-5 w-5 text-yellow-400 flex-shrink-0" />
+          <p className="text-sm text-white/80">
+            Пробные запросы доступны только после{' '}
+            <a href="/profile" className="text-yellow-400 hover:underline font-medium">привязки Telegram аккаунта</a>
+          </p>
+        </div>
+      )}
+
       {/* Баннер подписки на канал */}
       {isAuthenticated && user?.telegram_id && showBanner && !bonusClaimed && (
         <div className="relative rounded-xl border border-[#229ED9]/30 bg-[#229ED9]/10 px-4 py-3 flex items-center gap-3">

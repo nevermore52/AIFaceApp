@@ -310,7 +310,7 @@ func (s *AuthService) IsAdmin(userID int64) (bool, error) {
 	return s.userRepo.IsAdmin(userID)
 }
 
-func (s *AuthService) LinkTelegramAccount(userID int64, telegramID int64) error {
+func (s *AuthService) LinkTelegramAccount(userID int64, telegramID int64, username, firstName, lastName string) error {
 	// Load current user to check their state
 	currentUser, err := s.userRepo.GetByID(userID)
 	if err != nil {
@@ -336,7 +336,7 @@ func (s *AuthService) LinkTelegramAccount(userID int64, telegramID int64) error 
 		return fmt.Errorf("failed to check existing telegram account: %w", err)
 	}
 
-	if err := s.userRepo.LinkTelegramID(userID, telegramID); err != nil {
+	if err := s.userRepo.LinkTelegramID(userID, telegramID, username, firstName, lastName); err != nil {
 		return fmt.Errorf("failed to link telegram account: %w", err)
 	}
 

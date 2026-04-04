@@ -373,7 +373,7 @@ func (h *AuthHandler) ConfirmWebToken(c *gin.Context) {
 	// Check if this is a linking action
 	if t.ActionType == "link" && t.UserID != nil {
 		// Link Telegram account to existing user
-		if err := h.authService.LinkTelegramAccount(*t.UserID, req.TelegramID); err != nil {
+		if err := h.authService.LinkTelegramAccount(*t.UserID, req.TelegramID, req.Username, req.FirstName, req.LastName); err != nil {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to link account", "details": err.Error()})
 			return
 		}

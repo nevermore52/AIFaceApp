@@ -142,9 +142,17 @@ func (r *UserRepository) Update(user *models.User) error {
 	return err
 }
 
-func (r *UserRepository) LinkTelegramID(userID int64, telegramID int64) error {
-	query := `UPDATE users SET telegram_id = $2, updated_at = CURRENT_TIMESTAMP WHERE id = $1`
-	_, err := r.db.Exec(query, userID, telegramID)
+func (r *UserRepository) LinkTelegramID(userID, telegramID int64, username, firstName, lastName string) error {
+	// Always set username from TG (may be empty if user has no @username).
+	// Only override first/last name when TG has a non-empty value.
+	query := `UPDATE users SET
+		telegram_id = $2,
+		username    = $3,
+		first_name  = CASE WHEN $4 <> '' THEN $4 ELSE first_name END,
+		last_name   = CASE WHEN $5 <> '' THEN $5 ELSE last_name  END,
+		updated_at  = CURRENT_TIMESTAMP
+	WHERE id = $1`
+	_, err := r.db.Exec(query, userID, telegramID, username, firstName, lastName)
 	return err
 }
 
