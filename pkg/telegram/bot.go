@@ -452,6 +452,17 @@ func (b *Bot) sendMarkdownLong(chatID int64, text string) error {
 }
 
 func convertBroadcastMarkupToHTML(text string) string {
+	// Extract [emoji:ID] placeholders before escaping
+	emojiRe := regexp.MustCompile(`\[emoji:(\d+)\]`)
+	type emojiPlaceholder struct{ placeholder, replacement string }
+	var emojis []emojiPlaceholder
+	for _, m := range emojiRe.FindAllStringSubmatch(text, -1) {
+		ph := m[0]
+		id := m[1]
+		replacement := fmt.Sprintf(`<tg-emoji emoji-id="%s">⭐</tg-emoji>`, id)
+		emojis = append(emojis, emojiPlaceholder{ph, replacement})
+	}
+
 	text = html.EscapeString(text)
 
 	codeBlockRe := regexp.MustCompile("(?s)```(.*?)```")
@@ -468,6 +479,11 @@ func convertBroadcastMarkupToHTML(text string) string {
 
 	strikeRe := regexp.MustCompile(`~~(.+?)~~`)
 	text = strikeRe.ReplaceAllString(text, "<s>$1</s>")
+
+	// Restore premium emoji tags (they survive html.EscapeString as-is since [emoji:digits] has no HTML chars)
+	for _, e := range emojis {
+		text = strings.ReplaceAll(text, e.placeholder, e.replacement)
+	}
 
 	return text
 }
@@ -6279,6 +6295,8 @@ func (b *Bot) handleAdminHelp(chatID int64) {
 /admin payments - Управление платежами
 /admin nano - Переключение Nano Banana API
 /admin broadcast <текст> - Рассылка сообщения всем пользователям
+  Форматирование: **жирный**, __курсив__, ~~зачёркнутый~~
+  Премиум эмодзи: [emoji:ID] — ID узнать через /emoji
 /admin sub_set <user_id> <mini|start|pro> <days> - Выдать подписку
 /admin sub_remove <user_id> - Убрать подписку
 /admin help - Эта справка
