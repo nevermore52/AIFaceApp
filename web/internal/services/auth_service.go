@@ -311,21 +311,31 @@ func (s *AuthService) IsAdmin(userID int64) (bool, error) {
 }
 
 func (s *AuthService) LinkTelegramAccount(userID int64, telegramID int64) error {
-	// Проверяем, существует ли уже аккаунт с этим telegram_id
+	// Load current user to check their state
+	currentUser, err := s.userRepo.GetByID(userID)
+	if err != nil {
+		return fmt.Errorf("current user not found: %w", err)
+	}
+	// Refuse if current account already has a Telegram linked
+	if currentUser.TelegramID != nil {
+		return fmt.Errorf("account already linked to telegram")
+	}
+
+	// Check if an account with this telegram_id already exists
 	existingUser, err := s.userRepo.GetByTelegramID(telegramID)
-	if err == nil {
-		// Аккаунт с таким telegram_id уже существует - нужно объединить
-		if existingUser.ID != userID {
-			// Объединяем аккаунты: сохраняем текущий (userID), удаляем старый (existingUser.ID)
-			if err := s.userRepo.MergeAccounts(userID, existingUser.ID); err != nil {
-				return fmt.Errorf("failed to merge accounts: %w", err)
-			}
+	if err == nil && existingUser.ID != userID {
+		// Refuse if the TG account is already linked to a Google account — two full accounts, no merge
+		if existingUser.Email != nil {
+			return fmt.Errorf("telegram account already linked to another google account")
 		}
-	} else if err != sql.ErrNoRows {
+		// TG-only account exists — merge: keep current (Google) user, transfer TG data over
+		if err := s.userRepo.MergeAccounts(userID, existingUser.ID); err != nil {
+			return fmt.Errorf("failed to merge accounts: %w", err)
+		}
+	} else if err != nil && err != sql.ErrNoRows {
 		return fmt.Errorf("failed to check existing telegram account: %w", err)
 	}
 
-	// Привязываем telegram_id к текущему аккаунту
 	if err := s.userRepo.LinkTelegramID(userID, telegramID); err != nil {
 		return fmt.Errorf("failed to link telegram account: %w", err)
 	}
@@ -334,21 +344,31 @@ func (s *AuthService) LinkTelegramAccount(userID int64, telegramID int64) error 
 }
 
 func (s *AuthService) LinkGoogleAccount(userID int64, email string) error {
-	// Проверяем, существует ли уже аккаунт с этим email
+	// Load current user to check their state
+	currentUser, err := s.userRepo.GetByID(userID)
+	if err != nil {
+		return fmt.Errorf("current user not found: %w", err)
+	}
+	// Refuse if current account already has a Google account linked
+	if currentUser.Email != nil {
+		return fmt.Errorf("account already linked to google")
+	}
+
+	// Check if an account with this email already exists
 	existingUser, err := s.userRepo.GetByEmail(email)
-	if err == nil {
-		// Аккаунт с таким email уже существует - нужно объединить
-		if existingUser.ID != userID {
-			// Объединяем аккаунты: сохраняем текущий (userID), удаляем старый (existingUser.ID)
-			if err := s.userRepo.MergeAccounts(userID, existingUser.ID); err != nil {
-				return fmt.Errorf("failed to merge accounts: %w", err)
-			}
+	if err == nil && existingUser.ID != userID {
+		// Refuse if the Google account is already linked to a Telegram account — two full accounts, no merge
+		if existingUser.TelegramID != nil {
+			return fmt.Errorf("google account already linked to another telegram account")
 		}
-	} else if err != sql.ErrNoRows {
+		// Google-only account exists — merge: keep current (TG) user, transfer Google data over
+		if err := s.userRepo.MergeAccounts(userID, existingUser.ID); err != nil {
+			return fmt.Errorf("failed to merge accounts: %w", err)
+		}
+	} else if err != nil && err != sql.ErrNoRows {
 		return fmt.Errorf("failed to check existing google account: %w", err)
 	}
 
-	// Привязываем email к текущему аккаунту
 	if err := s.userRepo.LinkEmail(userID, email); err != nil {
 		return fmt.Errorf("failed to link google account: %w", err)
 	}
