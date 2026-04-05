@@ -5,7 +5,7 @@ import { adminApi } from '../lib/api'
 import { Card, CardContent, CardHeader, CardTitle } from '../components/ui/card'
 import { Button } from '../components/ui/button'
 
-type Tab = 'stats' | 'users' | 'top_users' | 'generations' | 'payments' | 'broadcast'
+type Tab = 'stats' | 'users' | 'top_users' | 'generations' | 'payments'
 
 const TABS: { id: Tab; label: string }[] = [
   { id: 'stats', label: '📊 Статистика' },
@@ -13,7 +13,6 @@ const TABS: { id: Tab; label: string }[] = [
   { id: 'top_users', label: '📈 Топ-24ч' },
   { id: 'generations', label: '🎨 Генерации' },
   { id: 'payments', label: '💳 Платежи' },
-  { id: 'broadcast', label: '📣 Рассылка' },
 ]
 
 function StatCard({ label, value }: { label: string; value: string | number }) {
@@ -455,64 +454,6 @@ function PaymentsTab() {
   )
 }
 
-// ─── Broadcast Tab ────────────────────────────────────────────────────────────
-function BroadcastTab() {
-  const [text, setText] = useState('')
-  const [sending, setSending] = useState(false)
-  const [result, setResult] = useState<{ sent: number; failed: number; total: number } | null>(null)
-  const [error, setError] = useState('')
-
-  const send = async () => {
-    if (!text.trim()) return
-    setSending(true)
-    setResult(null)
-    setError('')
-    try {
-      const res = await adminApi.broadcast(text)
-      setResult(res)
-    } catch (e: any) {
-      setError(e.message || 'Ошибка')
-    } finally {
-      setSending(false)
-    }
-  }
-
-  return (
-    <div className="space-y-4 max-w-2xl">
-      <div className="text-xs text-white/30 space-y-0.5">
-        <p>Форматирование: <span className="text-white/50">**жирный**</span>, <span className="text-white/50">__курсив__</span>, <span className="text-white/50">~~зачёркнутый~~</span></p>
-        <p>Ссылка: <span className="text-white/50">[текст](https://example.com)</span></p>
-        <p>Премиум эмодзи: <span className="text-white/50">[emoji:ID]</span> — ID узнать через /emoji в боте</p>
-      </div>
-
-      <textarea
-        value={text}
-        onChange={(e) => setText(e.target.value)}
-        placeholder="Текст рассылки..."
-        rows={8}
-        className="w-full px-4 py-3 rounded-xl border border-white/5 bg-white/[0.03] text-sm text-white/80 resize-none focus:border-primary/50 focus:outline-none"
-      />
-
-      {error && <p className="text-red-400 text-sm">{error}</p>}
-
-      {result && (
-        <div className="p-4 rounded-xl border border-green-500/20 bg-green-500/5 text-sm text-white/70">
-          ✅ Рассылка завершена — Отправлено: <strong className="text-white">{result.sent}</strong>, Ошибки: <strong className="text-red-400">{result.failed}</strong>, Всего: <strong>{result.total}</strong>
-        </div>
-      )}
-
-      <Button onClick={send} disabled={sending || !text.trim()} className="w-full py-6 font-bold">
-        {sending ? (
-          <div className="flex items-center gap-2">
-            <span className="h-4 w-4 animate-spin rounded-full border-2 border-white/20 border-t-white" />
-            Отправляем...
-          </div>
-        ) : '📣 Отправить рассылку'}
-      </Button>
-    </div>
-  )
-}
-
 // ─── Main Page ────────────────────────────────────────────────────────────────
 export function AdminPage() {
   const { user } = useAuthStore()
@@ -561,7 +502,6 @@ export function AdminPage() {
           {tab === 'top_users' && <TopUsersTab />}
           {tab === 'generations' && <GenerationsTab />}
           {tab === 'payments' && <PaymentsTab />}
-          {tab === 'broadcast' && <BroadcastTab />}
         </CardContent>
       </Card>
     </div>
