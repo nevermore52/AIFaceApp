@@ -142,9 +142,9 @@ func min(a, b int) int {
 
 func (s *WebGenerationService) GetAvailableModels() []ModelInfo {
 	return []ModelInfo{
+		{ID: "nano-banana-2", Name: "Nano Banana 2", Type: "image", Description: "Генерация и редактирование изображений", TokenCost: 2, Placeholder: "Опишите, что вы хотите получить в изображении"},
 		{ID: "google/nano-banana", Name: "Nano Banana", Type: "image", Description: "Генерация изображений", TokenCost: 1, Placeholder: "Опишите, что вы хотите получить в изображении"},
 		{ID: "google/nano-banana-pro", Name: "Nano Banana Pro", Type: "image", Description: "Продвинутая генерация изображений", TokenCost: 4, Placeholder: "Опишите, что вы хотите получить в изображении"},
-		{ID: "nano-banana-2", Name: "Nano Banana 2", Type: "image", Description: "Генерация и редактирование изображений", TokenCost: 2, Placeholder: "Опишите, что вы хотите получить в изображении"},
 		{ID: "seedream/4.5-edit", Name: "Seedream 4.5", Type: "image", Description: "Редактирование изображений", TokenCost: 3, Placeholder: "Опишите, что вы хотите получить в изображении"},
 		{ID: "veo3_fast", Name: "Veo 3.1 Fast", Type: "video", Description: "Генерация видео", TokenCost: 1, Placeholder: "Опишите, что вы хотите получить в видео"},
 		{ID: "wan/2-6-image-to-video", Name: "Wan 2.6", Type: "video", Description: "Генерация видео из изображения", TokenCost: 2, Placeholder: "Опишите, что вы хотите получить в видео"},
