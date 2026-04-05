@@ -303,6 +303,17 @@ func (r *UserRepository) GetAll(limit, offset int) ([]*models.User, int, error) 
 	return users, total, rows.Err()
 }
 
+func (r *UserRepository) RemoveSubscription(userID int64) error {
+	_, err := r.db.Exec(`
+		UPDATE users
+		SET subscription_type = '',
+		    subscription_started_at = NULL,
+		    subscription_end = NULL,
+		    updated_at = CURRENT_TIMESTAMP
+		WHERE id = $1`, userID)
+	return err
+}
+
 func (r *UserRepository) GetStats() (map[string]interface{}, error) {
 	stats := make(map[string]interface{})
 

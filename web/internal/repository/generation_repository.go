@@ -2,6 +2,7 @@ package repository
 
 import (
 	"database/sql"
+	"time"
 
 	"telegram-ai-face-bot/web/internal/models"
 )
@@ -125,4 +126,72 @@ func (r *GenerationRepository) GetStats() (map[string]interface{}, error) {
 	stats["today_generations"] = today
 
 	return stats, nil
+}
+
+// GetStatsSince returns detailed stats since the given time. Pass zero time for all-time.
+func (r *GenerationRepository) GetStatsSince(since time.Time) (map[string]interface{}, error) {
+	var where string
+	var args []interface{}
+	if !since.IsZero() {
+		where = "WHERE created_at >= $1"
+		args = append(args, since)
+	}
+
+	query := `
+		SELECT
+			COUNT(*),
+			COUNT(CASE WHEN status = 'completed' THEN 1 END),
+			COUNT(CASE WHEN status = 'failed' THEN 1 END),
+			COUNT(CASE WHEN status IN ('pending', 'processing') THEN 1 END),
+			COALESCE(ROUND(COUNT(CASE WHEN status = 'completed' THEN 1 END) * 100.0 / NULLIF(COUNT(*), 0), 1), 0),
+			COALESCE(AVG(EXTRACT(EPOCH FROM (completed_at - created_at))) FILTER (WHERE status = 'completed' AND completed_at IS NOT NULL), 0)
+		FROM generation_requests ` + where
+
+	var total, completed, failed, processing int
+	var successRate, avgTime float64
+	if err := r.db.QueryRow(query, args...).Scan(&total, &completed, &failed, &processing, &successRate, &avgTime); err != nil {
+		return nil, err
+	}
+	return map[string]interface{}{
+		"total_requests":               total,
+		"completed_requests":           completed,
+		"failed_requests":              failed,
+		"processing_requests":          processing,
+		"success_rate":                 successRate,
+		"avg_processing_time_seconds":  avgTime,
+	}, nil
+}
+
+func (r *GenerationRepository) GetTopUsers(limit int) ([]*models.TopUser, error) {
+	query := `
+		SELECT
+			user_id,
+			COALESCE(MAX(username), '') as username,
+			COUNT(*) as total_generations,
+			SUM(CASE WHEN model_type = 'image' THEN 1 ELSE 0 END) as photo_generations,
+			SUM(CASE WHEN model_type = 'video' THEN 1 ELSE 0 END) as video_generations,
+			SUM(CASE WHEN model_type = 'music' THEN 1 ELSE 0 END) as music_generations,
+			SUM(CASE WHEN model_type = 'text' THEN 1 ELSE 0 END) as text_generations,
+			COALESCE(SUM(tokens_used), 0) as tokens_spent
+		FROM generation_requests
+		WHERE created_at > NOW() - INTERVAL '24 hours'
+		GROUP BY user_id
+		ORDER BY total_generations DESC
+		LIMIT $1`
+
+	rows, err := r.db.Query(query, limit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var users []*models.TopUser
+	for rows.Next() {
+		u := &models.TopUser{}
+		if err := rows.Scan(&u.UserID, &u.Username, &u.TotalGenerations, &u.PhotoGenerations, &u.VideoGenerations, &u.MusicGenerations, &u.TextGenerations, &u.TokensSpent); err != nil {
+			return nil, err
+		}
+		users = append(users, u)
+	}
+	return users, rows.Err()
 }

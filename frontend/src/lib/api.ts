@@ -156,6 +156,27 @@ export const generationApi = {
     api.post<{ id: number; status: string }>('/generations', data),
 }
 
+export const adminApi = {
+  getStats: (period = 'all') =>
+    api.get<any>(`/admin/stats?period=${period}`),
+  getUsers: (limit = 20, offset = 0) =>
+    api.get<any>(`/admin/users?limit=${limit}&offset=${offset}`),
+  updateUser: (id: number, data: { is_admin?: boolean; is_blocked?: boolean }) =>
+    api.put<any>(`/admin/users/${id}`, data),
+  setSubscription: (id: number, plan: string, days: number) =>
+    api.post<any>(`/admin/users/${id}/subscription`, { plan, days }),
+  removeSubscription: (id: number) =>
+    api.delete<any>(`/admin/users/${id}/subscription`),
+  getTopUsers: () =>
+    api.get<any>('/admin/top-users'),
+  broadcast: (text: string) =>
+    api.post<{ sent: number; failed: number; total: number }>('/admin/broadcast', { text }),
+  getGenerations: (limit = 20, offset = 0) =>
+    api.get<any>(`/admin/generations?limit=${limit}&offset=${offset}`),
+  getPayments: (limit = 20, offset = 0) =>
+    api.get<any>(`/admin/payments?limit=${limit}&offset=${offset}`),
+}
+
 export const paymentApi = {
   getPackages: () => api.get('/payments/packages'),
   getSubscriptions: () => api.get('/payments/subscriptions'),

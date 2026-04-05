@@ -62,6 +62,75 @@ func (b *Bot) handleAdminBroadcastAlbum(msg *tgmodels.Message) {
 	})
 }
 
+// BroadcastText sends a text broadcast to all users with telegram IDs.
+// Returns the number of successful and failed sends.
+func (b *Bot) BroadcastText(text string) (sent, failed int) {
+	const (
+		batchSize  = 500
+		numWorkers = 20
+	)
+
+	var allUsers []int64
+	for offset := 0; ; offset += batchSize {
+		users, err := b.userService.GetAllUsers(batchSize, offset)
+		if err != nil {
+			break
+		}
+		if len(users) == 0 {
+			break
+		}
+		for _, u := range users {
+			if u != nil && u.TelegramID != 0 {
+				allUsers = append(allUsers, u.TelegramID)
+			}
+		}
+	}
+
+	if len(allUsers) == 0 {
+		return 0, 0
+	}
+
+	jobs := make(chan int64, len(allUsers))
+	results := make(chan bool, len(allUsers))
+
+	var wg sync.WaitGroup
+	for w := 0; w < numWorkers; w++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			for userID := range jobs {
+				if err := b.sendMarkdownLong(userID, text); err != nil {
+					results <- false
+				} else {
+					results <- true
+				}
+				time.Sleep(35 * time.Millisecond)
+			}
+		}()
+	}
+
+	go func() {
+		for _, userID := range allUsers {
+			jobs <- userID
+		}
+		close(jobs)
+	}()
+
+	go func() {
+		wg.Wait()
+		close(results)
+	}()
+
+	for success := range results {
+		if success {
+			sent++
+		} else {
+			failed++
+		}
+	}
+	return
+}
+
 func (b *Bot) processBroadcastAlbum(mediaID string) {
 	broadcastAlbumMu.Lock()
 	buf := broadcastAlbumBuffers[mediaID]

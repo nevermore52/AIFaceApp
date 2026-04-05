@@ -272,6 +272,29 @@ func (b *Bot) startWebhookServer() {
 		w.WriteHeader(http.StatusOK)
 	})
 
+	mux.HandleFunc("/admin/broadcast", func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost {
+			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+			return
+		}
+		body, err := io.ReadAll(r.Body)
+		if err != nil {
+			http.Error(w, "bad request", http.StatusBadRequest)
+			return
+		}
+		var payload struct {
+			Text string `json:"text"`
+		}
+		if err := json.Unmarshal(body, &payload); err != nil || strings.TrimSpace(payload.Text) == "" {
+			http.Error(w, "bad request: text required", http.StatusBadRequest)
+			return
+		}
+		sent, failed := b.tgBot.BroadcastText(payload.Text)
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(map[string]int{"sent": sent, "failed": failed, "total": sent + failed})
+		log.Printf("admin broadcast done: sent=%d failed=%d", sent, failed)
+	})
+
 	mux.HandleFunc("/suno/register", func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodPost {
 			log.Printf("suno register bad method: %s from %s", r.Method, r.RemoteAddr)

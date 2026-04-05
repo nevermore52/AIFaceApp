@@ -3,12 +3,13 @@ import { useAuthStore } from '../store/auth'
 import { userApi, authApi, API_BASE_URL } from '../lib/api'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../components/ui/card'
 import { Button } from '../components/ui/button'
-import { Copy, Check, Users } from 'lucide-react'
-import { useSearchParams } from 'react-router-dom'
+import { Copy, Check, Users, Shield } from 'lucide-react'
+import { useSearchParams, useNavigate } from 'react-router-dom'
 
 export function ProfilePage() {
   const { user, updateUser, accessToken } = useAuthStore()
   const [searchParams] = useSearchParams()
+  const navigate = useNavigate()
   const [saving, setSaving] = useState(false)
   const [copied, setCopied] = useState(false)
   const [linkNotice, setLinkNotice] = useState<{ type: 'success' | 'error'; msg: string } | null>(null)
@@ -286,6 +287,25 @@ export function ProfilePage() {
           </Card>
         </div>
       </div>
+
+      {/* Кнопка админ-панели */}
+      {user?.is_admin && (
+        <Card
+          className="border-yellow-500/20 bg-yellow-500/5 backdrop-blur-sm cursor-pointer hover:bg-yellow-500/10 transition-all"
+          onClick={() => navigate('/admin')}
+        >
+          <CardContent className="flex items-center gap-4 py-4">
+            <div className="w-10 h-10 rounded-xl bg-yellow-500/20 flex items-center justify-center flex-shrink-0">
+              <Shield className="w-5 h-5 text-yellow-400" />
+            </div>
+            <div className="flex-1">
+              <p className="font-semibold text-yellow-300">Панель администратора</p>
+              <p className="text-xs text-yellow-400/60">Статистика, пользователи, рассылки</p>
+            </div>
+            <span className="text-yellow-400/40 text-lg">→</span>
+          </CardContent>
+        </Card>
+      )}
 
       {/* Реферальная программа */}
       <Card className="border-white/5 bg-white/[0.02] backdrop-blur-sm">

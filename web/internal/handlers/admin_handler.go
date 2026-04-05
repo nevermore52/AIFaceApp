@@ -1,8 +1,14 @@
 package handlers
 
 import (
+	"bytes"
+	"encoding/json"
+	"fmt"
 	"net/http"
+	"os"
 	"strconv"
+	"strings"
+	"time"
 
 	"telegram-ai-face-bot/web/internal/services"
 
@@ -10,33 +16,51 @@ import (
 )
 
 type AdminHandler struct {
-	userService       *services.UserService
-	generationService *services.GenerationService
-	paymentService    *services.PaymentService
+	userService        *services.UserService
+	generationService  *services.GenerationService
+	paymentService     *services.PaymentService
+	webPaymentService  *services.WebPaymentService
+	botWebhookURL      string
 }
 
 func NewAdminHandler(
 	userService *services.UserService,
 	generationService *services.GenerationService,
 	paymentService *services.PaymentService,
+	webPaymentService *services.WebPaymentService,
 ) *AdminHandler {
 	return &AdminHandler{
 		userService:       userService,
 		generationService: generationService,
 		paymentService:    paymentService,
+		webPaymentService: webPaymentService,
+		botWebhookURL:     os.Getenv("BOT_WEBHOOK_URL"),
 	}
 }
 
 func (h *AdminHandler) GetStats(c *gin.Context) {
-	userStats, err := h.userService.GetStats()
+	period := c.DefaultQuery("period", "all")
+
+	var since time.Time
+	now := time.Now().UTC()
+	switch period {
+	case "day":
+		since = now.Add(-24 * time.Hour)
+	case "week":
+		since = now.Add(-7 * 24 * time.Hour)
+	case "month":
+		since = now.Add(-30 * 24 * time.Hour)
+	}
+
+	genStats, err := h.generationService.GetStatsSince(since)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to get user stats"})
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to get generation stats"})
 		return
 	}
 
-	generationStats, err := h.generationService.GetStats()
+	userStats, err := h.userService.GetStats()
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to get generation stats"})
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to get user stats"})
 		return
 	}
 
@@ -47,8 +71,9 @@ func (h *AdminHandler) GetStats(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusOK, gin.H{
+		"period":      period,
+		"generations": genStats,
 		"users":       userStats,
-		"generations": generationStats,
 		"payments":    paymentStats,
 	})
 }
@@ -56,7 +81,6 @@ func (h *AdminHandler) GetStats(c *gin.Context) {
 func (h *AdminHandler) GetUsers(c *gin.Context) {
 	limit, _ := strconv.Atoi(c.DefaultQuery("limit", "20"))
 	offset, _ := strconv.Atoi(c.DefaultQuery("offset", "0"))
-
 	if limit > 100 {
 		limit = 100
 	}
@@ -76,30 +100,25 @@ func (h *AdminHandler) GetUsers(c *gin.Context) {
 }
 
 func (h *AdminHandler) GetUser(c *gin.Context) {
-	idStr := c.Param("id")
-	id, err := strconv.ParseInt(idStr, 10, 64)
+	id, err := strconv.ParseInt(c.Param("id"), 10, 64)
 	if err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid ID"})
 		return
 	}
-
 	user, err := h.userService.GetByID(id)
 	if err != nil {
 		c.JSON(http.StatusNotFound, gin.H{"error": "User not found"})
 		return
 	}
-
 	c.JSON(http.StatusOK, user)
 }
 
 func (h *AdminHandler) UpdateUser(c *gin.Context) {
-	idStr := c.Param("id")
-	id, err := strconv.ParseInt(idStr, 10, 64)
+	id, err := strconv.ParseInt(c.Param("id"), 10, 64)
 	if err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid ID"})
 		return
 	}
-
 	user, err := h.userService.GetByID(id)
 	if err != nil {
 		c.JSON(http.StatusNotFound, gin.H{"error": "User not found"})
@@ -114,36 +133,122 @@ func (h *AdminHandler) UpdateUser(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid request"})
 		return
 	}
-
 	if req.IsAdmin != nil {
 		user.IsAdmin = *req.IsAdmin
 	}
 	if req.IsBlocked != nil {
 		user.IsBlocked = *req.IsBlocked
 	}
-
 	if err := h.userService.Update(user); err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to update user"})
 		return
 	}
-
 	c.JSON(http.StatusOK, user)
+}
+
+func (h *AdminHandler) SetUserSubscription(c *gin.Context) {
+	id, err := strconv.ParseInt(c.Param("id"), 10, 64)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid ID"})
+		return
+	}
+
+	var req struct {
+		Plan string `json:"plan"`
+		Days int    `json:"days"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil || req.Plan == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid request, need plan and days"})
+		return
+	}
+	plan := strings.ToLower(req.Plan)
+	if plan != "mini" && plan != "start" && plan != "pro" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Plan must be mini, start, or pro"})
+		return
+	}
+	days := req.Days
+	if days <= 0 {
+		days = 30
+	}
+
+	if h.webPaymentService == nil {
+		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "Payment service not configured"})
+		return
+	}
+	if err := h.webPaymentService.ApplySubscription(id, plan, days); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": fmt.Sprintf("Failed to apply subscription: %v", err)})
+		return
+	}
+
+	user, _ := h.userService.GetByID(id)
+	c.JSON(http.StatusOK, gin.H{"ok": true, "user": user})
+}
+
+func (h *AdminHandler) RemoveUserSubscription(c *gin.Context) {
+	id, err := strconv.ParseInt(c.Param("id"), 10, 64)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid ID"})
+		return
+	}
+	if err := h.userService.RemoveSubscription(id); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to remove subscription"})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"ok": true})
+}
+
+func (h *AdminHandler) GetTopUsers(c *gin.Context) {
+	limit, _ := strconv.Atoi(c.DefaultQuery("limit", "20"))
+	if limit > 100 {
+		limit = 100
+	}
+	users, err := h.generationService.GetTopUsers(limit)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to get top users"})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"data": users})
+}
+
+func (h *AdminHandler) Broadcast(c *gin.Context) {
+	var req struct {
+		Text string `json:"text"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil || strings.TrimSpace(req.Text) == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "text is required"})
+		return
+	}
+
+	if h.botWebhookURL == "" {
+		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "Bot webhook URL not configured"})
+		return
+	}
+
+	payload, _ := json.Marshal(map[string]string{"text": req.Text})
+	url := strings.TrimRight(h.botWebhookURL, "/") + "/admin/broadcast"
+	resp, err := http.Post(url, "application/json", bytes.NewReader(payload))
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": fmt.Sprintf("Failed to reach bot: %v", err)})
+		return
+	}
+	defer resp.Body.Close()
+
+	var result map[string]interface{}
+	json.NewDecoder(resp.Body).Decode(&result)
+	c.JSON(http.StatusOK, result)
 }
 
 func (h *AdminHandler) GetGenerations(c *gin.Context) {
 	limit, _ := strconv.Atoi(c.DefaultQuery("limit", "20"))
 	offset, _ := strconv.Atoi(c.DefaultQuery("offset", "0"))
-
 	if limit > 100 {
 		limit = 100
 	}
-
 	generations, total, err := h.generationService.GetAll(limit, offset)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to get generations"})
 		return
 	}
-
 	c.JSON(http.StatusOK, gin.H{
 		"data":   generations,
 		"total":  total,
@@ -155,17 +260,14 @@ func (h *AdminHandler) GetGenerations(c *gin.Context) {
 func (h *AdminHandler) GetPayments(c *gin.Context) {
 	limit, _ := strconv.Atoi(c.DefaultQuery("limit", "20"))
 	offset, _ := strconv.Atoi(c.DefaultQuery("offset", "0"))
-
 	if limit > 100 {
 		limit = 100
 	}
-
 	payments, total, err := h.paymentService.GetAll(limit, offset)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to get payments"})
 		return
 	}
-
 	c.JSON(http.StatusOK, gin.H{
 		"data":   payments,
 		"total":  total,
@@ -175,13 +277,9 @@ func (h *AdminHandler) GetPayments(c *gin.Context) {
 }
 
 func (h *AdminHandler) GetCategories(c *gin.Context) {
-	c.JSON(http.StatusOK, gin.H{
-		"message": "Category management via web is not yet implemented",
-	})
+	c.JSON(http.StatusOK, gin.H{"message": "Category management via web is not yet implemented"})
 }
 
 func (h *AdminHandler) UpdateCategory(c *gin.Context) {
-	c.JSON(http.StatusOK, gin.H{
-		"message": "Category management via web is not yet implemented",
-	})
+	c.JSON(http.StatusOK, gin.H{"message": "Category management via web is not yet implemented"})
 }

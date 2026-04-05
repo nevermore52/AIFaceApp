@@ -10,6 +10,7 @@ import { HistoryPage } from './pages/HistoryPage'
 import { GenerationDetailPage } from './pages/GenerationDetailPage'
 import { PaymentsPage } from './pages/PaymentsPage'
 import { ProfilePage } from './pages/ProfilePage'
+import { AdminPage } from './pages/AdminPage'
 import { AuthCallbackPage } from './pages/AuthCallbackPage'
 import { Toaster } from './components/ui/toaster'
 
@@ -131,6 +132,14 @@ function App() {
               element={
                 <ProtectedRoute>
                   <ProfilePage />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="admin"
+              element={
+                <ProtectedRoute>
+                  <AdminPage />
                 </ProtectedRoute>
               }
             />

@@ -65,6 +65,10 @@ func (s *UserService) IsAdmin(userID int64) (bool, error) {
 	return s.userRepo.IsAdmin(userID)
 }
 
+func (s *UserService) RemoveSubscription(userID int64) error {
+	return s.userRepo.RemoveSubscription(userID)
+}
+
 // ClaimChannelBonus проверяет подписку на канал через Telegram Bot API
 // и выдаёт бонусные запросы если ещё не выдавались.
 // Возвращает (subscribed, alreadyClaimed, error).

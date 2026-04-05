@@ -86,7 +86,7 @@ func New(cfg *config.Config, db *sql.DB) *Server {
 	userHandler := handlers.NewUserHandler(userService, cfg.TelegramBotToken)
 	generationHandler := handlers.NewGenerationHandler(generationService, webGenerationService, cfg.UploadDir, cfg.WebBaseURL)
 	paymentHandler := handlers.NewPaymentHandler(paymentService, webPaymentService)
-	adminHandler := handlers.NewAdminHandler(userService, generationService, paymentService)
+	adminHandler := handlers.NewAdminHandler(userService, generationService, paymentService, webPaymentService)
 
 	// Используем middleware с userService для обновления информации о подписке при каждом запросе
 	authMiddleware := middleware.NewAuthMiddlewareWithUserService(authService, userService, cfg.TelegramBotToken)
@@ -153,6 +153,10 @@ func New(cfg *config.Config, db *sql.DB) *Server {
 			admin.GET("/users", adminHandler.GetUsers)
 			admin.GET("/users/:id", adminHandler.GetUser)
 			admin.PUT("/users/:id", adminHandler.UpdateUser)
+			admin.POST("/users/:id/subscription", adminHandler.SetUserSubscription)
+			admin.DELETE("/users/:id/subscription", adminHandler.RemoveUserSubscription)
+			admin.GET("/top-users", adminHandler.GetTopUsers)
+			admin.POST("/broadcast", adminHandler.Broadcast)
 			admin.GET("/generations", adminHandler.GetGenerations)
 			admin.GET("/payments", adminHandler.GetPayments)
 			admin.GET("/categories", adminHandler.GetCategories)

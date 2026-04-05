@@ -1,6 +1,8 @@
 package services
 
 import (
+	"time"
+
 	"telegram-ai-face-bot/web/internal/models"
 	"telegram-ai-face-bot/web/internal/repository"
 )
@@ -27,4 +29,12 @@ func (s *GenerationService) GetAll(limit, offset int) ([]*models.GenerationReque
 
 func (s *GenerationService) GetStats() (map[string]interface{}, error) {
 	return s.repo.GetStats()
+}
+
+func (s *GenerationService) GetStatsSince(since time.Time) (map[string]interface{}, error) {
+	return s.repo.GetStatsSince(since)
+}
+
+func (s *GenerationService) GetTopUsers(limit int) ([]*models.TopUser, error) {
+	return s.repo.GetTopUsers(limit)
 }

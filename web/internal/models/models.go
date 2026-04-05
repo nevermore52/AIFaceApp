@@ -128,3 +128,14 @@ type SubscriptionPlan struct {
 	VideoWeekly int    `json:"video_weekly"`
 	Discount    int    `json:"discount"`
 }
+
+type TopUser struct {
+	UserID           int64  `json:"user_id"`
+	Username         string `json:"username"`
+	TotalGenerations int    `json:"total_generations"`
+	PhotoGenerations int    `json:"photo_generations"`
+	VideoGenerations int    `json:"video_generations"`
+	MusicGenerations int    `json:"music_generations"`
+	TextGenerations  int    `json:"text_generations"`
+	TokensSpent      int    `json:"tokens_spent"`
+}
