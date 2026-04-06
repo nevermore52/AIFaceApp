@@ -358,8 +358,13 @@ export function GeneratePage() {
     })
 
     if (!response.ok) {
-      const error = await response.json()
-      throw new Error(error.error || 'Не удалось загрузить изображение')
+      if (response.status === 413) {
+        throw new Error('Файл слишком большой (макс. 15 МБ)')
+      }
+      const text = await response.text()
+      let msg = 'Не удалось загрузить изображение'
+      try { msg = JSON.parse(text).error || msg } catch {}
+      throw new Error(msg)
     }
 
     const data = await response.json()
