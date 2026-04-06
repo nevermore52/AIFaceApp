@@ -154,6 +154,8 @@ export const generationApi = {
   getModels: () => api.get<{ id: string; name: string; type: string; description: string; token_cost: number }[]>('/models'),
   create: (data: GenerationCreateParams) =>
     api.post<{ id: number; status: string }>('/generations', data),
+  getUserUploads: () =>
+    api.get<{ uploads: { url: string; filename: string }[] }>('/user-uploads'),
 }
 
 export const adminApi = {

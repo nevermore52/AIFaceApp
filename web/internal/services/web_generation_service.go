@@ -1583,24 +1583,21 @@ func (s *WebGenerationService) registerSunoTaskInBot(taskID string, userID int64
 	return nil
 }
 
-// SaveUploadedFile saves an uploaded image to local storage and returns its public URL.
-// Files are stored in uploadDir and served at baseURL/api/uploads/{filename}.
-func (s *WebGenerationService) SaveUploadedFile(file io.Reader, originalFilename, uploadDir, baseURL string) (string, error) {
+// SaveUploadedFile saves an uploaded image to local storage, records it in user_uploads, and returns its public URL.
+func (s *WebGenerationService) SaveUploadedFile(file io.Reader, originalFilename, uploadDir, baseURL string, userID int64) (string, error) {
 	data, err := io.ReadAll(file)
 	if err != nil {
 		return "", fmt.Errorf("failed to read file: %w", err)
 	}
 
-	// Determine extension from original filename, default to .jpg
 	ext := ".jpg"
 	if idx := strings.LastIndex(originalFilename, "."); idx >= 0 {
 		e := strings.ToLower(originalFilename[idx:])
-		if e == ".jpg" || e == ".jpeg" || e == ".png" || e == ".webp" || e == ".gif" {
+		if e == ".jpg" || e == ".jpeg" || e == ".png" || e == ".webp" || e == ".gif" || e == ".heic" || e == ".heif" || e == ".avif" {
 			ext = e
 		}
 	}
 
-	// Generate unique filename
 	uid, err := generateUUID()
 	if err != nil {
 		return "", fmt.Errorf("failed to generate uuid: %w", err)
@@ -1617,7 +1614,40 @@ func (s *WebGenerationService) SaveUploadedFile(file io.Reader, originalFilename
 
 	url := strings.TrimRight(baseURL, "/") + "/api/uploads/" + filename
 	log.Printf("Image saved locally: %s -> %s", fullPath, url)
+
+	if userID > 0 {
+		_, _ = s.db.Exec(`INSERT INTO user_uploads (user_id, url, filename) VALUES ($1, $2, $3)`, userID, url, filename)
+	}
+
 	return url, nil
+}
+
+// GetUserUploads returns the most recent uploaded images for a user.
+func (s *WebGenerationService) GetUserUploads(userID int64, limit int) ([]map[string]string, error) {
+	if limit <= 0 {
+		limit = 50
+	}
+	rows, err := s.db.Query(`
+		SELECT url, filename, created_at FROM user_uploads
+		WHERE user_id = $1
+		ORDER BY created_at DESC
+		LIMIT $2
+	`, userID, limit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var result []map[string]string
+	for rows.Next() {
+		var url, filename string
+		var createdAt interface{}
+		if err := rows.Scan(&url, &filename, &createdAt); err != nil {
+			continue
+		}
+		result = append(result, map[string]string{"url": url, "filename": filename})
+	}
+	return result, nil
 }
 
 // runUploadCleanup periodically deletes uploaded files older than maxAge.

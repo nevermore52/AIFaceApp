@@ -382,7 +382,7 @@ func (h *GenerationHandler) UploadImage(c *gin.Context) {
 		}
 	}
 
-	tempImageURL, err := h.webGenerationService.SaveUploadedFile(file, header.Filename, h.uploadDir, h.webBaseURL)
+	tempImageURL, err := h.webGenerationService.SaveUploadedFile(file, header.Filename, h.uploadDir, h.webBaseURL, u.ID)
 	if err != nil {
 		log.Printf("Error saving image for user %d: %v", u.ID, err)
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to upload image"})
@@ -393,4 +393,26 @@ func (h *GenerationHandler) UploadImage(c *gin.Context) {
 		"url":  tempImageURL,
 		"size": header.Size,
 	})
+}
+
+// GetUserUploads returns previously uploaded images for the current user.
+func (h *GenerationHandler) GetUserUploads(c *gin.Context) {
+	user, exists := c.Get("user")
+	if !exists {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "Not authenticated"})
+		return
+	}
+	u := user.(*models.User)
+
+	uploads, err := h.webGenerationService.GetUserUploads(u.ID, 50)
+	if err != nil {
+		log.Printf("Error getting uploads for user %d: %v", u.ID, err)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to get uploads"})
+		return
+	}
+
+	if uploads == nil {
+		uploads = []map[string]string{}
+	}
+	c.JSON(http.StatusOK, gin.H{"uploads": uploads})
 }

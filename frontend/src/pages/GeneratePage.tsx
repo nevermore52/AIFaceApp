@@ -6,6 +6,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '../components/ui/card'
 import { Button } from '../components/ui/button'
 import { cn, humanizeError } from '../lib/utils'
 import { Sparkles, Image as ImageIcon, Video, Music, Type, ChevronDown, Info, X, ChevronRight, Mic, Download } from 'lucide-react'
+import { ImageLibraryPicker } from '../components/ImageLibraryPicker'
 
 async function downloadFile(url: string, filename: string) {
   try {
@@ -167,6 +168,8 @@ export function GeneratePage() {
   const [currentGeneration, setCurrentGeneration] = useState<Generation | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [dragActive, setDragActive] = useState(false)
+  const [showLibraryPicker, setShowLibraryPicker] = useState(false)
+  const [libraryUrls, setLibraryUrls] = useState<string[]>([]) // URLs выбранных из библиотеки
   const fileInputRef = useRef<HTMLInputElement>(null)
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null)
 
@@ -213,6 +216,7 @@ export function GeneratePage() {
       setSelectedModel(filteredModels[0].id)
     }
     setChatHistory([])
+    setLibraryUrls([])
   }, [selectedCategory, filteredModels, selectedModel])
 
   // Устанавливаем дефолтные параметры при смене модели
@@ -387,21 +391,25 @@ export function GeneratePage() {
     try {
       let imageUrls: string[] | undefined
 
-      if (imageFiles.length > 0) {
-        setUploadingImage(true)
-        try {
-          const uploadedUrls = await Promise.all(
-            imageFiles.map(file => uploadImageToImgur(file))
-          )
-          imageUrls = uploadedUrls
-        } catch (uploadErr: any) {
-          console.error('Upload error:', uploadErr)
-          setError(uploadErr?.message || 'Ошибка загрузки изображения')
-          setGenerating(false)
+      if (imageFiles.length > 0 || libraryUrls.length > 0) {
+        let uploadedUrls: string[] = [...libraryUrls]
+        if (imageFiles.length > 0) {
+          setUploadingImage(true)
+          try {
+            const newUrls = await Promise.all(
+              imageFiles.map(file => uploadImageToImgur(file))
+            )
+            uploadedUrls = [...uploadedUrls, ...newUrls]
+          } catch (uploadErr: any) {
+            console.error('Upload error:', uploadErr)
+            setError(uploadErr?.message || 'Ошибка загрузки изображения')
+            setGenerating(false)
+            setUploadingImage(false)
+            return
+          }
           setUploadingImage(false)
-          return
         }
-        setUploadingImage(false)
+        imageUrls = uploadedUrls
       }
 
       // Собираем параметры в зависимости от модели
@@ -537,7 +545,25 @@ export function GeneratePage() {
     )
   }
 
+  const handleLibrarySelect = (urls: string[]) => {
+    const maxImages = getMaxImages()
+    const remaining = maxImages - imageFiles.length - libraryUrls.length
+    const toAdd = urls.slice(0, remaining)
+    setLibraryUrls([...libraryUrls, ...toAdd])
+    setShowLibraryPicker(false)
+  }
+
   return (
+    <>
+    {showLibraryPicker && (
+      <ImageLibraryPicker
+        maxSelect={getMaxImages()}
+        alreadySelected={imageFiles.length + libraryUrls.length}
+        onSelect={handleLibrarySelect}
+        onUploadNew={() => { setShowLibraryPicker(false); fileInputRef.current?.click() }}
+        onClose={() => setShowLibraryPicker(false)}
+      />
+    )}
     <div className="max-w-2xl mx-auto pb-20 lg:pb-8">
       {/* Category Header */}
       <div className="flex items-center justify-between mb-4 px-2">
@@ -616,11 +642,11 @@ export function GeneratePage() {
                 onDragLeave={handleDrag}
                 onDragOver={handleDrag}
                 onDrop={handleDrop}
-                onClick={() => fileInputRef.current?.click()}
+                onClick={() => setShowLibraryPicker(true)}
                 className={cn(
                   "relative flex flex-col items-center justify-center w-24 h-32 rounded-xl border border-white/10 transition-all cursor-pointer group",
-                  dragActive 
-                    ? "border-primary bg-primary/5" 
+                  dragActive
+                    ? "border-primary bg-primary/5"
                     : "bg-white/[0.03] hover:bg-white/[0.05]"
                 )}
               >
@@ -639,10 +665,22 @@ export function GeneratePage() {
               </div>
 
               {imagePreviews.map((preview, idx) => (
-                <div key={idx} className="relative w-24 h-32 rounded-xl overflow-hidden border border-white/10 shadow-lg">
+                <div key={`file-${idx}`} className="relative w-24 h-32 rounded-xl overflow-hidden border border-white/10 shadow-lg">
                   <img src={preview} alt={`Preview ${idx}`} className="w-full h-full object-cover" />
                   <button
                     onClick={(e) => { e.stopPropagation(); removeImage(idx); }}
+                    className="absolute top-1 right-1 p-1 bg-black/60 hover:bg-black/80 text-white rounded-lg backdrop-blur-md transition-all border border-white/5"
+                  >
+                    <X className="w-2.5 h-2.5" />
+                  </button>
+                </div>
+              ))}
+
+              {libraryUrls.map((url, idx) => (
+                <div key={`lib-${idx}`} className="relative w-24 h-32 rounded-xl overflow-hidden border border-yellow-400/40 shadow-lg">
+                  <img src={url} alt={`Library ${idx}`} className="w-full h-full object-cover" />
+                  <button
+                    onClick={(e) => { e.stopPropagation(); setLibraryUrls(libraryUrls.filter((_, i) => i !== idx)); }}
                     className="absolute top-1 right-1 p-1 bg-black/60 hover:bg-black/80 text-white rounded-lg backdrop-blur-md transition-all border border-white/5"
                   >
                     <X className="w-2.5 h-2.5" />
@@ -1081,5 +1119,6 @@ export function GeneratePage() {
         </Card>
       )}
     </div>
+    </>
   )
 }
