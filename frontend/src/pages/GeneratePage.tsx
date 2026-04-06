@@ -263,7 +263,10 @@ export function GeneratePage() {
   const handleFilesChange = async (files: FileList | null) => {
     if (!files) return
     const maxImages = getMaxImages()
-    const newFiles = Array.from(files).filter(f => f.type.startsWith('image/'))
+    const IMAGE_EXTS = /\.(jpe?g|png|webp|gif|heic|heif|avif|bmp)$/i
+    const newFiles = Array.from(files).filter(f =>
+      f.type.startsWith('image/') || (!f.type && IMAGE_EXTS.test(f.name))
+    )
     
     if (newFiles.length === 0) {
       setError('Пожалуйста, выберите изображения')
@@ -307,9 +310,9 @@ export function GeneratePage() {
 
       setImageFiles([...imageFiles, ...filesToAdd])
       setImagePreviews([...imagePreviews, ...newPreviews])
-    } catch (err) {
+    } catch (err: any) {
       console.error('Error reading files:', err)
-      setError('Ошибка загрузки изображений. Попробуйте снова.')
+      setError(err?.message || 'Ошибка загрузки изображений. Попробуйте снова.')
     }
   }
 
@@ -391,8 +394,9 @@ export function GeneratePage() {
             imageFiles.map(file => uploadImageToImgur(file))
           )
           imageUrls = uploadedUrls
-        } catch (uploadErr) {
-          setError('Ошибка загрузки изображения')
+        } catch (uploadErr: any) {
+          console.error('Upload error:', uploadErr)
+          setError(uploadErr?.message || 'Ошибка загрузки изображения')
           setGenerating(false)
           setUploadingImage(false)
           return
