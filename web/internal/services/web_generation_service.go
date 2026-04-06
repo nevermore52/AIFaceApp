@@ -21,6 +21,7 @@ import (
 type QuotaService interface {
 	GetByID(id int64) (*models.User, error)
 	GetQuota(telegramID int64) (*models.UserQuota, error)
+	EnsureDailyReset(telegramID int64) error
 	ConsumeQuota(telegramID int64, category models.QuotaCategory, amount int) (primaryUsed, extraUsed int, err error)
 	AddExtraQuota(telegramID int64, category models.QuotaCategory, amount int) error
 	AddPrimaryQuota(telegramID int64, category models.QuotaCategory, amount int) error
@@ -332,6 +333,13 @@ func (s *WebGenerationService) CreateGeneration(userID int64, username string, r
 			category = models.QuotaCategoryVideo
 		default:
 			return nil, fmt.Errorf("unknown model type: %s", modelType)
+		}
+
+		// Сбрасываем ежедневную квоту если новый день
+		if category == models.QuotaCategoryText {
+			if err := s.quotaService.EnsureDailyReset(quotaUserID); err != nil {
+				log.Printf("EnsureDailyReset failed for user %d: %v", quotaUserID, err)
+			}
 		}
 
 		// Списываем квоту (с правильной стоимостью)

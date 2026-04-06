@@ -3,6 +3,8 @@ package repository
 import (
 	"database/sql"
 	"fmt"
+	"strings"
+	"time"
 
 	"telegram-ai-face-bot/web/internal/models"
 )
@@ -52,6 +54,66 @@ func (r *QuotaRepository) GetOrCreate(telegramID int64) (*models.UserQuota, erro
 		&quota.VideoWeekly, &quota.VideoExtra, &quota.CreatedAt, &quota.UpdatedAt,
 	)
 	return quota, err
+}
+
+// EnsureDailyReset checks if text_daily needs to be reset for a new day (MSK timezone)
+// and resets it based on the user's current subscription.
+func (r *QuotaRepository) EnsureDailyReset(telegramID int64) error {
+	tx, err := r.db.Begin()
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+
+	// Ensure row exists
+	if _, err := tx.Exec(`
+		INSERT INTO user_quotas (telegram_id, text_daily, text_extra, image_weekly, image_extra, music_weekly, music_extra, video_weekly, video_extra)
+		VALUES ($1, 10, 0, 0, 0, 0, 0, 0, 0)
+		ON CONFLICT (telegram_id) DO NOTHING
+	`, telegramID); err != nil {
+		return err
+	}
+
+	var updatedAt time.Time
+	if err := tx.QueryRow(`SELECT updated_at FROM user_quotas WHERE telegram_id = $1 FOR UPDATE`, telegramID).Scan(&updatedAt); err != nil {
+		return err
+	}
+
+	msk := time.FixedZone("MSK", 3*3600)
+	today := time.Now().In(msk).Format("2006-01-02")
+	if updatedAt.In(msk).Format("2006-01-02") == today {
+		return tx.Commit()
+	}
+
+	// Get subscription info
+	var subType string
+	var subEnd *time.Time
+	if err := tx.QueryRow(`SELECT COALESCE(subscription_type, ''), subscription_end FROM users WHERE telegram_id = $1`, telegramID).Scan(&subType, &subEnd); err != nil {
+		// User row might not exist (web-only user without TG) — use free quota
+		subType = ""
+	}
+
+	activeSub := subType != "" && subEnd != nil && subEnd.After(time.Now())
+	newDaily := 10
+	if activeSub {
+		switch strings.ToLower(subType) {
+		case "mini":
+			newDaily = 50
+		case "start":
+			newDaily = 100
+		case "pro":
+			newDaily = 200
+		}
+	}
+
+	_, err = tx.Exec(`
+		UPDATE user_quotas SET text_daily = $2, updated_at = CURRENT_TIMESTAMP WHERE telegram_id = $1
+	`, telegramID, newDaily)
+	if err != nil {
+		return err
+	}
+
+	return tx.Commit()
 }
 
 func (r *QuotaRepository) AddExtra(telegramID int64, category models.QuotaCategory, amount int) error {
@@ -146,7 +208,7 @@ func (r *QuotaRepository) Consume(telegramID int64, category models.QuotaCategor
 	extraUsed = origExtra - extra
 
 	_, err = tx.Exec(fmt.Sprintf(`
-		UPDATE user_quotas SET %s = $2, %s = $3, updated_at = CURRENT_TIMESTAMP
+		UPDATE user_quotas SET %s = $2, %s = $3
 		WHERE telegram_id = $1`, primaryCol, extraCol), telegramID, primary, extra)
 	if err != nil {
 		return 0, 0, err

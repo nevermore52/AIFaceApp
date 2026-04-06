@@ -41,6 +41,10 @@ func (s *UserService) GetQuota(telegramID int64) (*models.UserQuota, error) {
 	return s.quotaRepo.GetOrCreate(telegramID)
 }
 
+func (s *UserService) EnsureDailyReset(telegramID int64) error {
+	return s.quotaRepo.EnsureDailyReset(telegramID)
+}
+
 func (s *UserService) AddExtraQuota(telegramID int64, category models.QuotaCategory, amount int) error {
 	return s.quotaRepo.AddExtra(telegramID, category, amount)
 }
