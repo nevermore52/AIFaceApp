@@ -365,15 +365,21 @@ func (h *GenerationHandler) UploadImage(c *gin.Context) {
 		return
 	}
 
-	// Validate file type
+	// Validate file type via magic bytes; fallback to multipart Content-Type header
+	// (needed for HEIC/AVIF/etc. that http.DetectContentType doesn't recognise)
 	buffer := make([]byte, 512)
 	n, _ := file.Read(buffer)
 	file.Seek(0, 0)
 
 	contentType := http.DetectContentType(buffer[:n])
 	if !strings.HasPrefix(contentType, "image/") {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid file type"})
-		return
+		// Fallback: trust the Content-Type sent by the browser in the multipart part
+		if ct := header.Header.Get("Content-Type"); strings.HasPrefix(ct, "image/") {
+			contentType = ct
+		} else {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid file type"})
+			return
+		}
 	}
 
 	tempImageURL, err := h.webGenerationService.SaveUploadedFile(file, header.Filename, h.uploadDir, h.webBaseURL)
