@@ -546,7 +546,7 @@ func (s *WebGenerationService) processGeneration(genReq *GenerationRequest, req 
 	}
 
 	taskReq := kieapi.CreateTaskRequest{
-		Model:       req.Model,
+		Model:       kieModelName(req.Model),
 		CallBackURL: s.callbackURL,
 		Input:       input,
 	}
@@ -574,6 +574,19 @@ func (s *WebGenerationService) processGeneration(genReq *GenerationRequest, req 
 
 	_ = s.updateExternalTaskID(genReq.ID, taskID)
 	log.Printf("KieAPI task created: requestID=%d taskID=%s model=%s", genReq.ID, taskID, req.Model)
+}
+
+// kieModelName maps internal model IDs to the names KieAPI expects.
+func kieModelName(model string) string {
+	switch strings.ToLower(strings.TrimSpace(model)) {
+	case "google/nano-banana":
+		return "google/nano-banana-edit"
+	case "google/nano-banana-pro":
+		return "nano-banana-pro"
+	case "seedream/4.5-edit":
+		return "seedream/4.5-edit"
+	}
+	return model
 }
 
 func isTextModel(model string) bool {
