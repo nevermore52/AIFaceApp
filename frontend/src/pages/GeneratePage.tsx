@@ -145,7 +145,7 @@ const SUBSCRIPTION_REQUIRED_MODELS: Record<string, string[]> = {
 
 export function GeneratePage() {
   const navigate = useNavigate()
-  const { isAuthenticated, user } = useAuthStore()
+  const { isAuthenticated, user, accessToken } = useAuthStore()
   const [allModels, setAllModels] = useState<Model[]>([])
   const [selectedCategory, setSelectedCategory] = useState<Category>('image')
   const [selectedModel, setSelectedModel] = useState<string>('')
@@ -343,11 +343,7 @@ export function GeneratePage() {
     const formData = new FormData()
     formData.append('image', file)
 
-    // Get auth token from storage
-    const storage = localStorage.getItem('auth-storage')
-    const token = storage ? JSON.parse(storage).state?.accessToken : null
-
-    if (!token) {
+    if (!accessToken) {
       throw new Error('Не авторизованы')
     }
 
@@ -357,7 +353,7 @@ export function GeneratePage() {
       method: 'POST',
       body: formData,
       headers: {
-        Authorization: `Bearer ${token}`,
+        Authorization: `Bearer ${accessToken}`,
       },
     })
 
