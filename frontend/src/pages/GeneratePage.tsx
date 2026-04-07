@@ -637,10 +637,12 @@ export function GeneratePage() {
                   </div>
                   <div className="flex items-center gap-2 shrink-0">
                     <span className={cn(
-                      "text-xs font-semibold px-2 py-0.5 rounded-full",
+                      "text-[11px] font-semibold px-2 py-0.5 rounded-full whitespace-nowrap",
                       isSelected ? "bg-yellow-500/20 text-yellow-300" : "bg-white/5 text-white/30"
                     )}>
-                      {model.token_cost}
+                      {['nano-banana-2', 'google/nano-banana-pro', 'wan/2-6-image-to-video', 'kling-2.6/image-to-video'].includes(model.id)
+                        ? `от ${model.token_cost}`
+                        : model.token_cost}
                     </span>
                     {isSelected && (
                       <div className="w-5 h-5 rounded-full bg-yellow-400 flex items-center justify-center">
@@ -670,15 +672,16 @@ export function GeneratePage() {
     <div className="max-w-2xl mx-auto pb-20 lg:pb-8">
       {/* Category Header */}
       <div className="flex items-center justify-between mb-4 px-2">
-        <div className="relative group">
-          <button className="flex items-center gap-2 text-white/90 hover:text-white transition-colors py-1">
-            {(() => {
-              const Icon = CATEGORY_ICONS[selectedCategory]
-              return <Icon className="w-4 h-4" />
-            })()}
-            <span className="text-sm font-medium">{CATEGORY_LABELS[selectedCategory]}</span>
-            <ChevronDown className="w-3 h-3 opacity-50" />
-          </button>
+        <div className="flex items-center gap-3">
+          <div className="relative group">
+            <button className="flex items-center gap-2 text-white/90 hover:text-white transition-colors py-1">
+              {(() => {
+                const Icon = CATEGORY_ICONS[selectedCategory]
+                return <Icon className="w-4 h-4" />
+              })()}
+              <span className="text-sm font-medium">{CATEGORY_LABELS[selectedCategory]}</span>
+              <ChevronDown className="w-3 h-3 opacity-50" />
+            </button>
           
           <div className="absolute top-full left-0 mt-1 w-48 bg-[#0a0a0a] border border-white/10 rounded-xl shadow-2xl opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all z-50 overflow-hidden">
             {(Object.entries(CATEGORY_LABELS) as [Category, string][]).map(([cat, label]) => {
@@ -698,9 +701,23 @@ export function GeneratePage() {
               )
             })}
           </div>
+
+          {/* Quota badge */}
+          {currentQuota >= 0 && (
+            <div className={cn(
+              "px-2.5 py-1 rounded-full text-xs font-bold tabular-nums",
+              currentQuota < totalCost
+                ? "bg-red-500/15 text-red-400 border border-red-500/20"
+                : currentQuota <= totalCost * 3
+                  ? "bg-orange-500/15 text-orange-400 border border-orange-500/20"
+                  : "bg-white/5 text-white/50 border border-white/10"
+            )}>
+              {currentQuota}
+            </div>
+          )}
         </div>
-        
-        <button 
+
+        <button
           onClick={() => navigate('/')}
           className="p-2 hover:bg-white/5 rounded-full transition-colors text-white/40 hover:text-white"
         >
@@ -1057,7 +1074,7 @@ export function GeneratePage() {
           <div className="flex items-center justify-between px-1 text-xs">
             <span className="text-white/30">
               Осталось: <span className={cn("font-semibold", currentQuota <= totalCost * 2 ? "text-orange-400" : "text-white/50")}>{currentQuota}</span>
-              {selectedCategory === 'text' ? ' текстовых' : selectedCategory === 'image' ? ' фото' : selectedCategory === 'video' ? ' видео' : ' музыкальных'}
+              {selectedCategory === 'text' ? ' текстовых генераций' : selectedCategory === 'image' ? ' фото генераций' : selectedCategory === 'video' ? ' видео генераций' : ' музыкальных генераций'}
             </span>
             {currentQuota <= totalCost * 3 && (
               <button onClick={() => navigate('/payments')} className="text-yellow-400/70 hover:text-yellow-400 transition-colors flex items-center gap-1">
