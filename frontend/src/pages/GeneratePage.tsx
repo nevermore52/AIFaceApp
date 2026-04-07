@@ -1,4 +1,5 @@
 import { useEffect, useState, useRef, ChangeEvent, DragEvent } from 'react'
+import { createPortal } from 'react-dom'
 import { useNavigate } from 'react-router-dom'
 import { useAuthStore } from '../store/auth'
 import { generationApi, userApi, GenerationCreateParams } from '../lib/api'
@@ -588,8 +589,8 @@ export function GeneratePage() {
 
   return (
     <>
-    {/* Model Picker */}
-    {showModelPicker && (
+    {/* Model Picker — портал к body, чтобы fixed работал корректно поверх transform-анимаций */}
+    {showModelPicker && createPortal(
       <div
         className="fixed inset-0 z-50 flex items-end justify-center"
         style={{ background: 'rgba(0,0,0,0.6)', animation: 'fadeIn 220ms ease-out' }}
@@ -657,17 +658,19 @@ export function GeneratePage() {
             })}
           </div>
         </div>
-      </div>
+      </div>,
+      document.body
     )}
 
-    {showLibraryPicker && (
+    {showLibraryPicker && createPortal(
       <ImageLibraryPicker
         maxSelect={getMaxImages()}
         alreadySelected={imageFiles.length + libraryUrls.length}
         onSelect={handleLibrarySelect}
         onUploadNew={() => { setShowLibraryPicker(false); fileInputRef.current?.click() }}
         onClose={() => setShowLibraryPicker(false)}
-      />
+      />,
+      document.body
     )}
     <div className="max-w-2xl mx-auto pb-20 lg:pb-8">
       {/* Category Header */}
