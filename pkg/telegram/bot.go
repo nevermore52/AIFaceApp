@@ -1251,7 +1251,18 @@ func NewBot(token string, userService *services.UserService, generationService *
 		sunoVoice:         make(map[int64]string),
 	}
 
+	// Force HTTP/1.1 to avoid GOAWAY errors from Telegram's HTTP/2 servers.
+	// Go's HTTP/2 transport cannot retry POST requests after receiving GOAWAY
+	// because Request.Body is already consumed and GetBody is not set.
+	http1Transport := &http.Transport{
+		ForceAttemptHTTP2: false,
+	}
+	http1Client := &http.Client{
+		Transport: http1Transport,
+	}
+
 	opts := []tgbot.Option{
+		tgbot.WithHTTPClient(60*time.Second, http1Client),
 		tgbot.WithDefaultHandler(func(ctx context.Context, _ *tgbot.Bot, update *tgmodels.Update) {
 			bot.goLimited(func() {
 				bot.safeHandleUpdate(update)
