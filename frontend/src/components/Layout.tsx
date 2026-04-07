@@ -109,14 +109,19 @@ export function Layout() {
               <Link
                 key={item.href}
                 to={item.href}
-                className="flex flex-col items-center gap-1.5 group"
+                className="flex flex-col items-center gap-1.5 group relative"
               >
-                <item.icon className={cn(
-                  "h-6 w-6 transition-colors duration-200",
-                  isActive ? "text-white" : "text-white/40 group-hover:text-white/60"
-                )} />
+                <div className={cn(
+                  "relative flex items-center justify-center w-10 h-8 rounded-2xl transition-all duration-200",
+                  isActive ? "bg-white/10" : "group-hover:bg-white/5"
+                )}>
+                  <item.icon className={cn(
+                    "h-5 w-5 transition-all duration-200",
+                    isActive ? "text-white scale-110" : "text-white/40 group-hover:text-white/60"
+                  )} />
+                </div>
                 <span className={cn(
-                  "text-[10px] font-medium transition-colors duration-200",
+                  "text-[10px] font-medium transition-all duration-200",
                   isActive ? "text-white" : "text-white/40"
                 )}>
                   {item.name}
@@ -128,7 +133,9 @@ export function Layout() {
       </nav>
 
       <main className="container py-8 px-4 pb-32 md:pb-8">
-        <Outlet />
+        <div key={location.pathname} style={{ animation: 'pageEnter 280ms cubic-bezier(0.16,1,0.3,1) both' }}>
+          <Outlet />
+        </div>
       </main>
     </div>
   )

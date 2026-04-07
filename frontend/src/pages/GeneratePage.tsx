@@ -701,6 +701,7 @@ export function GeneratePage() {
               )
             })}
           </div>
+          </div>
 
           {/* Quota badge */}
           {currentQuota >= 0 && (
