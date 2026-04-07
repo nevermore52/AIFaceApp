@@ -62,21 +62,15 @@
     scroll-behavior: smooth;
   }
 
-  /* Custom Scrollbar */
+  /* Hide scrollbar */
   ::-webkit-scrollbar {
-    width: 10px;
+    width: 0;
+    height: 0;
   }
 
-  ::-webkit-scrollbar-track {
-    @apply bg-background;
-  }
-
-  ::-webkit-scrollbar-thumb {
-    @apply bg-white/5 rounded-full border-2 border-solid border-transparent bg-clip-padding transition-colors;
-  }
-
-  ::-webkit-scrollbar-thumb:hover {
-    @apply bg-white/10;
+  * {
+    scrollbar-width: none;
+    -ms-overflow-style: none;
   }
 }
 
@@ -91,12 +85,17 @@
   to { transform: translateY(0); }
 }
 
+@keyframes slideUpFade {
+  from { opacity: 0; transform: translateY(100%); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
 @keyframes fadeSlideIn {
   from { opacity: 0; transform: translateY(8px); }
   to { opacity: 1; transform: translateY(0); }
 }
 
 @keyframes pageEnter {
-  from { opacity: 0; transform: translateY(16px); }
+  from { opacity: 0; transform: translateY(20px); }
   to { opacity: 1; transform: translateY(0); }
 }

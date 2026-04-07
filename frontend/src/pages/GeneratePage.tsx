@@ -592,12 +592,12 @@ export function GeneratePage() {
     {showModelPicker && (
       <div
         className="fixed inset-0 z-50 flex items-end justify-center"
-        style={{ background: 'rgba(0,0,0,0.6)', animation: 'fadeIn 150ms ease-out' }}
+        style={{ background: 'rgba(0,0,0,0.6)', animation: 'fadeIn 220ms ease-out' }}
         onClick={(e) => { if (e.target === e.currentTarget) setShowModelPicker(false) }}
       >
         <div
           className="w-full max-w-lg rounded-t-2xl bg-[#1a1a1f] overflow-hidden"
-          style={{ animation: 'slideUp 250ms cubic-bezier(0.16,1,0.3,1)' }}
+          style={{ animation: 'slideUp 380ms cubic-bezier(0.16,1,0.3,1)' }}
         >
           <div className="flex justify-center pt-3 pb-1">
             <div className="w-10 h-1 rounded-full bg-white/20" />
@@ -623,7 +623,7 @@ export function GeneratePage() {
                       ? "bg-gradient-to-r from-yellow-500/15 to-orange-500/10 border border-yellow-500/30"
                       : "bg-white/[0.03] border border-transparent hover:bg-white/[0.06]"
                   )}
-                  style={{ animation: `fadeSlideIn ${150 + idx * 50}ms cubic-bezier(0.16,1,0.3,1) both` }}
+                  style={{ animation: `fadeSlideIn ${220 + idx * 60}ms cubic-bezier(0.16,1,0.3,1) both` }}
                 >
                   <div className={cn(
                     "w-8 h-8 rounded-xl flex items-center justify-center shrink-0 transition-colors",
@@ -1067,22 +1067,6 @@ export function GeneratePage() {
                 {!user?.subscription_type ? 'Оформить подписку' : 'Пополнить запросы'}
               </Button>
             </div>
-          </div>
-        )}
-
-        {/* Quota remaining indicator */}
-        {currentQuota >= 0 && currentQuota >= totalCost && !quotaError && (
-          <div className="flex items-center justify-between px-1 text-xs">
-            <span className="text-white/30">
-              Осталось: <span className={cn("font-semibold", currentQuota <= totalCost * 2 ? "text-orange-400" : "text-white/50")}>{currentQuota}</span>
-              {selectedCategory === 'text' ? ' текстовых генераций' : selectedCategory === 'image' ? ' фото генераций' : selectedCategory === 'video' ? ' видео генераций' : ' музыкальных генераций'}
-            </span>
-            {currentQuota <= totalCost * 3 && (
-              <button onClick={() => navigate('/payments')} className="text-yellow-400/70 hover:text-yellow-400 transition-colors flex items-center gap-1">
-                <ShoppingCart className="w-3 h-3" />
-                Купить ещё
-              </button>
-            )}
           </div>
         )}
 
