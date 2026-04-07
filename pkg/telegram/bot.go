@@ -128,6 +128,7 @@ func newReplyKeyboard(rows ...[]tgmodels.KeyboardButton) tgmodels.ReplyKeyboardM
 	return tgmodels.ReplyKeyboardMarkup{
 		Keyboard:       rows,
 		ResizeKeyboard: true,
+		IsPersistent:   true,
 	}
 }
 

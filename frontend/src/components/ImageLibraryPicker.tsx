@@ -51,11 +51,11 @@ export function ImageLibraryPicker({ maxSelect, alreadySelected, onSelect, onUpl
     <div
       ref={overlayRef}
       className="fixed inset-0 z-50 flex items-end justify-center"
-      style={{ background: 'rgba(0,0,0,0.6)' }}
+      style={{ background: 'rgba(0,0,0,0.6)', animation: 'fadeIn 150ms ease-out' }}
       onClick={e => { if (e.target === overlayRef.current) onClose() }}
     >
       <div className="w-full max-w-lg rounded-t-2xl bg-[#1a1a1f] flex flex-col"
-        style={{ maxHeight: '80vh' }}>
+        style={{ maxHeight: '80vh', animation: 'slideUp 250ms cubic-bezier(0.16,1,0.3,1)' }}>
         {/* Handle */}
         <div className="flex justify-center pt-3 pb-1">
           <div className="w-10 h-1 rounded-full bg-white/20" />

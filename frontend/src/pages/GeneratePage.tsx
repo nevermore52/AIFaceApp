@@ -1,11 +1,11 @@
 import { useEffect, useState, useRef, ChangeEvent, DragEvent } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useAuthStore } from '../store/auth'
-import { generationApi, GenerationCreateParams } from '../lib/api'
+import { generationApi, userApi, GenerationCreateParams } from '../lib/api'
 import { Card, CardContent, CardHeader, CardTitle } from '../components/ui/card'
 import { Button } from '../components/ui/button'
 import { cn, humanizeError } from '../lib/utils'
-import { Sparkles, Image as ImageIcon, Video, Music, Type, ChevronDown, Info, X, ChevronRight, Mic, Download } from 'lucide-react'
+import { Sparkles, Image as ImageIcon, Video, Music, Type, ChevronDown, Info, X, ChevronRight, Mic, Download, ShoppingCart, Zap, Crown } from 'lucide-react'
 import { ImageLibraryPicker } from '../components/ImageLibraryPicker'
 
 async function downloadFile(url: string, filename: string) {
@@ -165,9 +165,12 @@ export function GeneratePage() {
   const [uploadingImage, setUploadingImage] = useState(false)
   const [loading, setLoading] = useState(false)
   const [generating, setGenerating] = useState(false)
+  const [quota, setQuota] = useState<{ text_daily: number; text_extra: number; image_weekly: number; image_extra: number; music_weekly: number; music_extra: number; video_weekly: number; video_extra: number } | null>(null)
+  const [quotaError, setQuotaError] = useState(false)
   const [currentGeneration, setCurrentGeneration] = useState<Generation | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [dragActive, setDragActive] = useState(false)
+  const [showModelPicker, setShowModelPicker] = useState(false)
   const [showLibraryPicker, setShowLibraryPicker] = useState(false)
   const [libraryUrls, setLibraryUrls] = useState<string[]>([]) // URLs выбранных из библиотеки
   const fileInputRef = useRef<HTMLInputElement>(null)
@@ -193,6 +196,10 @@ export function GeneratePage() {
         console.error(err)
       })
       .finally(() => setLoading(false))
+
+    userApi.getQuota()
+      .then((q: any) => setQuota(q))
+      .catch(() => {})
 
     return () => {
       if (pollRef.current) clearInterval(pollRef.current)
@@ -385,6 +392,7 @@ export function GeneratePage() {
     }
 
     setError(null)
+    setQuotaError(false)
     setGenerating(true)
     setCurrentGeneration(null)
 
@@ -476,6 +484,8 @@ export function GeneratePage() {
           if (status.status === 'completed' || status.status === 'failed') {
             if (pollRef.current) clearInterval(pollRef.current)
             setGenerating(false)
+            setQuotaError(false)
+            refreshQuota()
             // Добавляем сообщения в историю чата
             if (selectedCategory === 'text' && status.status === 'completed' && status.output) {
               setChatHistory(prev => [
@@ -491,10 +501,33 @@ export function GeneratePage() {
         }
       }, 3000)
     } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : String(err ?? '')
+      if (/insufficient quota/i.test(msg)) {
+        setQuotaError(true)
+        refreshQuota()
+      }
       setError(humanizeError(err, 'Ошибка при создании генерации. Попробуйте ещё раз.'))
       setGenerating(false)
     }
   }
+
+  // Обновляем квоту после каждой генерации
+  const refreshQuota = () => {
+    userApi.getQuota().then((q: any) => setQuota(q)).catch(() => {})
+  }
+
+  // Считаем оставшуюся квоту для текущей категории
+  const getCategoryQuota = (): number => {
+    if (!quota) return -1
+    switch (selectedCategory) {
+      case 'text':  return quota.text_daily + quota.text_extra
+      case 'image': return quota.image_weekly + quota.image_extra
+      case 'music': return quota.music_weekly + quota.music_extra
+      case 'video': return quota.video_weekly + quota.video_extra
+      default:      return -1
+    }
+  }
+  const currentQuota = getCategoryQuota()
 
   const selectedModelInfo = filteredModels.find(m => m.id === selectedModel)
 
@@ -555,6 +588,76 @@ export function GeneratePage() {
 
   return (
     <>
+    {/* Model Picker */}
+    {showModelPicker && (
+      <div
+        className="fixed inset-0 z-50 flex items-end justify-center"
+        style={{ background: 'rgba(0,0,0,0.6)', animation: 'fadeIn 150ms ease-out' }}
+        onClick={(e) => { if (e.target === e.currentTarget) setShowModelPicker(false) }}
+      >
+        <div
+          className="w-full max-w-lg rounded-t-2xl bg-[#1a1a1f] overflow-hidden"
+          style={{ animation: 'slideUp 250ms cubic-bezier(0.16,1,0.3,1)' }}
+        >
+          <div className="flex justify-center pt-3 pb-1">
+            <div className="w-10 h-1 rounded-full bg-white/20" />
+          </div>
+          <div className="px-4 pb-2">
+            <p className="text-white font-semibold text-base">Выберите модель</p>
+            <p className="text-white/40 text-xs mt-0.5">
+              {selectedCategory === 'image' ? 'Генерация и редактирование изображений' :
+               selectedCategory === 'video' ? 'Генерация видео' :
+               selectedCategory === 'music' ? 'Генерация музыки' : 'Текстовые модели'}
+            </p>
+          </div>
+          <div className="px-3 pb-4 space-y-1 max-h-[60vh] overflow-y-auto">
+            {filteredModels.map((model, idx) => {
+              const isSelected = model.id === selectedModel
+              return (
+                <button
+                  key={model.id}
+                  onClick={() => { setSelectedModel(model.id); setShowModelPicker(false) }}
+                  className={cn(
+                    "w-full flex items-center gap-3 px-4 py-3.5 rounded-xl transition-all active:scale-[0.97]",
+                    isSelected
+                      ? "bg-gradient-to-r from-yellow-500/15 to-orange-500/10 border border-yellow-500/30"
+                      : "bg-white/[0.03] border border-transparent hover:bg-white/[0.06]"
+                  )}
+                  style={{ animation: `fadeSlideIn ${150 + idx * 50}ms cubic-bezier(0.16,1,0.3,1) both` }}
+                >
+                  <div className={cn(
+                    "w-8 h-8 rounded-xl flex items-center justify-center shrink-0 transition-colors",
+                    isSelected ? "bg-yellow-500/20" : "bg-white/5"
+                  )}>
+                    <Sparkles className={cn("w-4 h-4", isSelected ? "text-yellow-400" : "text-white/30")} />
+                  </div>
+                  <div className="flex-1 text-left min-w-0">
+                    <p className={cn("text-sm font-medium", isSelected ? "text-white" : "text-white/70")}>{model.name}</p>
+                    <p className="text-[11px] text-white/30 truncate">{model.description}</p>
+                  </div>
+                  <div className="flex items-center gap-2 shrink-0">
+                    <span className={cn(
+                      "text-xs font-semibold px-2 py-0.5 rounded-full",
+                      isSelected ? "bg-yellow-500/20 text-yellow-300" : "bg-white/5 text-white/30"
+                    )}>
+                      {model.token_cost}
+                    </span>
+                    {isSelected && (
+                      <div className="w-5 h-5 rounded-full bg-yellow-400 flex items-center justify-center">
+                        <svg className="w-3 h-3 text-black" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}>
+                          <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+                        </svg>
+                      </div>
+                    )}
+                  </div>
+                </button>
+              )
+            })}
+          </div>
+        </div>
+      </div>
+    )}
+
     {showLibraryPicker && (
       <ImageLibraryPicker
         maxSelect={getMaxImages()}
@@ -609,27 +712,17 @@ export function GeneratePage() {
         {/* Model Selection */}
         <div className="space-y-1">
           <label className="text-[13px] lg:text-sm font-medium text-white/90 ml-1">Модель</label>
-          <div className="relative">
-            <div className="w-full flex items-center rounded-xl border border-white/10 bg-white/[0.03] px-3 lg:px-4 py-2.5 lg:py-3.5 text-sm lg:text-base transition-all hover:bg-white/[0.05] cursor-pointer group">
-              <div className="w-6 h-6 lg:w-7 lg:h-7 rounded-lg bg-white/10 flex items-center justify-center mr-2.5">
-                <span className="text-[10px] lg:text-xs font-bold text-white/40">G</span>
-              </div>
-              <Sparkles className="w-3.5 h-3.5 lg:w-4 lg:h-4 text-orange-400 mr-2 shrink-0" />
-              <span className="text-[13px] lg:text-base text-white/80 truncate flex-1">{selectedModelInfo?.name || 'Выберите модель'}</span>
-              <ChevronRight className="w-4 h-4 lg:w-5 lg:h-5 text-white/20 ml-2 shrink-0 group-hover:text-white/40 transition-colors" />
+          <button
+            onClick={() => setShowModelPicker(true)}
+            className="w-full flex items-center rounded-xl border border-white/10 bg-white/[0.03] px-3 lg:px-4 py-2.5 lg:py-3.5 text-sm lg:text-base transition-all hover:bg-white/[0.05] hover:border-white/20 active:scale-[0.98] cursor-pointer group"
+          >
+            <div className="w-6 h-6 lg:w-7 lg:h-7 rounded-lg bg-white/10 flex items-center justify-center mr-2.5">
+              <span className="text-[10px] lg:text-xs font-bold text-white/40">G</span>
             </div>
-            <select
-              className="absolute inset-0 w-full opacity-0 cursor-pointer"
-              value={selectedModel}
-              onChange={(e: ChangeEvent<HTMLSelectElement>) => setSelectedModel(e.target.value)}
-            >
-              {filteredModels.map((model) => (
-                <option key={model.id} value={model.id} className="bg-[#0a0a0a]">
-                  {model.name}
-                </option>
-              ))}
-            </select>
-          </div>
+            <Sparkles className="w-3.5 h-3.5 lg:w-4 lg:h-4 text-orange-400 mr-2 shrink-0" />
+            <span className="text-[13px] lg:text-base text-white/80 truncate flex-1 text-left">{selectedModelInfo?.name || 'Выберите модель'}</span>
+            <ChevronRight className="w-4 h-4 lg:w-5 lg:h-5 text-white/20 ml-2 shrink-0 group-hover:text-white/40 transition-colors" />
+          </button>
         </div>
 
         {/* Media Upload - скрыто для музыки и текста */}
@@ -924,37 +1017,92 @@ export function GeneratePage() {
           </>
         )}
 
-        {error && (
+        {error && !quotaError && (
           <div className="p-3 rounded-xl bg-destructive/10 border border-destructive/20 text-destructive text-xs animate-in fade-in slide-in-from-top-2">
             {error}
+          </div>
+        )}
+
+        {/* Quota banner — нехватка запросов */}
+        {(quotaError || (currentQuota >= 0 && currentQuota < totalCost)) && (
+          <div className="relative overflow-hidden rounded-2xl border border-yellow-500/20 bg-gradient-to-br from-yellow-500/10 via-orange-500/5 to-transparent p-4 animate-in fade-in slide-in-from-top-2">
+            <div className="absolute -top-6 -right-6 w-24 h-24 bg-yellow-500/10 blur-[40px] rounded-full" />
+            <div className="flex items-start gap-3 relative">
+              <div className="p-2 rounded-xl bg-yellow-500/10 border border-yellow-500/20 shrink-0">
+                <Zap className="w-5 h-5 text-yellow-400" />
+              </div>
+              <div className="flex-1 min-w-0">
+                <p className="text-sm font-semibold text-white">Запросы закончились</p>
+                <p className="text-xs text-white/50 mt-0.5">
+                  {!user?.subscription_type
+                    ? 'Оформите подписку — больше запросов, лучшие модели и приоритет'
+                    : 'Пополните запросы или перейдите на более мощный тариф'}
+                </p>
+              </div>
+            </div>
+            <div className="flex gap-2 mt-3">
+              <Button
+                className="flex-1 h-11 rounded-xl text-sm font-bold bg-gradient-to-r from-yellow-400 to-orange-400 text-black hover:opacity-90"
+                onClick={() => navigate('/payments')}
+              >
+                <Crown className="w-4 h-4 mr-1.5" />
+                {!user?.subscription_type ? 'Оформить подписку' : 'Пополнить запросы'}
+              </Button>
+            </div>
+          </div>
+        )}
+
+        {/* Quota remaining indicator */}
+        {currentQuota >= 0 && currentQuota >= totalCost && !quotaError && (
+          <div className="flex items-center justify-between px-1 text-xs">
+            <span className="text-white/30">
+              Осталось: <span className={cn("font-semibold", currentQuota <= totalCost * 2 ? "text-orange-400" : "text-white/50")}>{currentQuota}</span>
+              {selectedCategory === 'text' ? ' текстовых' : selectedCategory === 'image' ? ' фото' : selectedCategory === 'video' ? ' видео' : ' музыкальных'}
+            </span>
+            {currentQuota <= totalCost * 3 && (
+              <button onClick={() => navigate('/payments')} className="text-yellow-400/70 hover:text-yellow-400 transition-colors flex items-center gap-1">
+                <ShoppingCart className="w-3 h-3" />
+                Купить ещё
+              </button>
+            )}
           </div>
         )}
 
         {/* Generate Button Section */}
         <div className="mt-10 mb-4 px-2">
           <div className="max-w-2xl mx-auto">
-            <Button
-              className="w-full h-16 rounded-2xl text-lg font-black bg-gradient-to-r from-[#FFD700] via-[#FFB700] to-[#FF8C00] text-black hover:opacity-90 transition-all shadow-[0_8px_30px_rgba(255,183,0,0.3)] active:scale-[0.95] flex items-center justify-center gap-3"
-              onClick={handleGenerate}
-              disabled={generating || uploadingImage}
-            >
-              {uploadingImage ? (
-                <>
-                  <span className="h-5 w-5 animate-spin rounded-full border-2 border-black/20 border-t-black" />
-                  <span>Загрузка...</span>
-                </>
-              ) : generating ? (
-                <>
-                  <span className="h-5 w-5 animate-spin rounded-full border-2 border-black/20 border-t-black" />
-                  <span>Создание...</span>
-                </>
-              ) : (
-                <>
-                  <Sparkles className="h-6 w-6 fill-black" />
-                  <span>Сгенерировать — {totalCost}</span>
-                </>
-              )}
-            </Button>
+            {currentQuota >= 0 && currentQuota < totalCost && !generating ? (
+              <Button
+                className="w-full h-16 rounded-2xl text-lg font-black bg-gradient-to-r from-yellow-400 via-orange-400 to-red-400 text-black hover:opacity-90 transition-all shadow-[0_8px_30px_rgba(255,140,0,0.3)] active:scale-[0.95] flex items-center justify-center gap-3"
+                onClick={() => navigate('/payments')}
+              >
+                <ShoppingCart className="h-6 w-6" />
+                <span>Купить запросы</span>
+              </Button>
+            ) : (
+              <Button
+                className="w-full h-16 rounded-2xl text-lg font-black bg-gradient-to-r from-[#FFD700] via-[#FFB700] to-[#FF8C00] text-black hover:opacity-90 transition-all shadow-[0_8px_30px_rgba(255,183,0,0.3)] active:scale-[0.95] flex items-center justify-center gap-3"
+                onClick={handleGenerate}
+                disabled={generating || uploadingImage}
+              >
+                {uploadingImage ? (
+                  <>
+                    <span className="h-5 w-5 animate-spin rounded-full border-2 border-black/20 border-t-black" />
+                    <span>Загрузка...</span>
+                  </>
+                ) : generating ? (
+                  <>
+                    <span className="h-5 w-5 animate-spin rounded-full border-2 border-black/20 border-t-black" />
+                    <span>Создание...</span>
+                  </>
+                ) : (
+                  <>
+                    <Sparkles className="h-6 w-6 fill-black" />
+                    <span>Сгенерировать — {totalCost}</span>
+                  </>
+                )}
+              </Button>
+            )}
           </div>
         </div>
       </div>
