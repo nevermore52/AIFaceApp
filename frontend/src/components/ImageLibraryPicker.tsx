@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import React, { useEffect, useRef, useState } from 'react'
 import { X, Plus, Check } from 'lucide-react'
 import { generationApi } from '../lib/api'
 
@@ -43,7 +43,7 @@ export function ImageLibraryPicker({ maxSelect, alreadySelected, onSelect, onUpl
     })
   }
 
-  const handleConfirm = (e: React.MouseEvent) => {
+  const handleConfirm = (e: MouseEvent | React.MouseEvent) => {
     e.stopPropagation()
     onSelect(Array.from(selected))
   }
