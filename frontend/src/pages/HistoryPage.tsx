@@ -144,22 +144,20 @@ export function HistoryPage() {
                         <div className="p-2.5 rounded-xl bg-white/5 group-hover:bg-primary/10 transition-colors shrink-0">
                           <Icon className="h-5 w-5 text-white/60 group-hover:text-primary transition-colors" />
                         </div>
-                        <div className="flex-1 min-w-0">
-                          <div className="flex items-center gap-2 mb-0.5">
-                            <span className="font-semibold text-sm text-white/90 truncate">{gen.model}</span>
+                        <div className="flex-1 min-w-0 overflow-hidden">
+                          <div className="flex items-center gap-2 mb-0.5 overflow-hidden">
+                            <span className="font-semibold text-sm text-white/90 truncate min-w-0">{gen.model}</span>
                             <span className={cn(
-                              "text-[10px] px-2 py-0.5 rounded-full font-bold uppercase tracking-wider shrink-0",
+                              "text-[10px] px-2 py-0.5 rounded-full font-bold uppercase tracking-wider shrink-0 whitespace-nowrap",
                               getStatusColor(gen.status)
                             )}>
                               {getStatusText(gen.status)}
                             </span>
                           </div>
-                          <div className="flex items-center justify-between gap-2">
-                            {gen.prompt ? (
-                              <p className="text-xs text-white/40 truncate italic">&ldquo;{gen.prompt}&rdquo;</p>
-                            ) : <span />}
-                            <p className="text-[10px] text-white/20 shrink-0">{formatDate(gen.created_at)}</p>
-                          </div>
+                          {gen.prompt && (
+                            <p className="text-xs text-white/40 truncate italic">&ldquo;{gen.prompt}&rdquo;</p>
+                          )}
+                          <p className="text-[10px] text-white/20 mt-0.5">{formatDate(gen.created_at)}</p>
                         </div>
                         <ChevronRight className="h-4 w-4 text-white/20 group-hover:text-white/60 shrink-0 transition-colors" />
                       </div>
