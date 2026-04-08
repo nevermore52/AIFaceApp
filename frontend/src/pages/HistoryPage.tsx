@@ -138,7 +138,7 @@ export function HistoryPage() {
               const Icon = getIcon(gen.model_type)
               return (
                 <Link key={gen.id} to={`/generations/${gen.id}`} className="block group w-full">
-                  <Card className="border-white/5 bg-white/[0.02] backdrop-blur-sm group-hover:bg-white/[0.04] transition-all duration-300">
+                  <Card className="border-white/5 bg-white/[0.02] backdrop-blur-sm group-hover:bg-white/[0.04] transition-all duration-300 overflow-hidden w-full">
                     <CardContent className="p-3.5">
                       <div className="flex items-center gap-3">
                         <div className="p-2.5 rounded-xl bg-white/5 group-hover:bg-primary/10 transition-colors shrink-0">
