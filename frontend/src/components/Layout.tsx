@@ -132,7 +132,7 @@ export function Layout() {
         </div>
       </nav>
 
-      <main className="container py-8 px-4 pb-32 md:pb-8">
+      <main className="container py-6 px-3 pb-32 md:py-8 md:px-4 md:pb-8 overflow-x-hidden">
         <div key={location.pathname} style={{ animation: 'pageEnter 480ms cubic-bezier(0.16,1,0.3,1) both' }}>
           <Outlet />
         </div>

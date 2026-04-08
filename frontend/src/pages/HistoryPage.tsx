@@ -88,12 +88,12 @@ export function HistoryPage() {
   const totalPages = Math.ceil(total / limit)
 
   return (
-    <div className="space-y-8 max-w-5xl mx-auto">
+    <div className="space-y-6 max-w-2xl mx-auto w-full overflow-hidden">
       <div className="flex flex-col gap-1">
-        <h1 className="text-4xl font-bold tracking-tight bg-gradient-to-br from-white to-white/40 bg-clip-text text-transparent">
+        <h1 className="text-2xl font-bold tracking-tight bg-gradient-to-br from-white to-white/40 bg-clip-text text-transparent">
           История генераций
         </h1>
-        <p className="text-white/40 text-sm">
+        <p className="text-white/40 text-xs">
           Архив всех ваших творческих запросов и результатов
         </p>
       </div>
@@ -138,37 +138,31 @@ export function HistoryPage() {
               const Icon = getIcon(gen.model_type)
               return (
                 <Card key={gen.id} className="group border-white/5 bg-white/[0.02] backdrop-blur-sm hover:bg-white/[0.04] transition-all duration-300">
-                  <CardContent className="p-5">
-                    <div className="flex items-center gap-5">
-                      <div className="p-3.5 rounded-2xl bg-white/5 group-hover:bg-primary/10 transition-colors">
-                        <Icon className="h-6 w-6 text-white/60 group-hover:text-primary transition-colors" />
+                  <CardContent className="p-3.5">
+                    <div className="flex items-center gap-3">
+                      <div className="p-2.5 rounded-xl bg-white/5 group-hover:bg-primary/10 transition-colors shrink-0">
+                        <Icon className="h-5 w-5 text-white/60 group-hover:text-primary transition-colors" />
                       </div>
                       <div className="flex-1 min-w-0">
-                        <div className="flex items-center justify-between gap-4 mb-1.5">
-                          <div className="flex items-center gap-3">
-                            <span className="font-semibold text-white/90 group-hover:text-white transition-colors">{gen.model}</span>
-                            <span className={cn(
-                              "text-[10px] px-2.5 py-0.5 rounded-full font-bold uppercase tracking-wider",
-                              getStatusColor(gen.status)
-                            )}>
-                              {getStatusText(gen.status)}
-                            </span>
-                          </div>
-                          <p className="text-[10px] uppercase tracking-widest text-white/20 font-medium">
-                            {formatDate(gen.created_at)}
-                          </p>
+                        <div className="flex items-center gap-2 mb-0.5">
+                          <span className="font-semibold text-sm text-white/90 truncate">{gen.model}</span>
+                          <span className={cn(
+                            "text-[10px] px-2 py-0.5 rounded-full font-bold uppercase tracking-wider shrink-0",
+                            getStatusColor(gen.status)
+                          )}>
+                            {getStatusText(gen.status)}
+                          </span>
                         </div>
-                        {gen.prompt && (
-                          <p className="text-sm text-white/40 line-clamp-1 group-hover:text-white/60 transition-colors italic">
-                            &ldquo;{gen.prompt}&rdquo;
-                          </p>
-                        )}
+                        <div className="flex items-center justify-between gap-2">
+                          {gen.prompt ? (
+                            <p className="text-xs text-white/40 truncate italic">&ldquo;{gen.prompt}&rdquo;</p>
+                          ) : <span />}
+                          <p className="text-[10px] text-white/20 shrink-0">{formatDate(gen.created_at)}</p>
+                        </div>
                       </div>
-                      <Button variant="ghost" size="icon" className="rounded-full hover:bg-white/5 text-white/20 hover:text-white" asChild>
-                        <Link to={`/generations/${gen.id}`}>
-                          <ChevronRight className="h-5 w-5" />
-                        </Link>
-                      </Button>
+                      <Link to={`/generations/${gen.id}`} className="shrink-0 p-1.5 rounded-full text-white/20 hover:text-white hover:bg-white/5 transition-colors">
+                        <ChevronRight className="h-4 w-4" />
+                      </Link>
                     </div>
                   </CardContent>
                 </Card>
