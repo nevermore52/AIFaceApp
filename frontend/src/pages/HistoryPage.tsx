@@ -137,7 +137,7 @@ export function HistoryPage() {
             {generations.map((gen: Generation) => {
               const Icon = getIcon(gen.model_type)
               return (
-                <Link key={gen.id} to={`/generations/${gen.id}`} className="block group">
+                <Link key={gen.id} to={`/generations/${gen.id}`} className="block group w-full">
                   <Card className="border-white/5 bg-white/[0.02] backdrop-blur-sm group-hover:bg-white/[0.04] transition-all duration-300">
                     <CardContent className="p-3.5">
                       <div className="flex items-center gap-3">
