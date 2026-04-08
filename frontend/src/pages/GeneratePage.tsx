@@ -1,4 +1,5 @@
 import { useEffect, useState, useRef, ChangeEvent, DragEvent } from 'react'
+import { useLocation } from 'react-router-dom'
 import { createPortal } from 'react-dom'
 import { useNavigate } from 'react-router-dom'
 import { useAuthStore } from '../store/auth'
@@ -147,6 +148,7 @@ const SUBSCRIPTION_REQUIRED_MODELS: Record<string, string[]> = {
 
 export function GeneratePage() {
   const navigate = useNavigate()
+  const location = useLocation()
   const { isAuthenticated, user, accessToken } = useAuthStore()
   const [allModels, setAllModels] = useState<Model[]>([])
   const [selectedCategory, setSelectedCategory] = useState<Category>('image')
@@ -183,13 +185,18 @@ export function GeneratePage() {
       return
     }
 
+    const state = location.state as { prompt?: string; model?: string } | null
+    if (state?.prompt) setPrompt(state.prompt)
+
     setLoading(true)
     generationApi.getModels()
       .then((data) => {
         setAllModels(data)
-        const imageModels = data.filter((m: Model) => m.type === 'image')
-        if (imageModels.length > 0) {
-          setSelectedModel(imageModels[0].id)
+        if (state?.model) {
+          setSelectedModel(state.model)
+        } else {
+          const imageModels = data.filter((m: Model) => m.type === 'image')
+          if (imageModels.length > 0) setSelectedModel(imageModels[0].id)
         }
       })
       .catch((err) => {

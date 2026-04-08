@@ -4,7 +4,7 @@ import { generationApi } from '../lib/api'
 import { Card, CardContent, CardHeader, CardTitle } from '../components/ui/card'
 import { Button } from '../components/ui/button'
 import { formatDate, cn, humanizeError } from '../lib/utils'
-import { ChevronLeft, Image, Music, Video, MessageSquare, Download } from 'lucide-react'
+import { ChevronLeft, Image, Music, Video, MessageSquare, Download, RotateCcw } from 'lucide-react'
 
 async function downloadFile(url: string, filename: string) {
   try {
@@ -264,9 +264,16 @@ export function GenerationDetailPage() {
         <Card className="border-white/5 bg-white/[0.02] backdrop-blur-sm flex-shrink-0">
           <CardContent className="p-3">
             <p className="text-xs font-semibold text-white/40 mb-1">Запрос</p>
-            <p className="text-sm text-white/80 line-clamp-2 italic">
+            <p className="text-sm text-white/80 italic mb-3">
               &ldquo;{generation.prompt}&rdquo;
             </p>
+            <Button
+              className="w-full rounded-xl font-bold bg-gradient-to-r from-[#FFD700] via-[#FFB700] to-[#FF8C00] text-black hover:opacity-90 transition-all"
+              onClick={() => navigate('/generate', { state: { prompt: generation.prompt, model: generation.model } })}
+            >
+              <RotateCcw className="h-4 w-4 mr-2" />
+              Повторить генерацию
+            </Button>
           </CardContent>
         </Card>
       )}
