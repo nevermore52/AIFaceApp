@@ -1,4 +1,4 @@
-import { useEffect, useState, useRef, ChangeEvent, DragEvent } from 'react'
+import { useEffect, useState, useRef, useCallback, ChangeEvent, DragEvent } from 'react'
 import { createPortal } from 'react-dom'
 import { useNavigate } from 'react-router-dom'
 import { useAuthStore } from '../store/auth'
@@ -221,6 +221,7 @@ export function GeneratePage() {
 
   // Сброс данных только при смене категории
   useEffect(() => {
+    console.log('[Effect] selectedCategory changed to:', selectedCategory, '— resetting library')
     setChatHistory([])
     setLibraryUrls([])
   }, [selectedCategory])
@@ -584,13 +585,18 @@ export function GeneratePage() {
     )
   }
 
-  const handleLibrarySelect = (urls: string[]) => {
-    const maxImages = getMaxImages()
-    const remaining = maxImages - imageFiles.length - libraryUrls.length
-    const toAdd = urls.slice(0, remaining)
-    setLibraryUrls([...libraryUrls, ...toAdd])
+  const handleLibrarySelect = useCallback((urls: string[]) => {
+    console.log('[Library] onSelect called, urls:', urls)
+    if (!urls.length) return
+    const maxImages = MAX_IMAGES_PER_MODEL[selectedModel] || 4
+    setLibraryUrls(prev => {
+      const remaining = maxImages - imageFiles.length - prev.length
+      console.log('[Library] setLibraryUrls: prev=', prev, 'remaining=', remaining, 'toAdd=', urls.slice(0, remaining))
+      if (remaining <= 0) return prev
+      return [...prev, ...urls.slice(0, remaining)]
+    })
     setShowLibraryPicker(false)
-  }
+  }, [selectedModel, imageFiles])
 
   return (
     <>
@@ -761,7 +767,7 @@ export function GeneratePage() {
                 onDragLeave={handleDrag}
                 onDragOver={handleDrag}
                 onDrop={handleDrop}
-                onClick={() => setShowLibraryPicker(true)}
+                onClick={(e) => { e.stopPropagation(); setShowLibraryPicker(true) }}
                 className={cn(
                   "relative flex flex-col items-center justify-center w-24 h-32 rounded-xl border border-white/10 transition-all cursor-pointer group",
                   dragActive

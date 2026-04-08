@@ -43,7 +43,8 @@ export function ImageLibraryPicker({ maxSelect, alreadySelected, onSelect, onUpl
     })
   }
 
-  const handleConfirm = () => {
+  const handleConfirm = (e: React.MouseEvent) => {
+    e.stopPropagation()
     onSelect(Array.from(selected))
   }
 
@@ -133,7 +134,7 @@ export function ImageLibraryPicker({ maxSelect, alreadySelected, onSelect, onUpl
             Отмена
           </button>
           <button
-            onClick={handleConfirm}
+            onClick={(e) => handleConfirm(e)}
             disabled={selected.size === 0}
             className="flex-1 py-3 rounded-xl text-sm font-bold transition-opacity disabled:opacity-40"
             style={{ background: selected.size > 0 ? 'linear-gradient(135deg, #d4a017, #f0c040)' : undefined, color: selected.size > 0 ? '#000' : '#fff' }}
