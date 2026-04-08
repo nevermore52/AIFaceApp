@@ -219,13 +219,18 @@ export function GeneratePage() {
     return canAccessModel(m.id)
   })
 
+  // Сброс данных только при смене категории
+  useEffect(() => {
+    setChatHistory([])
+    setLibraryUrls([])
+  }, [selectedCategory])
+
+  // Корректировка выбранной модели при смене категории или недоступности модели
   useEffect(() => {
     if (filteredModels.length > 0 && !filteredModels.find(m => m.id === selectedModel)) {
       setSelectedModel(filteredModels[0].id)
     }
-    setChatHistory([])
-    setLibraryUrls([])
-  }, [selectedCategory, filteredModels, selectedModel])
+  }, [selectedCategory, selectedModel])
 
   // Устанавливаем дефолтные параметры при смене модели
   useEffect(() => {
