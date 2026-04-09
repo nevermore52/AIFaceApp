@@ -5,7 +5,7 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "build": "node scripts/generate-favicon.mjs && tsc && vite build",
+    "build": "node scripts/generate-favicon.mjs && npx tsc && npx vite build",
     "generate-favicon": "node scripts/generate-favicon.mjs",
     "preview": "vite preview"
   },
