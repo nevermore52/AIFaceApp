@@ -34,6 +34,7 @@ type WebGenerationService struct {
 	botWebhookURL string // URL бота для уведомлений о завершении генераций
 	httpClient   *http.Client
 	quotaService QuotaService
+	uploadDir    string
 	// Suno: накапливаем 2 песни перед завершением
 	sunoMu       sync.Mutex
 	sunoPartials map[int64][]string    // genID -> полученные audio URLs
@@ -55,12 +56,13 @@ func NewWebGenerationService(db *sql.DB, kieClient *kieapi.Client, callbackURL s
 		botWebhookURL: botURL,
 		httpClient:    &http.Client{Timeout: 30 * time.Second},
 		quotaService:  quotaService,
+		uploadDir:     uploadDir,
 		sunoPartials: make(map[int64][]string),
 		sunoTimers:   make(map[int64]*time.Timer),
 		chatContexts: make(map[string][]map[string]string),
 	}
 	if uploadDir != "" {
-		go s.runUploadCleanup(uploadDir, 48*time.Hour, time.Hour)
+		go s.runUploadCleanup(uploadDir, 30*24*time.Hour, time.Hour)
 	}
 	return s
 }
@@ -1616,7 +1618,27 @@ func (s *WebGenerationService) SaveUploadedFile(file io.Reader, originalFilename
 	log.Printf("Image saved locally: %s -> %s", fullPath, url)
 
 	if userID > 0 {
+		const maxUploads = 10
+		// Insert new record
 		_, _ = s.db.Exec(`INSERT INTO user_uploads (user_id, url, filename) VALUES ($1, $2, $3)`, userID, url, filename)
+		// Delete oldest records beyond the limit, also removing their files from disk
+		rows, err := s.db.Query(`
+			SELECT filename FROM user_uploads
+			WHERE user_id = $1
+			ORDER BY created_at DESC
+			OFFSET $2
+		`, userID, maxUploads)
+		if err == nil {
+			defer rows.Close()
+			for rows.Next() {
+				var oldFilename string
+				if err := rows.Scan(&oldFilename); err != nil {
+					continue
+				}
+				_ = os.Remove(uploadDir + "/" + oldFilename)
+				_, _ = s.db.Exec(`DELETE FROM user_uploads WHERE user_id = $1 AND filename = $2`, userID, oldFilename)
+			}
+		}
 	}
 
 	return url, nil
@@ -1639,13 +1661,25 @@ func (s *WebGenerationService) GetUserUploads(userID int64, limit int) ([]map[st
 	defer rows.Close()
 
 	var result []map[string]string
+	var staleFilenames []string
 	for rows.Next() {
 		var url, filename string
 		var createdAt interface{}
 		if err := rows.Scan(&url, &filename, &createdAt); err != nil {
 			continue
 		}
+		// If we know the upload dir, verify the file still exists on disk
+		if s.uploadDir != "" && filename != "" {
+			if _, err := os.Stat(s.uploadDir + "/" + filename); os.IsNotExist(err) {
+				staleFilenames = append(staleFilenames, filename)
+				continue
+			}
+		}
 		result = append(result, map[string]string{"url": url, "filename": filename})
+	}
+	// Clean up stale DB records
+	for _, fn := range staleFilenames {
+		_, _ = s.db.Exec(`DELETE FROM user_uploads WHERE filename = $1`, fn)
 	}
 	return result, nil
 }
@@ -1672,6 +1706,7 @@ func (s *WebGenerationService) runUploadCleanup(uploadDir string, maxAge, interv
 				path := uploadDir + "/" + e.Name()
 				if err := os.Remove(path); err == nil {
 					log.Printf("Deleted expired upload: %s", path)
+					_, _ = s.db.Exec(`DELETE FROM user_uploads WHERE filename = $1`, e.Name())
 				}
 			}
 		}
