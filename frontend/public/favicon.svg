@@ -1,34 +1,24 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 200">
   <defs>
-    <linearGradient id="bgGradient" x1="0%" y1="0%" x2="100%" y2="100%">
-      <stop offset="0%" style="stop-color:#6366f1;stop-opacity:1" />
-      <stop offset="50%" style="stop-color:#a855f7;stop-opacity:1" />
-      <stop offset="100%" style="stop-color:#ec4899;stop-opacity:1" />
+    <linearGradient id="bg" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#1a1a1a"/>
+      <stop offset="100%" style="stop-color:#0a0a0a"/>
+    </linearGradient>
+    <linearGradient id="gold" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#FFD700"/>
+      <stop offset="50%" style="stop-color:#FFB700"/>
+      <stop offset="100%" style="stop-color:#FF8C00"/>
     </linearGradient>
   </defs>
-  
-  <!-- Background circle -->
-  <circle cx="100" cy="100" r="100" fill="url(#bgGradient)"/>
-  
-  <!-- Sparkles -->
-  <circle cx="40" cy="40" r="3" fill="#fbbf24" opacity="0.8"/>
-  <circle cx="160" cy="50" r="2.5" fill="#fbbf24" opacity="0.6"/>
-  <circle cx="170" cy="140" r="2" fill="#fbbf24" opacity="0.7"/>
-  <circle cx="30" cy="150" r="2.5" fill="#fbbf24" opacity="0.5"/>
-  
-  <!-- Hair styling tools (simplified) -->
-  <g transform="translate(100, 100)">
-    <!-- Brush icon -->
-    <rect x="-35" y="-15" width="8" height="30" fill="#ec4899" rx="2"/>
-    <circle cx="-31" cy="20" r="6" fill="#8b5cf6"/>
-    
-    <!-- Curling iron -->
-    <path d="M 20 -20 Q 25 -10 20 0 Q 15 10 20 20" stroke="#a855f7" stroke-width="6" fill="none" stroke-linecap="round"/>
-    <rect x="18" y="-25" width="4" height="8" fill="#6366f1" rx="1"/>
-  </g>
-  
-  <!-- Simplified face silhouette -->
-  <circle cx="100" cy="95" r="45" fill="rgba(255,255,255,0.15)"/>
-  <ellipse cx="85" cy="85" rx="6" ry="8" fill="rgba(255,255,255,0.3)"/>
-  <ellipse cx="115" cy="85" rx="6" ry="8" fill="rgba(255,255,255,0.3)"/>
+  <circle cx="100" cy="100" r="100" fill="url(#bg)"/>
+  <!-- Face outline -->
+  <ellipse cx="100" cy="96" rx="46" ry="52" fill="none" stroke="url(#gold)" stroke-width="7"/>
+  <!-- Eyes -->
+  <ellipse cx="84" cy="88" rx="7" ry="8" fill="url(#gold)"/>
+  <ellipse cx="116" cy="88" rx="7" ry="8" fill="url(#gold)"/>
+  <!-- Sparkle top-right -->
+  <path d="M148 36 L151 44 L159 47 L151 50 L148 58 L145 50 L137 47 L145 44 Z" fill="#FFD700" opacity="0.9"/>
+  <!-- Small dot sparkles -->
+  <circle cx="38" cy="52" r="3" fill="#FFB700" opacity="0.6"/>
+  <circle cx="162" cy="148" r="2.5" fill="#FF8C00" opacity="0.5"/>
 </svg>

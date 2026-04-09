@@ -1,0 +1,9 @@
+User-agent: *
+Allow: /
+Disallow: /api/
+Disallow: /history
+Disallow: /profile
+Disallow: /admin
+Disallow: /auth/
+
+Sitemap: https://app.aifaceapp.ru/sitemap.xml
