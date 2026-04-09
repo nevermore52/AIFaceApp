@@ -145,7 +145,7 @@ export function GenerationDetailPage() {
   const audioUrls = generation.media_output?.urls ?? (generation.output ? [generation.output] : [])
 
   return (
-    <div className="space-y-3 max-w-4xl mx-auto h-[calc(100vh-8rem)] flex flex-col">
+    <div className="space-y-3 max-w-4xl mx-auto">
       <Button variant="ghost" size="sm" onClick={() => navigate('/history')} className="text-white/40 hover:text-white self-start">
         <ChevronLeft className="h-4 w-4 mr-2" />
         Назад
@@ -174,8 +174,8 @@ export function GenerationDetailPage() {
       </Card>
 
       {generation.status === 'completed' && (generation.output || generation.media_output) ? (
-        <Card className="border-white/5 bg-white/[0.02] backdrop-blur-sm overflow-hidden flex-1 min-h-0 flex flex-col">
-          <CardHeader className="p-3 flex-shrink-0">
+        <Card className="border-white/5 bg-white/[0.02] backdrop-blur-sm overflow-hidden">
+          <CardHeader className="p-3">
             <div className="flex items-center justify-between gap-2 flex-wrap">
               <CardTitle className="text-sm">{resultTitle}</CardTitle>
               {!isText && !isMusic && generation.output && (
@@ -194,7 +194,7 @@ export function GenerationDetailPage() {
               ))}
             </div>
           </CardHeader>
-          <CardContent className="p-3 flex-1 min-h-0 overflow-auto">
+          <CardContent className="p-3">
             {isText ? (
               <div className="text-sm text-white/80 leading-relaxed whitespace-pre-wrap">
                 {generation.output}
@@ -234,7 +234,7 @@ export function GenerationDetailPage() {
           </CardContent>
         </Card>
       ) : generation.status === 'failed' ? (
-        <Card className="border-destructive/20 bg-destructive/5 flex-1">
+        <Card className="border-destructive/20 bg-destructive/5">
           <CardContent className="p-6 flex items-center justify-center">
             <div className="space-y-2 text-center">
               <p className="font-semibold text-destructive">Ошибка при генерации</p>
@@ -247,7 +247,7 @@ export function GenerationDetailPage() {
           </CardContent>
         </Card>
       ) : (
-        <Card className="border-yellow-500/20 bg-yellow-500/5 flex-1">
+        <Card className="border-yellow-500/20 bg-yellow-500/5">
           <CardContent className="p-6 flex items-center justify-center">
             <div className="space-y-3 text-center">
               <div className="flex justify-center">
