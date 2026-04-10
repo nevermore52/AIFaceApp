@@ -769,10 +769,10 @@ export function GeneratePage() {
         {/* Media Upload - скрыто для музыки и текста */}
         {selectedCategory !== 'music' && selectedCategory !== 'text' && (
           <div className="space-y-1">
-            <div className="flex items-center gap-2 ml-1">
+            <div className="flex items-center gap-1 ml-1">
               <label className="text-[13px] font-medium text-white/90">Изображения</label>
               {selectedCategory === 'image' && (
-                <span className="text-[11px] text-orange-400/80 font-medium">* обязательно</span>
+                <span className="text-orange-400 font-bold">*</span>
               )}
             </div>
             <div className="flex flex-wrap gap-2">
