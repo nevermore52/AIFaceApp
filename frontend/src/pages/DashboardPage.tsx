@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import { useAuthStore } from '../store/auth'
 import { userApi } from '../lib/api'
 import { Button } from '../components/ui/button'
-import { Image, Film, Music, Sparkles, X, Send, Banana, Wand2, ChevronRight } from 'lucide-react'
+import { Image, Film, Music, Sparkles, Send, Banana, Wand2, ChevronRight } from 'lucide-react'
 
 const CHANNEL_URL = 'https://t.me/aifaceapps'
 const BANNER_DISMISS_KEY = 'channel_banner_dismissed_at'
@@ -67,10 +67,6 @@ export function DashboardPage() {
     }
   }, [user?.id])
 
-  const dismissBanner = () => {
-    localStorage.setItem(BANNER_DISMISS_KEY, Date.now().toString())
-    setShowBanner(false)
-  }
 
   const startChannelCheck = () => {
     window.open(CHANNEL_URL, '_blank')
@@ -134,9 +130,6 @@ export function DashboardPage() {
               </button>
             )}
           </div>
-          <button onClick={dismissBanner} className="p-1 rounded-md hover:bg-white/5 flex-shrink-0">
-            <X className="h-4 w-4 text-white/30" />
-          </button>
         </div>
       )}
 

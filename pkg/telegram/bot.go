@@ -4219,6 +4219,16 @@ func (b *Bot) sendChannelTrialMenu(chatID int64) {
 // Если уже подписан — выдаёт 2 пробные генерации и отправляет уведомление, возвращает true.
 // Если не подписан — возвращает false (вызывающий должен показать меню подписки).
 func (b *Bot) checkAndGrantChannelTrialOnStart(chatID, userID int64) bool {
+	// Проверяем, получал ли уже пробный запрос
+	claimed, err := b.userService.HasClaimedChannelTrial(userID)
+	if err != nil {
+		log.Printf("checkAndGrantChannelTrialOnStart HasClaimedChannelTrial error: %v", err)
+		return false
+	}
+	if claimed {
+		return true // уже получал — не показываем меню подписки
+	}
+
 	member, err := b.isChannelMember(userID)
 	if err != nil {
 		log.Printf("checkAndGrantChannelTrialOnStart isChannelMember error: %v", err)
