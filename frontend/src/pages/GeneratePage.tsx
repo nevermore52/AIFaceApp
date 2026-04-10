@@ -7,7 +7,7 @@ import { generationApi, userApi, GenerationCreateParams } from '../lib/api'
 import { Card, CardContent, CardHeader, CardTitle } from '../components/ui/card'
 import { Button } from '../components/ui/button'
 import { cn, humanizeError } from '../lib/utils'
-import { Sparkles, Image as ImageIcon, Video, Music, Type, ChevronDown, Info, X, ChevronRight, Mic, Download, ShoppingCart, Zap, Crown } from 'lucide-react'
+import { Sparkles, Image as ImageIcon, Video, Music, Type, ChevronDown, Info, X, ChevronRight, Download, ShoppingCart, Zap, Crown } from 'lucide-react'
 import { ImageLibraryPicker } from '../components/ImageLibraryPicker'
 
 async function downloadFile(url: string, filename: string) {
@@ -840,19 +840,12 @@ export function GeneratePage() {
             <label className="text-[13px] lg:text-sm font-medium text-white/90">Запрос</label>
             <span className="text-orange-400 font-bold">*</span>
           </div>
-          <div className="relative">
-            <textarea
-              className="w-full rounded-xl border border-white/10 bg-white/[0.03] px-3.5 lg:px-4 py-3 lg:py-4 text-sm lg:text-base transition-all focus:border-primary/50 focus:ring-0 hover:bg-white/[0.05] min-h-[80px] lg:min-h-[100px] max-h-[120px] lg:max-h-[150px] resize-none"
-              placeholder={CATEGORY_PLACEHOLDERS[selectedCategory]}
-              value={prompt}
-              onChange={(e: ChangeEvent<HTMLTextAreaElement>) => setPrompt(e.target.value)}
-            />
-            <div className="absolute bottom-3 lg:bottom-4 right-3 lg:right-4">
-              <button className="p-1.5 lg:p-2 hover:bg-white/5 rounded-lg text-white/40 hover:text-white transition-colors">
-                <Mic className="w-4 h-4 lg:w-5 lg:h-5" />
-              </button>
-            </div>
-          </div>
+          <textarea
+            className="w-full rounded-xl border border-white/10 bg-white/[0.03] px-3.5 lg:px-4 py-3 lg:py-4 text-sm lg:text-base transition-all focus:border-primary/50 focus:ring-0 hover:bg-white/[0.05] min-h-[80px] lg:min-h-[100px] max-h-[120px] lg:max-h-[150px] resize-none"
+            placeholder={CATEGORY_PLACEHOLDERS[selectedCategory]}
+            value={prompt}
+            onChange={(e: ChangeEvent<HTMLTextAreaElement>) => setPrompt(e.target.value)}
+          />
         </div>
 
         {/* Aspect Ratio - для фото моделей */}
