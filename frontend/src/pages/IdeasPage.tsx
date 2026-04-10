@@ -24,10 +24,26 @@ export function IdeasPage() {
       setItems(res.data || [])
       setTotal(res.total)
       
-      // Check if there's an id parameter in URL
+      // Check for id parameter from URL or Telegram startapp
+      let itemId: number | null = null
+      
+      // Check URL parameter
       const idParam = searchParams.get('id')
       if (idParam) {
-        const itemId = parseInt(idParam, 10)
+        itemId = parseInt(idParam, 10)
+      }
+      
+      // Check Telegram startapp parameter (format: g-123)
+      const tg = window.Telegram?.WebApp
+      if (tg?.initDataUnsafe) {
+        const startParam = (tg.initDataUnsafe as any).start_param
+        if (startParam && typeof startParam === 'string' && startParam.startsWith('g-')) {
+          itemId = parseInt(startParam.substring(2), 10)
+        }
+      }
+      
+      // Open the item if found
+      if (itemId) {
         const item = res.data?.find((i: GalleryItem) => i.id === itemId)
         if (item) {
           setSelected(item)
@@ -131,46 +147,52 @@ export function IdeasPage() {
       {/* Detail overlay */}
       {selected && (
         <div
-          className="fixed inset-0 z-[60] flex items-center justify-center bg-black/90 backdrop-blur-sm"
+          className="fixed inset-0 z-[60] bg-black/95"
           onClick={(e) => { if (e.target === e.currentTarget) setSelected(null) }}
         >
-          <div className="relative w-full h-full max-w-7xl max-h-screen flex flex-col p-4">
-            <button onClick={() => setSelected(null)} className="absolute top-6 right-6 z-20 p-2 rounded-full bg-black/70 hover:bg-black/90 transition-colors">
-              <X className="w-6 h-6 text-white" />
-            </button>
+          <button onClick={() => setSelected(null)} className="absolute top-4 right-4 z-20 p-2 rounded-full bg-white/10 hover:bg-white/20 transition-colors">
+            <X className="w-6 h-6 text-white" />
+          </button>
 
-            <div className="flex-1 flex items-center justify-center overflow-hidden mb-4">
-              <img src={selected.output} alt="" className="max-w-full max-h-full w-auto h-auto object-contain" />
+          <div className="h-full flex flex-col">
+            {/* Image container - takes most space */}
+            <div className="flex-1 flex items-center justify-center p-4 pb-2">
+              <img 
+                src={selected.output} 
+                alt="" 
+                className="max-w-full max-h-full object-contain"
+                style={{ maxHeight: 'calc(100vh - 200px)' }}
+              />
             </div>
 
-            <div className="bg-[#111]/95 backdrop-blur-sm rounded-2xl border border-white/10 p-4 space-y-3 flex-shrink-0">
-              <div className="flex items-center gap-2">
-                <span className="text-[10px] font-bold uppercase tracking-widest text-white/30 bg-white/5 px-2 py-1 rounded-full">{selected.model}</span>
-              </div>
-              {selected.prompt && (
-                <div>
-                  <p className="text-[11px] font-semibold text-white/30 mb-1">Запрос</p>
-                  <p className="text-sm text-white/70 italic">&ldquo;{selected.prompt}&rdquo;</p>
+            {/* Info panel - fixed at bottom */}
+            <div className="flex-shrink-0 bg-gradient-to-t from-black via-black/90 to-transparent p-4 pt-8">
+              <div className="max-w-4xl mx-auto space-y-3">
+                <div className="flex items-center gap-2">
+                  <span className="text-xs font-bold uppercase tracking-widest text-white/50 bg-white/10 px-3 py-1 rounded-full">{selected.model}</span>
                 </div>
-              )}
-              <div className="flex gap-2 pt-2">
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => handleCopy(selected)}
-                  className="flex-1 rounded-xl border-white/10 hover:bg-white/5 gap-2"
-                >
-                  {copied ? <Check className="h-4 w-4 text-green-400" /> : <Copy className="h-4 w-4" />}
-                  {copied ? 'Скопировано' : 'Поделиться'}
-                </Button>
-                <Button
-                  size="sm"
-                  onClick={() => { setSelected(null); handleRepeat(selected) }}
-                  className="flex-1 rounded-xl bg-gradient-to-r from-[#FFD700] via-[#FFB700] to-[#FF8C00] text-black font-bold hover:opacity-90 gap-2"
-                >
-                  <Sparkles className="h-4 w-4" />
-                  Повторить
-                </Button>
+                {selected.prompt && (
+                  <p className="text-sm text-white/80 italic">&ldquo;{selected.prompt}&rdquo;</p>
+                )}
+                <div className="flex gap-2">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => handleCopy(selected)}
+                    className="flex-1 rounded-xl border-white/20 bg-white/5 hover:bg-white/10 gap-2"
+                  >
+                    {copied ? <Check className="h-4 w-4 text-green-400" /> : <Copy className="h-4 w-4" />}
+                    {copied ? 'Скопировано' : 'Поделиться'}
+                  </Button>
+                  <Button
+                    size="sm"
+                    onClick={() => { setSelected(null); handleRepeat(selected) }}
+                    className="flex-1 rounded-xl bg-gradient-to-r from-[#FFD700] via-[#FFB700] to-[#FF8C00] text-black font-bold hover:opacity-90 gap-2"
+                  >
+                    <Sparkles className="h-4 w-4" />
+                    Повторить
+                  </Button>
+                </div>
               </div>
             </div>
           </div>
