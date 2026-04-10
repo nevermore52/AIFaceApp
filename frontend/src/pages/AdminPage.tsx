@@ -510,25 +510,35 @@ function GalleryIdeasTab() {
     
     // Get token from auth-storage (same way as ApiClient)
     const storage = localStorage.getItem('auth-storage')
+    console.log('auth-storage:', storage)
     let token = null
     if (storage) {
       const parsed = JSON.parse(storage)
+      console.log('parsed storage:', parsed)
       token = parsed.state?.accessToken
+      console.log('extracted token:', token)
     }
+    
+    const headers: Record<string, string> = {}
+    if (token) {
+      headers['Authorization'] = `Bearer ${token}`
+    }
+    console.log('Upload headers:', headers)
     
     const response = await fetch('/api/upload-image', {
       method: 'POST',
-      headers: {
-        ...(token ? { Authorization: `Bearer ${token}` } : {}),
-      },
+      headers,
       body: formData,
     })
     
+    console.log('Upload response status:', response.status)
     if (!response.ok) {
       const errorText = await response.text()
+      console.error('Upload error response:', errorText)
       throw new Error(`Upload failed: ${errorText}`)
     }
     const data = await response.json()
+    console.log('Upload success, data:', data)
     return data.url
   }
 
