@@ -117,12 +117,12 @@ export function IdeasPage() {
               <button
                 key={item.id}
                 onClick={() => setSelected(item)}
-                className="relative aspect-square rounded-xl overflow-hidden group cursor-pointer"
+                className="relative aspect-square rounded-xl overflow-hidden group cursor-pointer bg-white/[0.03]"
               >
                 <img
                   src={item.output}
                   alt=""
-                  className="w-full h-full object-cover transition-transform duration-300 group-hover:scale-105"
+                  className="w-full h-full object-contain transition-transform duration-300 group-hover:scale-105"
                   loading="lazy"
                 />
               </button>
@@ -137,7 +137,7 @@ export function IdeasPage() {
 
       {/* Full-screen detail overlay */}
       {selected && (
-        <div className="fixed inset-0 z-[60] bg-black flex flex-col" style={{ touchAction: 'none' }}>
+        <div className="fixed inset-0 z-[60] bg-black" style={{ display: 'grid', gridTemplateRows: '1fr auto' }}>
           {/* Close button */}
           <button
             onClick={() => setSelected(null)}
@@ -146,29 +146,23 @@ export function IdeasPage() {
             <X className="w-5 h-5 text-white" />
           </button>
 
-          {/* Image — fills available space, covers like Instagram */}
-          <div className="flex-1 min-h-0 relative">
+          {/* Image area */}
+          <div className="relative overflow-hidden flex items-center justify-center bg-black">
             <img
               src={selected.output}
               alt=""
-              className="w-full h-full object-cover"
+              style={{ maxWidth: '100%', maxHeight: '100%', objectFit: 'contain', display: 'block' }}
             />
-            {/* gradient fade to bottom panel */}
-            <div className="absolute bottom-0 left-0 right-0 h-32 bg-gradient-to-t from-black to-transparent pointer-events-none" />
+            <div className="absolute bottom-0 left-0 right-0 h-16 bg-gradient-to-t from-black to-transparent pointer-events-none" />
           </div>
 
-          {/* Bottom info panel — scrollable if needed */}
-          <div
-            className="flex-shrink-0 bg-black overflow-y-auto"
-            style={{ maxHeight: '45vh' }}
-          >
-            <div className="px-4 pt-3 pb-6 space-y-3">
-              {/* Model badge */}
+          {/* Bottom info panel */}
+          <div className="bg-black overflow-y-auto" style={{ maxHeight: '45vh' }}>
+            <div className="px-4 pt-3 pb-8 space-y-3">
               <span className="inline-block text-[10px] font-bold uppercase tracking-widest text-white/50 bg-white/10 px-3 py-1 rounded-full">
                 {selected.model}
               </span>
 
-              {/* Prompt */}
               {selected.prompt && (
                 <div>
                   <p className="text-[11px] font-semibold text-white/40 mb-1 uppercase tracking-wider">Запрос</p>
@@ -176,7 +170,6 @@ export function IdeasPage() {
                 </div>
               )}
 
-              {/* Buttons */}
               <div className="flex gap-2 pt-1">
                 <Button
                   variant="outline"
