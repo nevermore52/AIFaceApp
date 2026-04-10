@@ -404,6 +404,11 @@ export function GeneratePage() {
       return
     }
 
+    if (selectedModel === 'nano-banana-2' && imageFiles.length === 0 && libraryUrls.length === 0) {
+      setError('Для Nano Banana 2 необходимо загрузить фото')
+      return
+    }
+
     setError(null)
     setQuotaError(false)
     setGenerating(true)
@@ -764,7 +769,12 @@ export function GeneratePage() {
         {/* Media Upload - скрыто для музыки и текста */}
         {selectedCategory !== 'music' && selectedCategory !== 'text' && (
           <div className="space-y-1">
-            <label className="text-[13px] font-medium text-white/90 ml-1">Изображения</label>
+            <div className="flex items-center gap-2 ml-1">
+              <label className="text-[13px] font-medium text-white/90">Изображения</label>
+              {selectedModel === 'nano-banana-2' && (
+                <span className="text-[11px] text-orange-400/80 font-medium">* обязательно</span>
+              )}
+            </div>
             <div className="flex flex-wrap gap-2">
               <div
                 onDragEnter={handleDrag}
@@ -1103,7 +1113,7 @@ export function GeneratePage() {
               <Button
                 className="w-full h-16 rounded-2xl text-lg font-black bg-gradient-to-r from-[#FFD700] via-[#FFB700] to-[#FF8C00] text-black hover:opacity-90 transition-all shadow-[0_8px_30px_rgba(255,183,0,0.3)] active:scale-[0.95] flex items-center justify-center gap-3"
                 onClick={handleGenerate}
-                disabled={generating || uploadingImage}
+                disabled={generating || uploadingImage || (selectedModel === 'nano-banana-2' && imageFiles.length === 0 && libraryUrls.length === 0)}
               >
                 {uploadingImage ? (
                   <>

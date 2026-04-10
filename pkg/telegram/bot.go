@@ -4766,6 +4766,15 @@ func (b *Bot) handleStartWithReferral(msg *tgmodels.Message, referralCode string
 		return
 	}
 
+	// Deep links для прямого открытия меню покупки
+	if referralCode == "buy_images" || referralCode == "buy_image" {
+		b.userService.GetOrCreateUser(msg.From.ID, msg.From.Username, msg.From.FirstName, msg.From.LastName, msg.From.LanguageCode)
+		if b.ensurePaymentsEnabled(msg.Chat.ID) {
+			b.sendBuyExtrasCategory(msg.Chat.ID, msg.From.ID, "image", "buy_extras:image")
+		}
+		return
+	}
+
 	user := msg.From
 	_, err := b.userService.GetOrCreateUserWithReferrer(
 		user.ID,
