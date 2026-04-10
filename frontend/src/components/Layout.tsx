@@ -1,6 +1,6 @@
 import { Outlet, Link, useLocation } from 'react-router-dom'
 import { useAuthStore } from '../store/auth'
-import { Home, Sparkles, History, CreditCard, User, LogOut } from 'lucide-react'
+import { Home, Sparkles, CreditCard, User, LogOut } from 'lucide-react'
 import { cn } from '../lib/utils'
 import { Button } from './ui/button'
 
@@ -12,7 +12,6 @@ export function Layout() {
     { name: 'Главная', href: '/', icon: Home },
     { name: 'Покупка', href: '/payments', icon: CreditCard },
     { name: 'Создать', href: '/generate', icon: Sparkles, isPrimary: true },
-    { name: 'История', href: '/history', icon: History },
     { name: 'Профиль', href: '/profile', icon: User },
   ]
 
