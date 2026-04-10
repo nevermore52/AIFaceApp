@@ -1,4 +1,5 @@
 import { useEffect, useState, useRef, useCallback } from 'react'
+import { createPortal } from 'react-dom'
 import { publicApi, type GalleryItem } from '../lib/api'
 import { X, Copy, Check, Sparkles } from 'lucide-react'
 import { Button } from '../components/ui/button'
@@ -135,51 +136,44 @@ export function IdeasPage() {
         </>
       )}
 
-      {/* Full-screen detail overlay — no page scroll */}
-      {selected && (
+      {/* Detail overlay — portal to body */}
+      {selected && createPortal(
         <div
-          className="fixed inset-0 z-[60] bg-black/90 backdrop-blur-sm flex items-center justify-center p-4"
-          style={{ overflow: 'hidden' }}
+          style={{ position: 'fixed', inset: 0, zIndex: 9999, background: '#000', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '16px' }}
           onClick={(e) => { if (e.target === e.currentTarget) setSelected(null) }}
         >
-          {/* Card — fixed height, no scroll */}
-          <div
-            className="relative w-full max-w-2xl"
-            onClick={(e) => e.stopPropagation()}
-          >
+          <div style={{ position: 'relative', width: '100%', maxWidth: '640px' }} onClick={(e) => e.stopPropagation()}>
             {/* Close */}
             <button
               onClick={() => setSelected(null)}
-              className="absolute -top-2 -right-2 z-20 p-2 rounded-full bg-black/70 hover:bg-black/90 transition-colors border border-white/10"
+              style={{ position: 'absolute', top: '-8px', right: '-8px', zIndex: 10, padding: '8px', borderRadius: '50%', background: 'rgba(255,255,255,0.1)', border: '1px solid rgba(255,255,255,0.1)', cursor: 'pointer' }}
             >
               <X className="w-5 h-5 text-white" />
             </button>
 
             {/* Image */}
-            <div className="flex items-center justify-center bg-black rounded-t-2xl overflow-hidden" style={{ maxHeight: 'calc(100vh - 250px)' }}>
-              <img
-                src={selected.output}
-                alt=""
-                style={{ maxWidth: '100%', maxHeight: 'calc(100vh - 250px)', objectFit: 'contain', display: 'block' }}
-              />
-            </div>
+            <img
+              src={selected.output}
+              alt=""
+              style={{ width: '100%', maxHeight: 'calc(100vh - 220px)', objectFit: 'contain', display: 'block', borderRadius: '16px 16px 0 0', background: '#000' }}
+            />
 
             {/* Info panel */}
-            <div className="bg-[#111] rounded-b-2xl border-t border-white/5 p-4 space-y-3">
-              <span className="inline-block text-[10px] font-bold uppercase tracking-widest text-white/50 bg-white/10 px-3 py-1 rounded-full">
+            <div style={{ background: '#111', borderRadius: '0 0 16px 16px', borderTop: '1px solid rgba(255,255,255,0.05)', padding: '16px' }}>
+              <span style={{ display: 'inline-block', fontSize: '10px', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.1em', color: 'rgba(255,255,255,0.5)', background: 'rgba(255,255,255,0.1)', padding: '4px 12px', borderRadius: '9999px' }}>
                 {selected.model}
               </span>
 
               {selected.prompt && (
-                <div>
-                  <p className="text-[11px] font-semibold text-white/40 mb-1 uppercase tracking-wider">Запрос</p>
-                  <div className="max-h-24 overflow-y-auto">
-                    <p className="text-sm text-white/80 leading-relaxed">{selected.prompt}</p>
+                <div style={{ marginTop: '12px' }}>
+                  <p style={{ fontSize: '11px', fontWeight: 600, color: 'rgba(255,255,255,0.4)', marginBottom: '4px', textTransform: 'uppercase', letterSpacing: '0.1em' }}>Запрос</p>
+                  <div style={{ maxHeight: '96px', overflowY: 'auto' }}>
+                    <p style={{ fontSize: '14px', color: 'rgba(255,255,255,0.8)', lineHeight: 1.6 }}>{selected.prompt}</p>
                   </div>
                 </div>
               )}
 
-              <div className="flex gap-2 pt-1">
+              <div style={{ display: 'flex', gap: '8px', marginTop: '12px' }}>
                 <Button
                   variant="outline"
                   size="sm"
@@ -200,7 +194,8 @@ export function IdeasPage() {
               </div>
             </div>
           </div>
-        </div>
+        </div>,
+        document.body
       )}
     </div>
   )
