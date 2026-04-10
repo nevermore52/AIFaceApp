@@ -2,12 +2,13 @@ import { useEffect, useState, useRef, useCallback } from 'react'
 import { publicApi, type GalleryItem } from '../lib/api'
 import { X, Copy, Check, Sparkles } from 'lucide-react'
 import { Button } from '../components/ui/button'
-import { useNavigate } from 'react-router-dom'
+import { useNavigate, useSearchParams } from 'react-router-dom'
 import { useAuthStore } from '../store/auth'
 
 export function IdeasPage() {
   const navigate = useNavigate()
   const { isAuthenticated } = useAuthStore()
+  const [searchParams] = useSearchParams()
   const [items, setItems] = useState<GalleryItem[]>([])
   const [total, setTotal] = useState(0)
   const [loading, setLoading] = useState(true)
@@ -22,8 +23,18 @@ export function IdeasPage() {
     publicApi.getGallery(limit, 0).then((res) => {
       setItems(res.data || [])
       setTotal(res.total)
+      
+      // Check if there's an id parameter in URL
+      const idParam = searchParams.get('id')
+      if (idParam) {
+        const itemId = parseInt(idParam, 10)
+        const item = res.data?.find((i: GalleryItem) => i.id === itemId)
+        if (item) {
+          setSelected(item)
+        }
+      }
     }).catch(console.error).finally(() => setLoading(false))
-  }, [])
+  }, [searchParams])
 
   const loadMore = useCallback(() => {
     if (loadingMore || items.length >= total) return
@@ -120,19 +131,19 @@ export function IdeasPage() {
       {/* Detail overlay */}
       {selected && (
         <div
-          className="fixed inset-0 z-[60] flex items-center justify-center bg-black/90 backdrop-blur-sm p-4"
+          className="fixed inset-0 z-[60] flex items-center justify-center bg-black/90 backdrop-blur-sm"
           onClick={(e) => { if (e.target === e.currentTarget) setSelected(null) }}
         >
-          <div className="relative w-full h-full max-w-7xl flex flex-col">
-            <button onClick={() => setSelected(null)} className="absolute top-4 right-4 z-10 p-2 rounded-full bg-black/70 hover:bg-black/90 transition-colors">
+          <div className="relative w-full h-full max-w-7xl max-h-screen flex flex-col p-4">
+            <button onClick={() => setSelected(null)} className="absolute top-6 right-6 z-20 p-2 rounded-full bg-black/70 hover:bg-black/90 transition-colors">
               <X className="w-6 h-6 text-white" />
             </button>
 
-            <div className="flex-1 flex items-center justify-center min-h-0 mb-4">
-              <img src={selected.output} alt="" className="max-w-full max-h-full object-contain" />
+            <div className="flex-1 flex items-center justify-center overflow-hidden mb-4">
+              <img src={selected.output} alt="" className="max-w-full max-h-full w-auto h-auto object-contain" />
             </div>
 
-            <div className="bg-[#111]/95 backdrop-blur-sm rounded-2xl border border-white/10 p-4 space-y-3">
+            <div className="bg-[#111]/95 backdrop-blur-sm rounded-2xl border border-white/10 p-4 space-y-3 flex-shrink-0">
               <div className="flex items-center gap-2">
                 <span className="text-[10px] font-bold uppercase tracking-widest text-white/30 bg-white/5 px-2 py-1 rounded-full">{selected.model}</span>
               </div>
