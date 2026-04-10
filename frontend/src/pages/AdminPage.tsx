@@ -484,8 +484,10 @@ function GalleryIdeasTab() {
     load()
     // Load models
     generationApi.getModels().then((res) => {
+      console.log('All models:', res)
       // Filter only image and video models
       const filtered = res.filter((m: any) => m.type === 'image' || m.type === 'video')
+      console.log('Filtered models:', filtered)
       setModels(filtered)
     }).catch(console.error)
   }, [load])
@@ -520,7 +522,10 @@ function GalleryIdeasTab() {
   }
 
   const handleCreate = async () => {
-    if (!formData.model || !formData.prompt) return
+    if (!formData.model || !formData.prompt) {
+      alert('Заполните модель и промпт')
+      return
+    }
     if (!imageFile && !formData.output) {
       alert('Загрузите изображение или укажите URL')
       return
@@ -530,17 +535,21 @@ function GalleryIdeasTab() {
     try {
       let outputUrl = formData.output
       if (imageFile) {
+        console.log('Uploading image:', imageFile.name)
         outputUrl = await uploadImage(imageFile)
+        console.log('Image uploaded, URL:', outputUrl)
       }
       
-      await adminApi.createGalleryIdea({ ...formData, output: outputUrl })
+      const dataToSend = { model: formData.model, output: outputUrl, prompt: formData.prompt }
+      console.log('Creating gallery idea with data:', dataToSend)
+      await adminApi.createGalleryIdea(dataToSend)
       setFormData({ model: '', output: '', prompt: '' })
       setImageFile(null)
       setImagePreview('')
       load()
     } catch (err) {
       console.error('Failed to create idea:', err)
-      alert('Ошибка при создании идеи')
+      alert('Ошибка при создании идеи: ' + (err instanceof Error ? err.message : String(err)))
     } finally {
       setUploading(false)
     }
@@ -608,13 +617,14 @@ function GalleryIdeasTab() {
           <select
             value={formData.model}
             onChange={(e) => setFormData({ ...formData, model: e.target.value })}
-            className="w-full px-3 py-2 rounded-lg bg-white/5 border border-white/10 text-white text-sm"
+            className="w-full px-3 py-2 rounded-lg bg-white/5 border border-white/10 text-white text-sm [&>option]:bg-gray-900 [&>option]:text-white"
           >
             <option value="">Выберите модель</option>
             {models.map((m) => (
               <option key={m.id} value={m.id}>{m.name} ({m.type})</option>
             ))}
           </select>
+          {models.length === 0 && <p className="text-xs text-white/30 mt-1">Загрузка моделей...</p>}
         </div>
 
         <div>
@@ -652,7 +662,7 @@ function GalleryIdeasTab() {
                     <select
                       value={formData.model}
                       onChange={(e) => setFormData({ ...formData, model: e.target.value })}
-                      className="w-full px-3 py-2 rounded-lg bg-white/5 border border-white/10 text-white text-sm"
+                      className="w-full px-3 py-2 rounded-lg bg-white/5 border border-white/10 text-white text-sm [&>option]:bg-gray-900 [&>option]:text-white"
                     >
                       <option value="">Выберите модель</option>
                       {models.map((m) => (
