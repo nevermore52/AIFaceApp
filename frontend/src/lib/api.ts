@@ -189,6 +189,14 @@ export const adminApi = {
     api.get<any>(`/admin/generations?limit=${limit}&offset=${offset}`),
   getPayments: (limit = 20, offset = 0) =>
     api.get<any>(`/admin/payments?limit=${limit}&offset=${offset}`),
+  getGalleryIdeas: (limit = 20, offset = 0) =>
+    api.get<any>(`/admin/gallery-ideas?limit=${limit}&offset=${offset}`),
+  createGalleryIdea: (data: { model: string; output: string; prompt: string }) =>
+    api.post<any>('/admin/gallery-ideas', data),
+  updateGalleryIdea: (id: number, data: { model: string; output: string; prompt: string }) =>
+    api.put<any>(`/admin/gallery-ideas/${id}`, data),
+  deleteGalleryIdea: (id: number) =>
+    api.delete<any>(`/admin/gallery-ideas/${id}`),
 }
 
 export const paymentApi = {

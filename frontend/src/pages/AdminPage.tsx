@@ -5,7 +5,7 @@ import { adminApi } from '../lib/api'
 import { Card, CardContent, CardHeader, CardTitle } from '../components/ui/card'
 import { Button } from '../components/ui/button'
 
-type Tab = 'stats' | 'users' | 'top_users' | 'generations' | 'payments'
+type Tab = 'stats' | 'users' | 'top_users' | 'generations' | 'payments' | 'gallery_ideas'
 
 const TABS: { id: Tab; label: string }[] = [
   { id: 'stats', label: '📊 Статистика' },
@@ -13,6 +13,7 @@ const TABS: { id: Tab; label: string }[] = [
   { id: 'top_users', label: '📈 Топ-24ч' },
   { id: 'generations', label: '🎨 Генерации' },
   { id: 'payments', label: '💳 Платежи' },
+  { id: 'gallery_ideas', label: '💡 Идеи' },
 ]
 
 function StatCard({ label, value }: { label: string; value: string | number }) {
@@ -454,6 +455,160 @@ function PaymentsTab() {
   )
 }
 
+// ─── Gallery Ideas Tab ────────────────────────────────────────────────────────
+function GalleryIdeasTab() {
+  const [ideas, setIdeas] = useState<any[]>([])
+  const [total, setTotal] = useState(0)
+  const [loading, setLoading] = useState(false)
+  const [limit] = useState(20)
+  const [offset, setOffset] = useState(0)
+  const [editingId, setEditingId] = useState<number | null>(null)
+  const [formData, setFormData] = useState({ model: '', output: '', prompt: '' })
+
+  const load = useCallback(async () => {
+    setLoading(true)
+    try {
+      const res = await adminApi.getGalleryIdeas(limit, offset)
+      setIdeas(res.data || [])
+      setTotal(res.total)
+    } finally {
+      setLoading(false)
+    }
+  }, [limit, offset])
+
+  useEffect(() => { load() }, [load])
+
+  const handleCreate = async () => {
+    if (!formData.model || !formData.output || !formData.prompt) return
+    try {
+      await adminApi.createGalleryIdea(formData)
+      setFormData({ model: '', output: '', prompt: '' })
+      load()
+    } catch (err) {
+      console.error('Failed to create idea:', err)
+    }
+  }
+
+  const handleUpdate = async (id: number) => {
+    if (!formData.model || !formData.output || !formData.prompt) return
+    try {
+      await adminApi.updateGalleryIdea(id, formData)
+      setEditingId(null)
+      setFormData({ model: '', output: '', prompt: '' })
+      load()
+    } catch (err) {
+      console.error('Failed to update idea:', err)
+    }
+  }
+
+  const handleDelete = async (id: number) => {
+    if (!confirm('Удалить эту идею?')) return
+    try {
+      await adminApi.deleteGalleryIdea(id)
+      load()
+    } catch (err) {
+      console.error('Failed to delete idea:', err)
+    }
+  }
+
+  const startEdit = (idea: any) => {
+    setEditingId(idea.id)
+    setFormData({ model: idea.model, output: idea.output, prompt: idea.prompt })
+  }
+
+  const cancelEdit = () => {
+    setEditingId(null)
+    setFormData({ model: '', output: '', prompt: '' })
+  }
+
+  return (
+    <div className="space-y-4">
+      <div className="p-4 rounded-xl border border-white/10 bg-white/5 space-y-3">
+        <p className="text-sm font-semibold text-white/70">Добавить новую идею</p>
+        <input
+          type="text"
+          placeholder="Модель (например: flux-pro)"
+          value={formData.model}
+          onChange={(e) => setFormData({ ...formData, model: e.target.value })}
+          className="w-full px-3 py-2 rounded-lg bg-white/5 border border-white/10 text-white text-sm"
+        />
+        <input
+          type="text"
+          placeholder="URL изображения"
+          value={formData.output}
+          onChange={(e) => setFormData({ ...formData, output: e.target.value })}
+          className="w-full px-3 py-2 rounded-lg bg-white/5 border border-white/10 text-white text-sm"
+        />
+        <textarea
+          placeholder="Промпт"
+          value={formData.prompt}
+          onChange={(e) => setFormData({ ...formData, prompt: e.target.value })}
+          className="w-full px-3 py-2 rounded-lg bg-white/5 border border-white/10 text-white text-sm min-h-[80px]"
+        />
+        <Button onClick={handleCreate} size="sm" className="w-full">Добавить</Button>
+      </div>
+
+      {loading ? <div className="text-white/40 text-sm">Загрузка...</div> : (
+        <div className="space-y-2">
+          {ideas.map((idea) => (
+            <div key={idea.id} className="p-4 rounded-xl border border-white/5 bg-white/[0.02] space-y-3">
+              {editingId === idea.id ? (
+                <>
+                  <input
+                    type="text"
+                    value={formData.model}
+                    onChange={(e) => setFormData({ ...formData, model: e.target.value })}
+                    className="w-full px-3 py-2 rounded-lg bg-white/5 border border-white/10 text-white text-sm"
+                  />
+                  <input
+                    type="text"
+                    value={formData.output}
+                    onChange={(e) => setFormData({ ...formData, output: e.target.value })}
+                    className="w-full px-3 py-2 rounded-lg bg-white/5 border border-white/10 text-white text-sm"
+                  />
+                  <textarea
+                    value={formData.prompt}
+                    onChange={(e) => setFormData({ ...formData, prompt: e.target.value })}
+                    className="w-full px-3 py-2 rounded-lg bg-white/5 border border-white/10 text-white text-sm min-h-[80px]"
+                  />
+                  <div className="flex gap-2">
+                    <Button onClick={() => handleUpdate(idea.id)} size="sm" variant="default">Сохранить</Button>
+                    <Button onClick={cancelEdit} size="sm" variant="outline">Отмена</Button>
+                  </div>
+                </>
+              ) : (
+                <>
+                  <div className="flex items-start gap-3">
+                    <img src={idea.output} alt="" className="w-20 h-20 rounded-lg object-cover" />
+                    <div className="flex-1 min-w-0">
+                      <p className="text-xs text-white/40 mb-1">{idea.model}</p>
+                      <p className="text-sm text-white/70 italic">&ldquo;{idea.prompt}&rdquo;</p>
+                    </div>
+                  </div>
+                  <div className="flex gap-2">
+                    <Button onClick={() => startEdit(idea)} size="sm" variant="outline">Редактировать</Button>
+                    <Button onClick={() => handleDelete(idea.id)} size="sm" variant="outline" className="text-red-400 hover:text-red-300">Удалить</Button>
+                  </div>
+                </>
+              )}
+            </div>
+          ))}
+        </div>
+      )}
+
+      <div className="flex justify-between items-center pt-2">
+        <span className="text-xs text-white/40">Всего: {total}</span>
+        <div className="flex gap-2">
+          <Button size="sm" variant="outline" disabled={offset === 0} onClick={() => setOffset(Math.max(0, offset - limit))}
+            className="border-white/10">← Назад</Button>
+          <Button size="sm" variant="outline" disabled={offset + limit >= total} onClick={() => setOffset(offset + limit)}
+            className="border-white/10">Вперёд →</Button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
 // ─── Main Page ────────────────────────────────────────────────────────────────
 export function AdminPage() {
   const { user } = useAuthStore()
@@ -502,6 +657,7 @@ export function AdminPage() {
           {tab === 'top_users' && <TopUsersTab />}
           {tab === 'generations' && <GenerationsTab />}
           {tab === 'payments' && <PaymentsTab />}
+          {tab === 'gallery_ideas' && <GalleryIdeasTab />}
         </CardContent>
       </Card>
     </div>

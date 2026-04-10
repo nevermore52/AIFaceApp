@@ -28,19 +28,19 @@ type QuotaService interface {
 }
 
 type WebGenerationService struct {
-	db           *sql.DB
-	kieClient    *kieapi.Client
-	callbackURL  string
+	db            *sql.DB
+	kieClient     *kieapi.Client
+	callbackURL   string
 	botWebhookURL string // URL бота для уведомлений о завершении генераций
-	httpClient   *http.Client
-	quotaService QuotaService
-	uploadDir    string
+	httpClient    *http.Client
+	quotaService  QuotaService
+	uploadDir     string
 	// Suno: накапливаем 2 песни перед завершением
 	sunoMu       sync.Mutex
 	sunoPartials map[int64][]string    // genID -> полученные audio URLs
 	sunoTimers   map[int64]*time.Timer // genID -> 6-мин таймер фоллбека
 	// Текстовые модели: серверный контекст диалога
-	chatMu      sync.Mutex
+	chatMu       sync.Mutex
 	chatContexts map[string][]map[string]string // "userID:model" -> messages
 }
 
@@ -57,9 +57,9 @@ func NewWebGenerationService(db *sql.DB, kieClient *kieapi.Client, callbackURL s
 		httpClient:    &http.Client{Timeout: 30 * time.Second},
 		quotaService:  quotaService,
 		uploadDir:     uploadDir,
-		sunoPartials: make(map[int64][]string),
-		sunoTimers:   make(map[int64]*time.Timer),
-		chatContexts: make(map[string][]map[string]string),
+		sunoPartials:  make(map[int64][]string),
+		sunoTimers:    make(map[int64]*time.Timer),
+		chatContexts:  make(map[string][]map[string]string),
 	}
 	if uploadDir != "" {
 		go s.runUploadCleanup(uploadDir, 30*24*time.Hour, time.Hour)
@@ -792,15 +792,15 @@ func (s *WebGenerationService) notifyBotAboutCompletion(genID int64) {
 	}
 
 	payload, _ := json.Marshal(map[string]any{
-		"telegram_id":        *user.TelegramID,
-		"status":             status,
-		"model":              model,
-		"model_type":         modelType,
-		"output":             output.String,
-		"error_msg":          errorMsg.String,
-		"tokens_used":        tokensUsed,
+		"telegram_id":         *user.TelegramID,
+		"status":              status,
+		"model":               model,
+		"model_type":          modelType,
+		"output":              output.String,
+		"error_msg":           errorMsg.String,
+		"tokens_used":         tokensUsed,
 		"tokens_primary_used": tokensPrimaryUsed,
-		"tokens_extra_used":  tokensExtraUsed,
+		"tokens_extra_used":   tokensExtraUsed,
 	})
 
 	url := strings.TrimRight(s.botWebhookURL, "/") + "/web/generation/notify"
@@ -1100,18 +1100,17 @@ func (s *WebGenerationService) GetByUserID(userID int64, limit, offset int) ([]*
 	return generations, total, rows.Err()
 }
 
-// GetPublicGallery returns recent completed image generations for the public gallery.
+// GetPublicGallery returns gallery ideas for the public gallery.
 func (s *WebGenerationService) GetPublicGallery(limit, offset int) ([]*GenerationRequest, int, error) {
 	var total int
-	err := s.db.QueryRow(`SELECT COUNT(*) FROM generation_requests WHERE status = 'completed' AND model_type = 'image' AND output IS NOT NULL AND output != ''`).Scan(&total)
+	err := s.db.QueryRow(`SELECT COUNT(*) FROM gallery_ideas`).Scan(&total)
 	if err != nil {
 		return nil, 0, err
 	}
 
 	rows, err := s.db.Query(`
-		SELECT id, user_id, model_type, model, status, output, prompt, created_at
-		FROM generation_requests
-		WHERE status = 'completed' AND model_type = 'image' AND output IS NOT NULL AND output != ''
+		SELECT id, model, output, prompt, created_at
+		FROM gallery_ideas
 		ORDER BY created_at DESC
 		LIMIT $1 OFFSET $2
 	`, limit, offset)
@@ -1123,7 +1122,9 @@ func (s *WebGenerationService) GetPublicGallery(limit, offset int) ([]*Generatio
 	var results []*GenerationRequest
 	for rows.Next() {
 		g := &GenerationRequest{}
-		if err := rows.Scan(&g.ID, &g.UserID, &g.ModelType, &g.Model, &g.Status, &g.Output, &g.Prompt, &g.CreatedAt); err != nil {
+		g.ModelType = "image"
+		g.Status = "completed"
+		if err := rows.Scan(&g.ID, &g.Model, &g.Output, &g.Prompt, &g.CreatedAt); err != nil {
 			continue
 		}
 		results = append(results, g)
@@ -1773,4 +1774,68 @@ func generateUUID() (string, error) {
 		return "", err
 	}
 	return fmt.Sprintf("%08x-%04x-%04x-%04x-%012x", b[0:4], b[4:6], b[6:8], b[8:10], b[10:]), nil
+}
+
+// Gallery Ideas Management
+
+type GalleryIdea struct {
+	ID        int64     `json:"id"`
+	Model     string    `json:"model"`
+	Output    string    `json:"output"`
+	Prompt    string    `json:"prompt"`
+	CreatedAt time.Time `json:"created_at"`
+	UpdatedAt time.Time `json:"updated_at"`
+}
+
+func (s *WebGenerationService) CreateGalleryIdea(model, output, prompt string) (*GalleryIdea, error) {
+	idea := &GalleryIdea{}
+	err := s.db.QueryRow(`
+		INSERT INTO gallery_ideas (model, output, prompt, created_at, updated_at)
+		VALUES ($1, $2, $3, NOW(), NOW())
+		RETURNING id, model, output, prompt, created_at, updated_at
+	`, model, output, prompt).Scan(&idea.ID, &idea.Model, &idea.Output, &idea.Prompt, &idea.CreatedAt, &idea.UpdatedAt)
+	return idea, err
+}
+
+func (s *WebGenerationService) GetGalleryIdeas(limit, offset int) ([]*GalleryIdea, int, error) {
+	var total int
+	err := s.db.QueryRow(`SELECT COUNT(*) FROM gallery_ideas`).Scan(&total)
+	if err != nil {
+		return nil, 0, err
+	}
+
+	rows, err := s.db.Query(`
+		SELECT id, model, output, prompt, created_at, updated_at
+		FROM gallery_ideas
+		ORDER BY created_at DESC
+		LIMIT $1 OFFSET $2
+	`, limit, offset)
+	if err != nil {
+		return nil, 0, err
+	}
+	defer rows.Close()
+
+	var ideas []*GalleryIdea
+	for rows.Next() {
+		idea := &GalleryIdea{}
+		if err := rows.Scan(&idea.ID, &idea.Model, &idea.Output, &idea.Prompt, &idea.CreatedAt, &idea.UpdatedAt); err != nil {
+			continue
+		}
+		ideas = append(ideas, idea)
+	}
+	return ideas, total, rows.Err()
+}
+
+func (s *WebGenerationService) UpdateGalleryIdea(id int64, model, output, prompt string) error {
+	_, err := s.db.Exec(`
+		UPDATE gallery_ideas
+		SET model = $1, output = $2, prompt = $3, updated_at = NOW()
+		WHERE id = $4
+	`, model, output, prompt, id)
+	return err
+}
+
+func (s *WebGenerationService) DeleteGalleryIdea(id int64) error {
+	_, err := s.db.Exec(`DELETE FROM gallery_ideas WHERE id = $1`, id)
+	return err
 }

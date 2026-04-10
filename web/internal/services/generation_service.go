@@ -38,3 +38,21 @@ func (s *GenerationService) GetStatsSince(since time.Time) (map[string]interface
 func (s *GenerationService) GetTopUsers(limit int) ([]*models.TopUser, error) {
 	return s.repo.GetTopUsers(limit)
 }
+
+// Gallery Ideas Management
+
+func (s *GenerationService) CreateGalleryIdea(model, output, prompt string) (*repository.GalleryIdea, error) {
+	return s.repo.CreateGalleryIdea(model, output, prompt)
+}
+
+func (s *GenerationService) GetGalleryIdeas(limit, offset int) ([]*repository.GalleryIdea, int, error) {
+	return s.repo.GetGalleryIdeas(limit, offset)
+}
+
+func (s *GenerationService) UpdateGalleryIdea(id int64, model, output, prompt string) error {
+	return s.repo.UpdateGalleryIdea(id, model, output, prompt)
+}
+
+func (s *GenerationService) DeleteGalleryIdea(id int64) error {
+	return s.repo.DeleteGalleryIdea(id)
+}

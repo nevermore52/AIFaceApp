@@ -16,11 +16,11 @@ import (
 )
 
 type AdminHandler struct {
-	userService        *services.UserService
-	generationService  *services.GenerationService
-	paymentService     *services.PaymentService
-	webPaymentService  *services.WebPaymentService
-	botWebhookURL      string
+	userService       *services.UserService
+	generationService *services.GenerationService
+	paymentService    *services.PaymentService
+	webPaymentService *services.WebPaymentService
+	botWebhookURL     string
 }
 
 func NewAdminHandler(
@@ -282,4 +282,78 @@ func (h *AdminHandler) GetCategories(c *gin.Context) {
 
 func (h *AdminHandler) UpdateCategory(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"message": "Category management via web is not yet implemented"})
+}
+
+// Gallery Ideas Management
+
+func (h *AdminHandler) GetGalleryIdeas(c *gin.Context) {
+	limit, _ := strconv.Atoi(c.DefaultQuery("limit", "30"))
+	offset, _ := strconv.Atoi(c.DefaultQuery("offset", "0"))
+	if limit > 100 {
+		limit = 100
+	}
+	ideas, total, err := h.generationService.GetGalleryIdeas(limit, offset)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to get gallery ideas"})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{
+		"data":   ideas,
+		"total":  total,
+		"limit":  limit,
+		"offset": offset,
+	})
+}
+
+func (h *AdminHandler) CreateGalleryIdea(c *gin.Context) {
+	var req struct {
+		Model  string `json:"model" binding:"required"`
+		Output string `json:"output" binding:"required"`
+		Prompt string `json:"prompt" binding:"required"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+	idea, err := h.generationService.CreateGalleryIdea(req.Model, req.Output, req.Prompt)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to create gallery idea"})
+		return
+	}
+	c.JSON(http.StatusOK, idea)
+}
+
+func (h *AdminHandler) UpdateGalleryIdea(c *gin.Context) {
+	id, err := strconv.ParseInt(c.Param("id"), 10, 64)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid ID"})
+		return
+	}
+	var req struct {
+		Model  string `json:"model" binding:"required"`
+		Output string `json:"output" binding:"required"`
+		Prompt string `json:"prompt" binding:"required"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+	if err := h.generationService.UpdateGalleryIdea(id, req.Model, req.Output, req.Prompt); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to update gallery idea"})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"message": "Gallery idea updated"})
+}
+
+func (h *AdminHandler) DeleteGalleryIdea(c *gin.Context) {
+	id, err := strconv.ParseInt(c.Param("id"), 10, 64)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid ID"})
+		return
+	}
+	if err := h.generationService.DeleteGalleryIdea(id); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to delete gallery idea"})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"message": "Gallery idea deleted"})
 }

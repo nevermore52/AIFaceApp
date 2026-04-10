@@ -165,6 +165,10 @@ func New(cfg *config.Config, db *sql.DB) *Server {
 			admin.GET("/payments", adminHandler.GetPayments)
 			admin.GET("/categories", adminHandler.GetCategories)
 			admin.PUT("/categories/:category", adminHandler.UpdateCategory)
+			admin.GET("/gallery-ideas", adminHandler.GetGalleryIdeas)
+			admin.POST("/gallery-ideas", adminHandler.CreateGalleryIdea)
+			admin.PUT("/gallery-ideas/:id", adminHandler.UpdateGalleryIdea)
+			admin.DELETE("/gallery-ideas/:id", adminHandler.DeleteGalleryIdea)
 		}
 	}
 

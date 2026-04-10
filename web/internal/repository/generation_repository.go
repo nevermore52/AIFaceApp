@@ -153,12 +153,12 @@ func (r *GenerationRepository) GetStatsSince(since time.Time) (map[string]interf
 		return nil, err
 	}
 	return map[string]interface{}{
-		"total_requests":               total,
-		"completed_requests":           completed,
-		"failed_requests":              failed,
-		"processing_requests":          processing,
-		"success_rate":                 successRate,
-		"avg_processing_time_seconds":  avgTime,
+		"total_requests":              total,
+		"completed_requests":          completed,
+		"failed_requests":             failed,
+		"processing_requests":         processing,
+		"success_rate":                successRate,
+		"avg_processing_time_seconds": avgTime,
 	}, nil
 }
 
@@ -194,4 +194,68 @@ func (r *GenerationRepository) GetTopUsers(limit int) ([]*models.TopUser, error)
 		users = append(users, u)
 	}
 	return users, rows.Err()
+}
+
+// Gallery Ideas Management
+
+type GalleryIdea struct {
+	ID        int64     `json:"id"`
+	Model     string    `json:"model"`
+	Output    string    `json:"output"`
+	Prompt    string    `json:"prompt"`
+	CreatedAt time.Time `json:"created_at"`
+	UpdatedAt time.Time `json:"updated_at"`
+}
+
+func (r *GenerationRepository) CreateGalleryIdea(model, output, prompt string) (*GalleryIdea, error) {
+	idea := &GalleryIdea{}
+	err := r.db.QueryRow(`
+		INSERT INTO gallery_ideas (model, output, prompt, created_at, updated_at)
+		VALUES ($1, $2, $3, NOW(), NOW())
+		RETURNING id, model, output, prompt, created_at, updated_at
+	`, model, output, prompt).Scan(&idea.ID, &idea.Model, &idea.Output, &idea.Prompt, &idea.CreatedAt, &idea.UpdatedAt)
+	return idea, err
+}
+
+func (r *GenerationRepository) GetGalleryIdeas(limit, offset int) ([]*GalleryIdea, int, error) {
+	var total int
+	err := r.db.QueryRow(`SELECT COUNT(*) FROM gallery_ideas`).Scan(&total)
+	if err != nil {
+		return nil, 0, err
+	}
+
+	rows, err := r.db.Query(`
+		SELECT id, model, output, prompt, created_at, updated_at
+		FROM gallery_ideas
+		ORDER BY created_at DESC
+		LIMIT $1 OFFSET $2
+	`, limit, offset)
+	if err != nil {
+		return nil, 0, err
+	}
+	defer rows.Close()
+
+	var ideas []*GalleryIdea
+	for rows.Next() {
+		idea := &GalleryIdea{}
+		if err := rows.Scan(&idea.ID, &idea.Model, &idea.Output, &idea.Prompt, &idea.CreatedAt, &idea.UpdatedAt); err != nil {
+			continue
+		}
+		ideas = append(ideas, idea)
+	}
+	return ideas, total, rows.Err()
+}
+
+func (r *GenerationRepository) UpdateGalleryIdea(id int64, model, output, prompt string) error {
+	_, err := r.db.Exec(`
+		UPDATE gallery_ideas
+		SET model = $1, output = $2, prompt = $3, updated_at = NOW()
+		WHERE id = $4
+	`, model, output, prompt, id)
+	return err
+}
+
+func (r *GenerationRepository) DeleteGalleryIdea(id int64) error {
+	_, err := r.db.Exec(`DELETE FROM gallery_ideas WHERE id = $1`, id)
+	return err
 }
