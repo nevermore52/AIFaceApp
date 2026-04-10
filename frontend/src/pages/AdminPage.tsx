@@ -506,9 +506,9 @@ function GalleryIdeasTab() {
 
   const uploadImage = async (file: File): Promise<string> => {
     const formData = new FormData()
-    formData.append('file', file)
+    formData.append('image', file)
     
-    const response = await fetch('/api/user-uploads', {
+    const response = await fetch('/api/upload-image', {
       method: 'POST',
       headers: {
         'Authorization': `Bearer ${localStorage.getItem('token')}`,
@@ -516,7 +516,10 @@ function GalleryIdeasTab() {
       body: formData,
     })
     
-    if (!response.ok) throw new Error('Upload failed')
+    if (!response.ok) {
+      const errorText = await response.text()
+      throw new Error(`Upload failed: ${errorText}`)
+    }
     const data = await response.json()
     return data.url
   }
