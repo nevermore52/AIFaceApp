@@ -107,11 +107,15 @@ func (s *UserService) ClaimChannelBonus(user *models.User, botToken string) (sub
 		return false, false, nil
 	}
 
-	// Выдаём бонус: +2 к фото
-	_ = s.quotaRepo.AddExtra(*user.TelegramID, models.QuotaCategoryImage, 2)
-
-	if err := s.userRepo.MarkChannelTrialClaimed(user.ID); err != nil {
+	// Атомарно помечаем — только первый вызов выдаёт бонус
+	ok, err := s.userRepo.TryClaimChannelTrial(user.ID)
+	if err != nil {
 		return true, false, fmt.Errorf("mark bonus given: %w", err)
 	}
+	if !ok {
+		return false, true, nil // кто-то уже выдал
+	}
+
+	_ = s.quotaRepo.AddExtra(*user.TelegramID, models.QuotaCategoryImage, 2)
 	return true, false, nil
 }

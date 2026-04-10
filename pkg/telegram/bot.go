@@ -3924,17 +3924,6 @@ func (b *Bot) handleCallback(callback *tgmodels.CallbackQuery) {
 		}
 		b.sendSunoBalance(chatID)
 	case "trial:check":
-		claimed, err := b.userService.HasClaimedChannelTrial(userID)
-		if err != nil {
-			log.Printf("trial claimed check error: %v", err)
-			b.sendErrorMessage(chatID, "Не удалось проверить пробный запрос")
-			return
-		}
-		if claimed {
-			b.sendText(chatID, "Вы уже получали пробный запрос")
-			b.sendMainMenu(chatID, userID)
-			return
-		}
 		member, mErr := b.isChannelMember(userID)
 		if mErr != nil {
 			log.Printf("trial member check error: %v", mErr)
@@ -3945,13 +3934,22 @@ func (b *Bot) handleCallback(callback *tgmodels.CallbackQuery) {
 			b.sendText(chatID, "Не удалось проверить подписку, попробуйте еще раз")
 			return
 		}
+		// Атомарно — только первый вызов выдаёт бонус
+		ok, err := b.userService.TryClaimChannelTrial(userID)
+		if err != nil {
+			log.Printf("trial claim error: %v", err)
+			b.sendErrorMessage(chatID, "Не удалось выдать пробные запросы")
+			return
+		}
+		if !ok {
+			b.sendText(chatID, "Вы уже получали пробный запрос")
+			b.sendMainMenu(chatID, userID)
+			return
+		}
 		if err := b.userService.AddExtraQuota(userID, models.QuotaCategoryImage, 2); err != nil {
 			log.Printf("trial grant quota error: %v", err)
 			b.sendErrorMessage(chatID, "Не удалось выдать пробные запросы")
 			return
-		}
-		if err := b.userService.MarkChannelTrialClaimed(userID); err != nil {
-			log.Printf("trial mark claimed error: %v", err)
 		}
 		b.sendText(chatID, "Спасибо за подписку! \n2 пробных запроса успешно выдано)")
 		b.sendMainMenu(chatID, userID)
@@ -4237,12 +4235,20 @@ func (b *Bot) checkAndGrantChannelTrialOnStart(chatID, userID int64) bool {
 	if !member {
 		return false
 	}
+
+	// Атомарно помечаем — только первый вызов выиграет
+	ok, err := b.userService.TryClaimChannelTrial(userID)
+	if err != nil {
+		log.Printf("checkAndGrantChannelTrialOnStart TryClaimChannelTrial error: %v", err)
+		return false
+	}
+	if !ok {
+		return true // уже кто-то выдал
+	}
+
 	if err := b.userService.AddExtraQuota(userID, models.QuotaCategoryImage, 2); err != nil {
 		log.Printf("checkAndGrantChannelTrialOnStart AddExtraQuota error: %v", err)
 		return false
-	}
-	if err := b.userService.MarkChannelTrialClaimed(userID); err != nil {
-		log.Printf("checkAndGrantChannelTrialOnStart MarkChannelTrialClaimed error: %v", err)
 	}
 	b.sendText(chatID, "🎁 Вам выданы 2 пробные фото генерации!")
 	log.Printf("Granted channel trial on start to user %d", userID)
@@ -4252,37 +4258,26 @@ func (b *Bot) checkAndGrantChannelTrialOnStart(chatID, userID int64) bool {
 // checkAndGrantChannelTrial проверяет подписку на канал и выдаёт пробный запрос
 // если пользователь ещё не получал его (channel_trial_claimed = false)
 func (b *Bot) checkAndGrantChannelTrial(userID int64) {
-	// Проверяем, получал ли пользователь уже пробный запрос
 	claimed, err := b.userService.HasClaimedChannelTrial(userID)
-	if err != nil {
-		log.Printf("checkAndGrantChannelTrial HasClaimedChannelTrial error: %v", err)
-		return
-	}
-	if claimed {
+	if err != nil || claimed {
 		return
 	}
 
-	// Проверяем подписку на канал
 	member, err := b.isChannelMember(userID)
-	if err != nil {
-		log.Printf("checkAndGrantChannelTrial isChannelMember error: %v", err)
-		return
-	}
-	if !member {
+	if err != nil || !member {
 		return
 	}
 
-	// Выдаём 2 пробных запроса
+	// Атомарно помечаем — только первый вызов выиграет
+	ok, err := b.userService.TryClaimChannelTrial(userID)
+	if err != nil || !ok {
+		return
+	}
+
 	if err := b.userService.AddExtraQuota(userID, models.QuotaCategoryImage, 2); err != nil {
 		log.Printf("checkAndGrantChannelTrial AddExtraQuota error: %v", err)
 		return
 	}
-
-	// Помечаем, что пробный запрос выдан
-	if err := b.userService.MarkChannelTrialClaimed(userID); err != nil {
-		log.Printf("checkAndGrantChannelTrial MarkChannelTrialClaimed error: %v", err)
-	}
-
 	log.Printf("Granted channel trial to user %d", userID)
 }
 

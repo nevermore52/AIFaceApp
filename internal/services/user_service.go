@@ -384,6 +384,20 @@ func (s *UserService) MarkChannelTrialClaimed(telegramID int64) error {
 	return err
 }
 
+// TryClaimChannelTrial atomically marks channel_trial_claimed = TRUE only if it was FALSE.
+// Returns true if the claim was successful (first caller wins), false if already claimed.
+func (s *UserService) TryClaimChannelTrial(telegramID int64) (bool, error) {
+	if err := s.ensureChannelTrialColumn(); err != nil {
+		return false, err
+	}
+	res, err := s.db.Exec(`UPDATE users SET channel_trial_claimed = TRUE, updated_at = CURRENT_TIMESTAMP WHERE telegram_id = $1 AND channel_trial_claimed = FALSE`, telegramID)
+	if err != nil {
+		return false, err
+	}
+	n, _ := res.RowsAffected()
+	return n > 0, nil
+}
+
 var allCategories = []string{"photo", "video", "music", "chat"}
 
 func (s *UserService) ensureCategorySettings() error {

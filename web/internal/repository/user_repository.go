@@ -130,6 +130,17 @@ func (r *UserRepository) MarkChannelTrialClaimed(userID int64) error {
 	return err
 }
 
+// TryClaimChannelTrial atomically sets channel_trial_claimed = TRUE only if FALSE.
+// Returns true if this call was the one that flipped the flag.
+func (r *UserRepository) TryClaimChannelTrial(userID int64) (bool, error) {
+	res, err := r.db.Exec(`UPDATE users SET channel_trial_claimed = TRUE WHERE id = $1 AND channel_trial_claimed = FALSE`, userID)
+	if err != nil {
+		return false, err
+	}
+	n, _ := res.RowsAffected()
+	return n > 0, nil
+}
+
 func (r *UserRepository) Update(user *models.User) error {
 	query := `
 		UPDATE users SET
