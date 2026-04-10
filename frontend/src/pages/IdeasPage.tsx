@@ -144,8 +144,7 @@ export function IdeasPage() {
         >
           {/* Card — fixed height, no scroll */}
           <div
-            className="relative w-full max-w-2xl flex flex-col"
-            style={{ maxHeight: 'calc(100vh - 32px)' }}
+            className="relative w-full max-w-2xl"
             onClick={(e) => e.stopPropagation()}
           >
             {/* Close */}
@@ -156,17 +155,17 @@ export function IdeasPage() {
               <X className="w-5 h-5 text-white" />
             </button>
 
-            {/* Image — takes remaining space */}
-            <div className="flex-1 min-h-0 flex items-center justify-center bg-black rounded-t-2xl overflow-hidden">
+            {/* Image */}
+            <div className="flex items-center justify-center bg-black rounded-t-2xl overflow-hidden" style={{ maxHeight: 'calc(100vh - 250px)' }}>
               <img
                 src={selected.output}
                 alt=""
-                className="max-w-full max-h-full object-contain block"
+                style={{ maxWidth: '100%', maxHeight: 'calc(100vh - 250px)', objectFit: 'contain', display: 'block' }}
               />
             </div>
 
-            {/* Info panel — fixed at bottom, prompt scrolls */}
-            <div className="flex-shrink-0 bg-[#111] rounded-b-2xl border-t border-white/5 p-4 space-y-3">
+            {/* Info panel */}
+            <div className="bg-[#111] rounded-b-2xl border-t border-white/5 p-4 space-y-3">
               <span className="inline-block text-[10px] font-bold uppercase tracking-widest text-white/50 bg-white/10 px-3 py-1 rounded-full">
                 {selected.model}
               </span>
