@@ -120,47 +120,47 @@ export function IdeasPage() {
       {/* Detail overlay */}
       {selected && (
         <div
-          className="fixed inset-0 z-[60] flex items-center justify-center bg-black/80 backdrop-blur-sm p-4"
+          className="fixed inset-0 z-[60] flex items-center justify-center bg-black/90 backdrop-blur-sm p-4"
           onClick={(e) => { if (e.target === e.currentTarget) setSelected(null) }}
         >
-          <div className="relative w-full max-w-lg max-h-[90vh] rounded-2xl bg-[#111] border border-white/10 overflow-hidden flex flex-col">
-            <button onClick={() => setSelected(null)} className="absolute top-3 right-3 z-10 p-1.5 rounded-full bg-black/50 hover:bg-black/80 transition-colors">
-              <X className="w-5 h-5 text-white/70" />
+          <div className="relative w-full h-full max-w-7xl flex flex-col">
+            <button onClick={() => setSelected(null)} className="absolute top-4 right-4 z-10 p-2 rounded-full bg-black/70 hover:bg-black/90 transition-colors">
+              <X className="w-6 h-6 text-white" />
             </button>
 
-            <div className="flex-1 min-h-0 overflow-auto">
-              <img src={selected.output} alt="" className="w-full" />
-              <div className="p-4 space-y-3">
-                <div className="flex items-center gap-2">
-                  <span className="text-[10px] font-bold uppercase tracking-widest text-white/30 bg-white/5 px-2 py-1 rounded-full">{selected.model}</span>
-                </div>
-                {selected.prompt && (
-                  <div>
-                    <p className="text-[11px] font-semibold text-white/30 mb-1">Запрос</p>
-                    <p className="text-sm text-white/70 italic">&ldquo;{selected.prompt}&rdquo;</p>
-                  </div>
-                )}
-              </div>
+            <div className="flex-1 flex items-center justify-center min-h-0 mb-4">
+              <img src={selected.output} alt="" className="max-w-full max-h-full object-contain" />
             </div>
 
-            <div className="flex gap-2 p-4 pt-2 border-t border-white/5">
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => handleCopy(selected)}
-                className="flex-1 rounded-xl border-white/10 hover:bg-white/5 gap-2"
-              >
-                {copied ? <Check className="h-4 w-4 text-green-400" /> : <Copy className="h-4 w-4" />}
-                {copied ? 'Скопировано' : 'Поделиться'}
-              </Button>
-              <Button
-                size="sm"
-                onClick={() => { setSelected(null); handleRepeat(selected) }}
-                className="flex-1 rounded-xl bg-gradient-to-r from-[#FFD700] via-[#FFB700] to-[#FF8C00] text-black font-bold hover:opacity-90 gap-2"
-              >
-                <Sparkles className="h-4 w-4" />
-                Повторить
-              </Button>
+            <div className="bg-[#111]/95 backdrop-blur-sm rounded-2xl border border-white/10 p-4 space-y-3">
+              <div className="flex items-center gap-2">
+                <span className="text-[10px] font-bold uppercase tracking-widest text-white/30 bg-white/5 px-2 py-1 rounded-full">{selected.model}</span>
+              </div>
+              {selected.prompt && (
+                <div>
+                  <p className="text-[11px] font-semibold text-white/30 mb-1">Запрос</p>
+                  <p className="text-sm text-white/70 italic">&ldquo;{selected.prompt}&rdquo;</p>
+                </div>
+              )}
+              <div className="flex gap-2 pt-2">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => handleCopy(selected)}
+                  className="flex-1 rounded-xl border-white/10 hover:bg-white/5 gap-2"
+                >
+                  {copied ? <Check className="h-4 w-4 text-green-400" /> : <Copy className="h-4 w-4" />}
+                  {copied ? 'Скопировано' : 'Поделиться'}
+                </Button>
+                <Button
+                  size="sm"
+                  onClick={() => { setSelected(null); handleRepeat(selected) }}
+                  className="flex-1 rounded-xl bg-gradient-to-r from-[#FFD700] via-[#FFB700] to-[#FF8C00] text-black font-bold hover:opacity-90 gap-2"
+                >
+                  <Sparkles className="h-4 w-4" />
+                  Повторить
+                </Button>
+              </div>
             </div>
           </div>
         </div>
