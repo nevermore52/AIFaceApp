@@ -86,6 +86,18 @@ class ApiClient {
 
 export const api = new ApiClient(API_BASE_URL)
 
+export interface GalleryItem {
+  id: number
+  model: string
+  output: string
+  prompt: string
+}
+
+export const publicApi = {
+  getGallery: (limit = 30, offset = 0) =>
+    api.get<{ data: GalleryItem[]; total: number }>(`/gallery?limit=${limit}&offset=${offset}`),
+}
+
 export const authApi = {
   telegramLogin: (data: {
     id: number

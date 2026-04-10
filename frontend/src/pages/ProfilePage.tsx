@@ -3,9 +3,16 @@ import { useAuthStore } from '../store/auth'
 import { userApi, authApi, API_BASE_URL } from '../lib/api'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../components/ui/card'
 import { Button } from '../components/ui/button'
-import { Copy, Check, Users, Shield, Image, Music, Video, MessageSquare, ChevronRight, ChevronLeft, History } from 'lucide-react'
+import { Copy, Check, Users, Shield, Image as ImageIcon, Music, Video, MessageSquare, ChevronRight, ChevronLeft, History } from 'lucide-react'
 import { useSearchParams, useNavigate, Link } from 'react-router-dom'
 import { formatDate, cn } from '../lib/utils'
+
+interface Quota {
+  text_daily: number; text_extra: number
+  image_weekly: number; image_extra: number
+  music_weekly: number; music_extra: number
+  video_weekly: number; video_extra: number
+}
 
 interface Generation {
   id: number
@@ -33,6 +40,9 @@ export function ProfilePage() {
   const [linkNotice, setLinkNotice] = useState<{ type: 'success' | 'error'; msg: string } | null>(null)
   const [tgLinkStatus, setTgLinkStatus] = useState<'idle' | 'waiting' | 'linked' | 'error'>('idle')
   const tgPollRef = useRef<ReturnType<typeof setInterval> | null>(null)
+
+  // Quota
+  const [quota, setQuota] = useState<Quota | null>(null)
 
   // History state
   const [generations, setGenerations] = useState<Generation[]>([])
@@ -62,6 +72,10 @@ export function ProfilePage() {
   }, [])
 
   useEffect(() => () => { if (tgPollRef.current) clearInterval(tgPollRef.current) }, [])
+
+  useEffect(() => {
+    userApi.getQuota().then((data) => setQuota(data as Quota)).catch(() => {})
+  }, [])
 
   useEffect(() => {
     if (activeTab === 'history') loadGenerations()
@@ -214,6 +228,41 @@ export function ProfilePage() {
       {/* ── Профиль ── */}
       {activeTab === 'profile' && (
         <div className="space-y-6">
+          {/* Subscription + Balance */}
+          <div className="flex items-center gap-3 p-3 rounded-2xl bg-white/[0.02] border border-white/5">
+            <div className="flex items-center gap-2 flex-shrink-0">
+              <span className="text-[10px] font-bold uppercase tracking-widest text-white/30">Подписка</span>
+              <span className="text-xs font-bold uppercase tracking-widest text-primary bg-primary/10 px-2.5 py-0.5 rounded-full border border-primary/20">
+                {user?.subscription_type || 'FREE'}
+              </span>
+              {user?.subscription_end && (
+                <span className="text-[10px] text-white/30">до {new Date(user.subscription_end).toLocaleDateString('ru-RU', { day: 'numeric', month: 'short' })}</span>
+              )}
+            </div>
+            <div className="flex-1" />
+            <Button variant="outline" size="sm" className="rounded-full h-7 text-[10px] font-bold uppercase tracking-widest border-white/10 hover:bg-white/5 px-3" onClick={() => navigate('/payments')}>
+              Пополнить
+            </Button>
+          </div>
+
+          {/* Compact quota row */}
+          {quota && (
+            <div className="grid grid-cols-4 gap-2">
+              {[
+                { label: 'Фото', icon: ImageIcon, val: quota.image_weekly + quota.image_extra, color: 'text-green-400' },
+                { label: 'Видео', icon: Video, val: quota.video_weekly + quota.video_extra, color: 'text-orange-400' },
+                { label: 'Музыка', icon: Music, val: quota.music_weekly + quota.music_extra, color: 'text-purple-400' },
+                { label: 'Текст', icon: MessageSquare, val: quota.text_daily + quota.text_extra, color: 'text-blue-400' },
+              ].map((q) => (
+                <div key={q.label} className="flex flex-col items-center gap-1 py-2 rounded-xl bg-white/[0.02] border border-white/5">
+                  <q.icon className={cn('w-4 h-4', q.color)} />
+                  <span className="text-lg font-bold text-white leading-none">{q.val}</span>
+                  <span className="text-[9px] uppercase tracking-wider text-white/30">{q.label}</span>
+                </div>
+              ))}
+            </div>
+          )}
+
           <div className="grid gap-6 md:grid-cols-12">
             <div className="md:col-span-7 space-y-6">
               <Card className="border-white/5 bg-white/[0.02] backdrop-blur-sm">

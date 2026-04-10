@@ -185,8 +185,11 @@ export function GeneratePage() {
       return
     }
 
-    const state = location.state as { prompt?: string; model?: string } | null
+    const state = location.state as { prompt?: string; model?: string; category?: string } | null
     if (state?.prompt) setPrompt(state.prompt)
+    if (state?.category && ['image', 'video', 'music', 'text'].includes(state.category)) {
+      setSelectedCategory(state.category as Category)
+    }
 
     setLoading(true)
     generationApi.getModels()
@@ -195,8 +198,9 @@ export function GeneratePage() {
         if (state?.model) {
           setSelectedModel(state.model)
         } else {
-          const imageModels = data.filter((m: Model) => m.type === 'image')
-          if (imageModels.length > 0) setSelectedModel(imageModels[0].id)
+          const cat = state?.category || 'image'
+          const catModels = data.filter((m: Model) => m.type === cat)
+          if (catModels.length > 0) setSelectedModel(catModels[0].id)
         }
       })
       .catch((err) => {

@@ -7,6 +7,7 @@ import { LoginPage } from './pages/LoginPage'
 import { DashboardPage } from './pages/DashboardPage'
 import { GeneratePage } from './pages/GeneratePage'
 import { HistoryPage } from './pages/HistoryPage'
+import { IdeasPage } from './pages/IdeasPage'
 import { GenerationDetailPage } from './pages/GenerationDetailPage'
 import { PaymentsPage } from './pages/PaymentsPage'
 import { ProfilePage } from './pages/ProfilePage'
@@ -95,6 +96,7 @@ function App() {
           <Route path="/auth/callback" element={<AuthCallbackPage />} />
           <Route path="/" element={<Layout />}>
             <Route index element={<DashboardPage />} />
+            <Route path="ideas" element={<IdeasPage />} />
             <Route
               path="generate"
               element={

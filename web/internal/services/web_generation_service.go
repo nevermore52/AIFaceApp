@@ -1100,6 +1100,37 @@ func (s *WebGenerationService) GetByUserID(userID int64, limit, offset int) ([]*
 	return generations, total, rows.Err()
 }
 
+// GetPublicGallery returns recent completed image generations for the public gallery.
+func (s *WebGenerationService) GetPublicGallery(limit, offset int) ([]*GenerationRequest, int, error) {
+	var total int
+	err := s.db.QueryRow(`SELECT COUNT(*) FROM generation_requests WHERE status = 'completed' AND model_type = 'image' AND output IS NOT NULL AND output != ''`).Scan(&total)
+	if err != nil {
+		return nil, 0, err
+	}
+
+	rows, err := s.db.Query(`
+		SELECT id, user_id, model_type, model, status, output, prompt, created_at
+		FROM generation_requests
+		WHERE status = 'completed' AND model_type = 'image' AND output IS NOT NULL AND output != ''
+		ORDER BY created_at DESC
+		LIMIT $1 OFFSET $2
+	`, limit, offset)
+	if err != nil {
+		return nil, 0, err
+	}
+	defer rows.Close()
+
+	var results []*GenerationRequest
+	for rows.Next() {
+		g := &GenerationRequest{}
+		if err := rows.Scan(&g.ID, &g.UserID, &g.ModelType, &g.Model, &g.Status, &g.Output, &g.Prompt, &g.CreatedAt); err != nil {
+			continue
+		}
+		results = append(results, g)
+	}
+	return results, total, rows.Err()
+}
+
 func (s *WebGenerationService) getByExternalTaskID(taskID string) (*GenerationRequest, error) {
 	query := `
 		SELECT id, user_id, model_type, model, status, input_image, output, prompt, error_msg, tokens_used, source, created_at, completed_at

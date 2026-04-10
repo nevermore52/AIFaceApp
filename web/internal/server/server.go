@@ -100,6 +100,9 @@ func New(cfg *config.Config, db *sql.DB) *Server {
 			c.JSON(http.StatusOK, gin.H{"status": "ok"})
 		})
 
+		// Public endpoints
+		api.GET("/gallery", generationHandler.GetPublicGallery)
+
 		// Public callback endpoints
 		api.POST("/callbacks/kieapi", generationHandler.HandleKieAPICallback)
 		api.POST("/callbacks/suno", generationHandler.HandleSunoCallback)

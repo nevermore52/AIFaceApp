@@ -2,25 +2,13 @@ import { useEffect, useState, useRef, useCallback } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useAuthStore } from '../store/auth'
 import { userApi } from '../lib/api'
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../components/ui/card'
-import { Image, Music, Video, MessageSquare, Sparkles, X, Send } from 'lucide-react'
 import { Button } from '../components/ui/button'
 import { cn } from '../lib/utils'
-
-interface Quota {
-  text_daily: number
-  text_extra: number
-  image_weekly: number
-  image_extra: number
-  music_weekly: number
-  music_extra: number
-  video_weekly: number
-  video_extra: number
-}
+import { Image, Film, Music, Type, Sparkles, X, Send } from 'lucide-react'
 
 const CHANNEL_URL = 'https://t.me/aifaceapps'
 const BANNER_DISMISS_KEY = 'channel_banner_dismissed_at'
-const BANNER_REDISPLAY_MS = 5 * 60 * 1000 // 5 минут
+const BANNER_REDISPLAY_MS = 5 * 60 * 1000
 
 function shouldShowBanner(alreadyClaimed: boolean): boolean {
   if (alreadyClaimed) return false
@@ -29,11 +17,16 @@ function shouldShowBanner(alreadyClaimed: boolean): boolean {
   return Date.now() - parseInt(ts) > BANNER_REDISPLAY_MS
 }
 
+const categories = [
+  { id: 'image', label: 'Картинка', icon: Image, color: 'from-amber-500 to-orange-600' },
+  { id: 'video', label: 'Видео', icon: Film, color: 'from-purple-500 to-pink-600' },
+  { id: 'music', label: 'Аудио', icon: Music, color: 'from-green-500 to-emerald-600' },
+  { id: 'text', label: 'Текст', icon: Type, color: 'from-blue-500 to-cyan-600' },
+]
+
 export function DashboardPage() {
   const navigate = useNavigate()
   const { user, isAuthenticated, updateUser } = useAuthStore()
-  const [quota, setQuota] = useState<Quota | null>(null)
-  const [loading, setLoading] = useState(true)
   const [showBanner, setShowBanner] = useState(false)
   const [bonusClaimed, setBonusClaimed] = useState(false)
   const [bonusChecking, setBonusChecking] = useState(false)
@@ -42,7 +35,7 @@ export function DashboardPage() {
 
   const refreshQuota = useCallback(() => {
     if (isAuthenticated) {
-      userApi.getQuota().then((data) => setQuota(data as Quota)).catch(console.error)
+      userApi.getQuota().catch(console.error)
     }
   }, [isAuthenticated])
 
@@ -60,12 +53,7 @@ export function DashboardPage() {
           setBonusClaimed(claimed)
           setShowBanner(shouldShowBanner(claimed))
         })
-      userApi.getQuota()
-        .then((data) => setQuota(data as Quota))
-        .catch(console.error)
-        .finally(() => setLoading(false))
     } else {
-      setLoading(false)
       const claimed = !!user?.channel_trial_claimed
       setBonusClaimed(claimed)
       setShowBanner(shouldShowBanner(claimed))
@@ -80,8 +68,6 @@ export function DashboardPage() {
   const startChannelCheck = () => {
     window.open(CHANNEL_URL, '_blank')
     setBonusChecking(true)
-
-    // Начинаем поллинг каждые 20 секунд
     if (pollRef.current) clearInterval(pollRef.current)
     pollRef.current = setInterval(async () => {
       try {
@@ -92,56 +78,40 @@ export function DashboardPage() {
           setBonusClaimed(true)
           setBonusSuccess(true)
           setShowBanner(false)
-          // Обновляем данные
           userApi.getMe().then((data) => updateUser(data as any))
           refreshQuota()
         }
-      } catch {
-        // продолжаем попытки
-      }
+      } catch {}
     }, 20000)
-
-    // Максимум 5 минут
     setTimeout(() => {
-      if (pollRef.current) {
-        clearInterval(pollRef.current)
-        setBonusChecking(false)
-      }
+      if (pollRef.current) { clearInterval(pollRef.current); setBonusChecking(false) }
     }, 5 * 60 * 1000)
   }
 
   useEffect(() => () => { if (pollRef.current) clearInterval(pollRef.current) }, [])
 
-  const quotaCards = [
-    { title: 'Фото', icon: Image, daily: quota?.image_weekly ?? 0, extra: quota?.image_extra ?? 0, color: 'text-green-400', bgColor: 'bg-green-500/10' },
-    { title: 'Видео', icon: Video, daily: quota?.video_weekly ?? 0, extra: quota?.video_extra ?? 0, color: 'text-orange-400', bgColor: 'bg-orange-500/10' },
-    { title: 'Музыка', icon: Music, daily: quota?.music_weekly ?? 0, extra: quota?.music_extra ?? 0, color: 'text-purple-400', bgColor: 'bg-purple-500/10' },
-    { title: 'Текст', icon: MessageSquare, daily: quota?.text_daily ?? 0, extra: quota?.text_extra ?? 0, color: 'text-blue-400', bgColor: 'bg-blue-500/10' },
-  ]
-
-  const handleModelClick = () => {
+  const handleCategoryClick = (categoryId: string) => {
     if (!isAuthenticated) {
-      navigate('/login', { state: { from: '/' } })
+      navigate('/login', { state: { from: '/generate' } })
       return
     }
-    window.location.href = '/generate'
+    navigate('/generate', { state: { category: categoryId } })
   }
 
   return (
-    <div className="space-y-4 max-w-6xl mx-auto">
-
-      {/* Баннер: нет TG — пробные запросы недоступны */}
+    <div className="space-y-5 max-w-6xl mx-auto">
+      {/* TG link banner */}
       {isAuthenticated && !user?.telegram_id && !user?.channel_trial_claimed && (
         <div className="rounded-xl border border-yellow-500/30 bg-yellow-500/10 px-4 py-3 flex items-center gap-3">
           <Send className="h-5 w-5 text-yellow-400 flex-shrink-0" />
           <p className="text-sm text-white/80">
             Пробные запросы доступны только после{' '}
-            <a href="/profile" className="text-yellow-400 hover:underline font-medium">привязки Telegram аккаунта</a>
+            <a href="/profile" className="text-yellow-400 hover:underline font-medium">привязки Telegram</a>
           </p>
         </div>
       )}
 
-      {/* Баннер подписки на канал */}
+      {/* Channel subscribe banner */}
       {isAuthenticated && user?.telegram_id && showBanner && !bonusClaimed && (
         <div className="relative rounded-xl border border-[#229ED9]/30 bg-[#229ED9]/10 px-4 py-3 flex items-center gap-3">
           <Send className="h-5 w-5 text-[#229ED9] flex-shrink-0" />
@@ -152,10 +122,7 @@ export function DashboardPage() {
             {bonusChecking ? (
               <p className="text-xs text-white/40 mt-0.5 animate-pulse">Проверяем подписку...</p>
             ) : (
-              <button
-                onClick={startChannelCheck}
-                className="text-xs text-[#229ED9] hover:underline mt-0.5"
-              >
+              <button onClick={startChannelCheck} className="text-xs text-[#229ED9] hover:underline mt-0.5">
                 Подписаться на @aifaceapps →
               </button>
             )}
@@ -166,140 +133,64 @@ export function DashboardPage() {
         </div>
       )}
 
-      {/* Успех */}
       {bonusSuccess && (
         <div className="rounded-xl border border-green-500/30 bg-green-500/10 px-4 py-3 text-sm text-green-300 font-medium">
-          Бонус получен! +2 запроса в каждой категории добавлены.
+          Бонус получен! +2 запроса добавлены.
         </div>
       )}
 
-      <div className="flex flex-col gap-1">
-        <h1 className="text-3xl font-bold tracking-tight bg-gradient-to-br from-white to-white/40 bg-clip-text text-transparent">
-          {isAuthenticated ? `С возвращением, ${user?.first_name}!` : 'AI Face App'}
-        </h1>
-        <p className="text-white/40 text-sm">
-          {isAuthenticated
-            ? 'Личный кабинет и статистика генераций'
-            : 'Войдите, чтобы запускать генерации'}
-        </p>
-      </div>
+      {/* Title */}
+      <h1 className="text-2xl font-bold tracking-tight text-white">Создать</h1>
 
-      {!isAuthenticated && (
-        <Card className="border-white/5 bg-white/[0.02] backdrop-blur-sm">
-          <CardContent className="pt-8 text-center space-y-4">
-            <div className="w-16 h-16 mx-auto rounded-full bg-primary/10 flex items-center justify-center">
-              <Sparkles className="w-8 h-8 text-primary" />
-            </div>
-            <div className="space-y-2">
-              <p className="text-lg font-semibold text-white/90">Готовы создавать?</p>
-              <p className="text-sm text-white/40 max-w-xs mx-auto">
-                Авторизуйтесь через Google или Telegram для доступа к мощным инструментам генерации.
-              </p>
-            </div>
-            <Button size="lg" onClick={() => navigate('/login', { state: { from: '/' } })} className="rounded-full px-8">
-              Войти в аккаунт
-            </Button>
-          </CardContent>
-        </Card>
-      )}
-
-
-      {/* Компактные карточки квоты — всегда 4 в ряд */}
-      <div className="grid grid-cols-4 gap-2">
-        {quotaCards.map((card) => (
-          <Card
-            key={card.title}
-            className="group cursor-pointer border-white/5 bg-white/[0.02] backdrop-blur-sm hover:bg-white/[0.04] transition-all duration-200"
-            onClick={handleModelClick}
+      {/* Category grid — like the reference screenshot */}
+      <div className="flex gap-3 overflow-x-auto pb-1 -mx-1 px-1 scrollbar-hide">
+        {categories.map((cat) => (
+          <button
+            key={cat.id}
+            onClick={() => handleCategoryClick(cat.id)}
+            className="flex flex-col items-center gap-2 flex-shrink-0 group"
           >
-            <CardContent className="p-3">
-              <div className="flex items-center justify-between mb-2">
-                <span className="text-[11px] font-medium text-white/50 leading-none">{card.title}</span>
-                <div className={cn("p-1.5 rounded-lg", card.bgColor)}>
-                  <card.icon className={cn("h-3.5 w-3.5", card.color)} />
-                </div>
-              </div>
-              {loading ? (
-                <div className="h-7 w-12 bg-white/5 animate-pulse rounded" />
-              ) : (
-                <>
-                  <div className="text-2xl font-bold text-white leading-none">
-                    {card.daily + card.extra}
-                  </div>
-                  <p className="text-[9px] uppercase tracking-wider text-white/20 font-medium mt-1 leading-none">
-                    {card.daily} баз <span className="text-white/10">+</span> {card.extra} доп
-                  </p>
-                </>
-              )}
-            </CardContent>
-          </Card>
+            <div className={cn(
+              "w-16 h-16 rounded-2xl flex items-center justify-center bg-gradient-to-br transition-all duration-200 group-hover:scale-105 group-active:scale-95 border border-white/10",
+              cat.color
+            )}>
+              <cat.icon className="w-7 h-7 text-white" />
+            </div>
+            <span className="text-[11px] font-medium text-white/60 group-hover:text-white transition-colors">
+              {cat.label}
+            </span>
+          </button>
         ))}
       </div>
 
-      <div className="grid gap-4 md:grid-cols-2">
-        <Card className="border-white/5 bg-white/[0.02] backdrop-blur-sm">
-          <CardHeader className="pb-3 pt-4 px-4">
-            <CardTitle className="text-base flex items-center gap-2">
-              <div className="h-5 w-1 bg-primary rounded-full" />
-              Ваша подписка
-            </CardTitle>
-            <CardDescription className="text-white/40 text-xs">Статус и сроки действия</CardDescription>
-          </CardHeader>
-          <CardContent className="px-4 pb-4">
-            <div className="space-y-2">
-              <div className="flex justify-between items-center p-3 rounded-xl bg-white/[0.03] border border-white/5">
-                <span className="text-xs text-white/40">Тарифный план</span>
-                <span className="text-xs font-bold uppercase tracking-widest text-primary bg-primary/10 px-2.5 py-1 rounded-full border border-primary/20">
-                  {user?.subscription_type || 'FREE'}
-                </span>
-              </div>
-              {user?.subscription_end && (
-                <div className="flex justify-between items-center p-3 rounded-xl bg-white/[0.03] border border-white/5">
-                  <span className="text-xs text-white/40">Действует до</span>
-                  <span className="text-xs font-semibold text-white/80">
-                    {new Date(user.subscription_end).toLocaleDateString('ru-RU', { day: 'numeric', month: 'long', year: 'numeric' })}
-                  </span>
-                </div>
-              )}
-              {!user?.subscription_end && (
-                <Button variant="outline" className="w-full rounded-xl border-white/10 hover:bg-white/5 text-xs h-10" onClick={() => navigate('/payments')}>
-                  Улучшить тариф
-                </Button>
-              )}
-            </div>
-          </CardContent>
-        </Card>
+      {/* Not authenticated card */}
+      {!isAuthenticated && (
+        <div className="rounded-2xl border border-white/5 bg-white/[0.02] p-8 text-center space-y-4">
+          <div className="w-14 h-14 mx-auto rounded-full bg-primary/10 flex items-center justify-center">
+            <Sparkles className="w-7 h-7 text-primary" />
+          </div>
+          <div className="space-y-1">
+            <p className="text-lg font-semibold text-white/90">Готовы создавать?</p>
+            <p className="text-sm text-white/40 max-w-xs mx-auto">
+              Авторизуйтесь для доступа к генерации
+            </p>
+          </div>
+          <Button size="lg" onClick={() => navigate('/login', { state: { from: '/' } })} className="rounded-full px-8">
+            Войти в аккаунт
+          </Button>
+        </div>
+      )}
 
-        <Card className="border-white/5 bg-white/[0.02] backdrop-blur-sm relative overflow-hidden">
-          <div className="absolute top-0 right-0 w-32 h-32 bg-primary/10 blur-[60px] -mr-16 -mt-16" />
-          <CardHeader className="pb-3 pt-4 px-4 relative">
-            <CardTitle className="text-base flex items-center gap-2">
-              <div className="h-5 w-1 bg-primary rounded-full" />
-              Быстрые действия
-            </CardTitle>
-            <CardDescription className="text-white/40 text-xs">Начните творить прямо сейчас</CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-3 relative px-4 pb-4">
-            <Button
-              onClick={handleModelClick}
-              className="w-full py-5 rounded-xl font-bold shadow-[0_10px_25px_-8px_rgba(139,92,246,0.3)] hover:shadow-[0_15px_30px_-6px_rgba(139,92,246,0.4)] transition-all"
-            >
-              Начать генерацию
-              <Sparkles className="ml-2 h-4 w-4" />
-            </Button>
-            {/* Telegram канал */}
-            <a
-              href={CHANNEL_URL}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="flex items-center justify-center gap-2 w-full py-2.5 rounded-xl font-semibold text-sm bg-[#229ED9] hover:bg-[#1a8bc2] text-white transition-colors"
-            >
-              <Send className="h-4 w-4" />
-              Наш Telegram канал
-            </a>
-          </CardContent>
-        </Card>
-      </div>
+      {/* TG channel link */}
+      <a
+        href={CHANNEL_URL}
+        target="_blank"
+        rel="noopener noreferrer"
+        className="flex items-center justify-center gap-2 w-full py-3 rounded-xl font-semibold text-sm bg-[#229ED9]/10 border border-[#229ED9]/20 text-[#229ED9] hover:bg-[#229ED9]/20 transition-colors"
+      >
+        <Send className="h-4 w-4" />
+        Наш Telegram канал
+      </a>
     </div>
   )
 }

@@ -166,6 +166,38 @@ func (h *GenerationHandler) GetUserHistory(c *gin.Context) {
 	})
 }
 
+// GetPublicGallery returns recent completed image generations (public, no auth).
+func (h *GenerationHandler) GetPublicGallery(c *gin.Context) {
+	if h.webGenerationService == nil {
+		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "Generation service not available"})
+		return
+	}
+	limit, _ := strconv.Atoi(c.DefaultQuery("limit", "30"))
+	offset, _ := strconv.Atoi(c.DefaultQuery("offset", "0"))
+	if limit > 100 {
+		limit = 100
+	}
+
+	generations, total, err := h.webGenerationService.GetPublicGallery(limit, offset)
+	if err != nil {
+		log.Printf("GetPublicGallery error: %v", err)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to get gallery"})
+		return
+	}
+
+	type galleryItem struct {
+		ID       int64   `json:"id"`
+		Model    string  `json:"model"`
+		Output   *string `json:"output"`
+		Prompt   string  `json:"prompt"`
+	}
+	items := make([]galleryItem, 0, len(generations))
+	for _, g := range generations {
+		items = append(items, galleryItem{ID: g.ID, Model: g.Model, Output: g.Output, Prompt: g.Prompt})
+	}
+	c.JSON(http.StatusOK, gin.H{"data": items, "total": total})
+}
+
 func (h *GenerationHandler) GetModels(c *gin.Context) {
 	if h.webGenerationService == nil {
 		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "Generation service not available"})
