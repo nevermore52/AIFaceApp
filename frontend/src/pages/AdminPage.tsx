@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useAuthStore } from '../store/auth'
-import { adminApi } from '../lib/api'
+import { adminApi, generationApi } from '../lib/api'
 import { Card, CardContent, CardHeader, CardTitle } from '../components/ui/card'
 import { Button } from '../components/ui/button'
 
@@ -483,13 +483,11 @@ function GalleryIdeasTab() {
   useEffect(() => { 
     load()
     // Load models
-    import('../lib/api').then(({ generationApi }) => {
-      generationApi.getModels().then((res) => {
-        // Filter only image and video models
-        const filtered = res.filter((m: any) => m.type === 'image' || m.type === 'video')
-        setModels(filtered)
-      })
-    })
+    generationApi.getModels().then((res) => {
+      // Filter only image and video models
+      const filtered = res.filter((m: any) => m.type === 'image' || m.type === 'video')
+      setModels(filtered)
+    }).catch(console.error)
   }, [load])
 
   const handleImageChange = (e: React.ChangeEvent<HTMLInputElement>) => {
