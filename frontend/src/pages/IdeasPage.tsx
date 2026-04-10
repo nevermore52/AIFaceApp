@@ -135,65 +135,69 @@ export function IdeasPage() {
         </>
       )}
 
-      {/* Full-screen detail overlay */}
+      {/* Full-screen detail overlay — no page scroll */}
       {selected && (
         <div
-          className="fixed inset-0 z-[60] bg-black/90 backdrop-blur-sm overflow-y-auto"
+          className="fixed inset-0 z-[60] bg-black/90 backdrop-blur-sm flex items-center justify-center p-4"
+          style={{ overflow: 'hidden' }}
           onClick={(e) => { if (e.target === e.currentTarget) setSelected(null) }}
         >
-          <div className="min-h-full flex flex-col items-center justify-center p-4 md:py-8">
-            {/* Card container */}
-            <div className="relative w-full max-w-2xl">
-              {/* Close */}
-              <button
-                onClick={() => setSelected(null)}
-                className="absolute -top-2 -right-2 z-20 p-2 rounded-full bg-black/70 hover:bg-black/90 transition-colors border border-white/10"
-              >
-                <X className="w-5 h-5 text-white" />
-              </button>
+          {/* Card — fixed height, no scroll */}
+          <div
+            className="relative w-full max-w-2xl flex flex-col"
+            style={{ maxHeight: 'calc(100vh - 32px)' }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* Close */}
+            <button
+              onClick={() => setSelected(null)}
+              className="absolute -top-2 -right-2 z-20 p-2 rounded-full bg-black/70 hover:bg-black/90 transition-colors border border-white/10"
+            >
+              <X className="w-5 h-5 text-white" />
+            </button>
 
-              {/* Image */}
+            {/* Image — takes remaining space */}
+            <div className="flex-1 min-h-0 flex items-center justify-center bg-black rounded-t-2xl overflow-hidden">
               <img
                 src={selected.output}
                 alt=""
-                className="w-full rounded-t-2xl md:rounded-t-3xl block"
-                style={{ maxHeight: '70vh', objectFit: 'contain', background: '#000' }}
+                className="max-w-full max-h-full object-contain block"
               />
+            </div>
 
-              {/* Info panel */}
-              <div className="bg-[#111] rounded-b-2xl md:rounded-b-3xl border-t border-white/5 p-4 space-y-3">
-                <span className="inline-block text-[10px] font-bold uppercase tracking-widest text-white/50 bg-white/10 px-3 py-1 rounded-full">
-                  {selected.model}
-                </span>
+            {/* Info panel — fixed at bottom, prompt scrolls */}
+            <div className="flex-shrink-0 bg-[#111] rounded-b-2xl border-t border-white/5 p-4 space-y-3">
+              <span className="inline-block text-[10px] font-bold uppercase tracking-widest text-white/50 bg-white/10 px-3 py-1 rounded-full">
+                {selected.model}
+              </span>
 
-                {selected.prompt && (
-                  <div>
-                    <p className="text-[11px] font-semibold text-white/40 mb-1 uppercase tracking-wider">Запрос</p>
-                    <div className="max-h-32 overflow-y-auto">
-                      <p className="text-sm text-white/80 leading-relaxed">{selected.prompt}</p>
-                    </div>
+              {selected.prompt && (
+                <div>
+                  <p className="text-[11px] font-semibold text-white/40 mb-1 uppercase tracking-wider">Запрос</p>
+                  <div className="max-h-24 overflow-y-auto">
+                    <p className="text-sm text-white/80 leading-relaxed">{selected.prompt}</p>
                   </div>
-                )}
-
-                <div className="flex gap-2 pt-1">
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={(e) => { e.stopPropagation(); handleCopy(selected) }}
-                    className="flex-1 rounded-xl border-white/15 bg-white/5 hover:bg-white/10 gap-2 h-11"
-                  >
-                    {copied ? <Check className="h-4 w-4 text-green-400" /> : <Copy className="h-4 w-4" />}
-                    {copied ? 'Скопировано' : 'Поделиться'}
-                  </Button>
-                  <Button
-                    size="sm"
-                    onClick={(e) => { e.stopPropagation(); setSelected(null); handleRepeat(selected) }}
-                    className="flex-1 rounded-xl bg-gradient-to-r from-[#FFD700] via-[#FFB700] to-[#FF8C00] text-black font-bold hover:opacity-90 gap-2 h-11"
-                  >
-                    <Sparkles className="h-4 w-4" />
-                    Повторить
-                  </Button>
                 </div>
+              )}
+
+              <div className="flex gap-2 pt-1">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => handleCopy(selected)}
+                  className="flex-1 rounded-xl border-white/15 bg-white/5 hover:bg-white/10 gap-2 h-11"
+                >
+                  {copied ? <Check className="h-4 w-4 text-green-400" /> : <Copy className="h-4 w-4" />}
+                  {copied ? 'Скопировано' : 'Поделиться'}
+                </Button>
+                <Button
+                  size="sm"
+                  onClick={() => { setSelected(null); handleRepeat(selected) }}
+                  className="flex-1 rounded-xl bg-gradient-to-r from-[#FFD700] via-[#FFB700] to-[#FF8C00] text-black font-bold hover:opacity-90 gap-2 h-11"
+                >
+                  <Sparkles className="h-4 w-4" />
+                  Повторить
+                </Button>
               </div>
             </div>
           </div>
