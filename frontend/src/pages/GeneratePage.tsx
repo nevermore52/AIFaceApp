@@ -404,8 +404,8 @@ export function GeneratePage() {
       return
     }
 
-    if (selectedModel === 'nano-banana-2' && imageFiles.length === 0 && libraryUrls.length === 0) {
-      setError('Для Nano Banana 2 необходимо загрузить фото')
+    if (selectedCategory === 'image' && imageFiles.length === 0 && libraryUrls.length === 0) {
+      setError('Для генерации изображений необходимо загрузить фото')
       return
     }
 
@@ -771,7 +771,7 @@ export function GeneratePage() {
           <div className="space-y-1">
             <div className="flex items-center gap-2 ml-1">
               <label className="text-[13px] font-medium text-white/90">Изображения</label>
-              {selectedModel === 'nano-banana-2' && (
+              {selectedCategory === 'image' && (
                 <span className="text-[11px] text-orange-400/80 font-medium">* обязательно</span>
               )}
             </div>
@@ -1113,7 +1113,7 @@ export function GeneratePage() {
               <Button
                 className="w-full h-16 rounded-2xl text-lg font-black bg-gradient-to-r from-[#FFD700] via-[#FFB700] to-[#FF8C00] text-black hover:opacity-90 transition-all shadow-[0_8px_30px_rgba(255,183,0,0.3)] active:scale-[0.95] flex items-center justify-center gap-3"
                 onClick={handleGenerate}
-                disabled={generating || uploadingImage || (selectedModel === 'nano-banana-2' && imageFiles.length === 0 && libraryUrls.length === 0)}
+                disabled={generating || uploadingImage || (selectedCategory === 'image' && imageFiles.length === 0 && libraryUrls.length === 0)}
               >
                 {uploadingImage ? (
                   <>

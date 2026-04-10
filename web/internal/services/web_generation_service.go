@@ -852,12 +852,27 @@ func (s *WebGenerationService) HandleCallback(payload kieapi.CallbackPayload) er
 	}
 
 	status := strings.ToLower(payload.StatusValue())
-	if status != "success" && status != "completed" && status != "succeeded" {
+
+	// Промежуточные статусы — игнорируем, ждём финального callback
+	switch status {
+	case "processing", "pending", "running", "queued", "queue", "in_progress", "submitted", "waiting":
+		log.Printf("HandleCallback: interim status %q for task %s, skipping", status, taskID)
+		return nil
+	}
+
+	// Явная ошибка
+	if status == "failed" || status == "error" || status == "cancelled" || status == "canceled" {
 		reason := payload.Msg
-		if reason == "" {
+		if reason == "" || strings.ToLower(reason) == "success" {
 			reason = fmt.Sprintf("status=%s", payload.StatusValue())
 		}
 		return s.updateStatus(genReq.ID, "failed", reason)
+	}
+
+	// Неизвестный статус — игнорируем (не помечаем как ошибку)
+	if status != "success" && status != "completed" && status != "succeeded" {
+		log.Printf("HandleCallback: unknown status %q for task %s, ignoring", status, taskID)
+		return nil
 	}
 
 	resultURL := payload.ResultURL()
@@ -889,9 +904,17 @@ func (s *WebGenerationService) HandleSunoCallback(payload map[string]any) error 
 	// Проверяем статус: ошибка — завершаем сразу, не ждём 2 песни
 	status := findStringByKeys(payload, "status", "state")
 	log.Printf("Status from callback: %s", status)
-	if status != "" && status != "success" && status != "completed" && status != "succeeded" {
+	statusLower := strings.ToLower(status)
+	// Промежуточные статусы — пропускаем
+	switch statusLower {
+	case "processing", "pending", "running", "queued", "queue", "in_progress", "submitted", "waiting":
+		log.Printf("HandleSunoCallback: interim status %q for task %s, skipping", status, taskID)
+		return nil
+	}
+	// Явная ошибка
+	if statusLower == "failed" || statusLower == "error" || statusLower == "cancelled" || statusLower == "canceled" {
 		reason := findStringByKeys(payload, "message", "msg", "error")
-		if reason == "" {
+		if reason == "" || strings.ToLower(reason) == "success" {
 			reason = fmt.Sprintf("status=%s", status)
 		}
 		log.Printf("Generation failed with status %s: %s", status, reason)
