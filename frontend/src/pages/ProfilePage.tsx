@@ -161,7 +161,7 @@ export function ProfilePage() {
 
   const getIcon = (modelType: string) => {
     switch (modelType) {
-      case 'image': return Image
+      case 'image': return ImageIcon
       case 'music': return Music
       case 'video': return Video
       default: return MessageSquare
@@ -451,7 +451,7 @@ export function ProfilePage() {
                     <Link key={gen.id} to={`/generations/${gen.id}`} style={{ display: 'block', width: '100%', minWidth: 0 }}>
                       <div style={{ display: 'flex', alignItems: 'center', gap: '12px', padding: '12px', background: 'rgba(255,255,255,0.02)', border: '1px solid rgba(255,255,255,0.05)', borderRadius: '12px', width: '100%', boxSizing: 'border-box', overflow: 'hidden' }}>
                         <div style={{ padding: '8px', borderRadius: '10px', background: 'rgba(255,255,255,0.05)', flexShrink: 0 }}>
-                          <Icon style={{ width: 18, height: 18, color: 'rgba(255,255,255,0.6)' }} />
+                          <Icon size={18} color="rgba(255,255,255,0.6)" />
                         </div>
                         <div style={{ flex: 1, minWidth: 0, overflow: 'hidden' }}>
                           <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '2px' }}>
