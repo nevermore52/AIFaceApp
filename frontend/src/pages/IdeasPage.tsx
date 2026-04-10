@@ -23,17 +23,12 @@ export function IdeasPage() {
     publicApi.getGallery(limit, 0).then((res) => {
       setItems(res.data || [])
       setTotal(res.total)
-      
-      // Check for id parameter from URL or Telegram startapp
+
+      // Open by URL param or Telegram startapp
       let itemId: number | null = null
-      
-      // Check URL parameter
       const idParam = searchParams.get('id')
-      if (idParam) {
-        itemId = parseInt(idParam, 10)
-      }
-      
-      // Check Telegram startapp parameter (format: g-123)
+      if (idParam) itemId = parseInt(idParam, 10)
+
       const tg = window.Telegram?.WebApp
       if (tg?.initDataUnsafe) {
         const startParam = (tg.initDataUnsafe as any).start_param
@@ -41,13 +36,10 @@ export function IdeasPage() {
           itemId = parseInt(startParam.substring(2), 10)
         }
       }
-      
-      // Open the item if found
+
       if (itemId) {
         const item = res.data?.find((i: GalleryItem) => i.id === itemId)
-        if (item) {
-          setSelected(item)
-        }
+        if (item) setSelected(item)
       }
     }).catch(console.error).finally(() => setLoading(false))
   }, [searchParams])
@@ -125,7 +117,7 @@ export function IdeasPage() {
               <button
                 key={item.id}
                 onClick={() => setSelected(item)}
-                className="relative aspect-square rounded-xl overflow-hidden group cursor-pointer border border-white/5 hover:border-white/20 transition-all"
+                className="relative aspect-square rounded-xl overflow-hidden group cursor-pointer"
               >
                 <img
                   src={item.output}
@@ -133,7 +125,6 @@ export function IdeasPage() {
                   className="w-full h-full object-cover transition-transform duration-300 group-hover:scale-105"
                   loading="lazy"
                 />
-                <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity" />
               </button>
             ))}
           </div>
@@ -144,55 +135,66 @@ export function IdeasPage() {
         </>
       )}
 
-      {/* Detail overlay */}
+      {/* Full-screen detail overlay */}
       {selected && (
-        <div
-          className="fixed inset-0 z-[60] bg-black/95"
-          onClick={(e) => { if (e.target === e.currentTarget) setSelected(null) }}
-        >
-          <button onClick={() => setSelected(null)} className="absolute top-4 right-4 z-20 p-2 rounded-full bg-white/10 hover:bg-white/20 transition-colors">
-            <X className="w-6 h-6 text-white" />
+        <div className="fixed inset-0 z-[60] bg-black flex flex-col" style={{ touchAction: 'none' }}>
+          {/* Close button */}
+          <button
+            onClick={() => setSelected(null)}
+            className="absolute top-4 right-4 z-20 p-2 rounded-full bg-black/50 hover:bg-black/80 transition-colors"
+          >
+            <X className="w-5 h-5 text-white" />
           </button>
 
-          <div className="h-full flex flex-col">
-            {/* Image container - takes most space */}
-            <div className="flex-1 flex items-center justify-center p-4 pb-2">
-              <img 
-                src={selected.output} 
-                alt="" 
-                className="max-w-full max-h-full object-contain"
-                style={{ maxHeight: 'calc(100vh - 200px)' }}
-              />
-            </div>
+          {/* Image — fills available space, covers like Instagram */}
+          <div className="flex-1 min-h-0 relative">
+            <img
+              src={selected.output}
+              alt=""
+              className="w-full h-full object-cover"
+            />
+            {/* gradient fade to bottom panel */}
+            <div className="absolute bottom-0 left-0 right-0 h-32 bg-gradient-to-t from-black to-transparent pointer-events-none" />
+          </div>
 
-            {/* Info panel - fixed at bottom */}
-            <div className="flex-shrink-0 bg-gradient-to-t from-black via-black/90 to-transparent p-4 pt-8">
-              <div className="max-w-4xl mx-auto space-y-3">
-                <div className="flex items-center gap-2">
-                  <span className="text-xs font-bold uppercase tracking-widest text-white/50 bg-white/10 px-3 py-1 rounded-full">{selected.model}</span>
+          {/* Bottom info panel — scrollable if needed */}
+          <div
+            className="flex-shrink-0 bg-black overflow-y-auto"
+            style={{ maxHeight: '45vh' }}
+          >
+            <div className="px-4 pt-3 pb-6 space-y-3">
+              {/* Model badge */}
+              <span className="inline-block text-[10px] font-bold uppercase tracking-widest text-white/50 bg-white/10 px-3 py-1 rounded-full">
+                {selected.model}
+              </span>
+
+              {/* Prompt */}
+              {selected.prompt && (
+                <div>
+                  <p className="text-[11px] font-semibold text-white/40 mb-1 uppercase tracking-wider">Запрос</p>
+                  <p className="text-sm text-white/80 leading-relaxed">{selected.prompt}</p>
                 </div>
-                {selected.prompt && (
-                  <p className="text-sm text-white/80 italic">&ldquo;{selected.prompt}&rdquo;</p>
-                )}
-                <div className="flex gap-2">
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() => handleCopy(selected)}
-                    className="flex-1 rounded-xl border-white/20 bg-white/5 hover:bg-white/10 gap-2"
-                  >
-                    {copied ? <Check className="h-4 w-4 text-green-400" /> : <Copy className="h-4 w-4" />}
-                    {copied ? 'Скопировано' : 'Поделиться'}
-                  </Button>
-                  <Button
-                    size="sm"
-                    onClick={() => { setSelected(null); handleRepeat(selected) }}
-                    className="flex-1 rounded-xl bg-gradient-to-r from-[#FFD700] via-[#FFB700] to-[#FF8C00] text-black font-bold hover:opacity-90 gap-2"
-                  >
-                    <Sparkles className="h-4 w-4" />
-                    Повторить
-                  </Button>
-                </div>
+              )}
+
+              {/* Buttons */}
+              <div className="flex gap-2 pt-1">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => handleCopy(selected)}
+                  className="flex-1 rounded-xl border-white/15 bg-white/5 hover:bg-white/10 gap-2 h-11"
+                >
+                  {copied ? <Check className="h-4 w-4 text-green-400" /> : <Copy className="h-4 w-4" />}
+                  {copied ? 'Скопировано' : 'Поделиться'}
+                </Button>
+                <Button
+                  size="sm"
+                  onClick={() => { setSelected(null); handleRepeat(selected) }}
+                  className="flex-1 rounded-xl bg-gradient-to-r from-[#FFD700] via-[#FFB700] to-[#FF8C00] text-black font-bold hover:opacity-90 gap-2 h-11"
+                >
+                  <Sparkles className="h-4 w-4" />
+                  Повторить
+                </Button>
               </div>
             </div>
           </div>

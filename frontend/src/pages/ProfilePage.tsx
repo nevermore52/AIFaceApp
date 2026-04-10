@@ -3,7 +3,7 @@ import { useAuthStore } from '../store/auth'
 import { userApi, authApi, API_BASE_URL } from '../lib/api'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../components/ui/card'
 import { Button } from '../components/ui/button'
-import { Copy, Check, Users, Shield, Image as ImageIcon, Music, Video, MessageSquare, ChevronRight, ChevronLeft, History } from 'lucide-react'
+import { Copy, Check, Users, Shield, FileImage, Music, Video, MessageSquare, ChevronRight, ChevronLeft, History } from 'lucide-react'
 import { useSearchParams, useNavigate, Link } from 'react-router-dom'
 import { formatDate, cn } from '../lib/utils'
 
@@ -161,7 +161,7 @@ export function ProfilePage() {
 
   const getIcon = (modelType: string) => {
     switch (modelType) {
-      case 'image': return ImageIcon
+      case 'image': return FileImage
       case 'music': return Music
       case 'video': return Video
       default: return MessageSquare
@@ -249,7 +249,7 @@ export function ProfilePage() {
           {quota && (
             <div className="grid grid-cols-4 gap-2">
               {[
-                { label: 'Фото', icon: ImageIcon, val: quota.image_weekly + quota.image_extra, color: 'text-green-400' },
+                { label: 'Фото', icon: FileImage, val: quota.image_weekly + quota.image_extra, color: 'text-green-400' },
                 { label: 'Видео', icon: Video, val: quota.video_weekly + quota.video_extra, color: 'text-orange-400' },
                 { label: 'Музыка', icon: Music, val: quota.music_weekly + quota.music_extra, color: 'text-purple-400' },
                 { label: 'Текст', icon: MessageSquare, val: quota.text_daily + quota.text_extra, color: 'text-blue-400' },
