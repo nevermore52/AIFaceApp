@@ -508,10 +508,18 @@ function GalleryIdeasTab() {
     const formData = new FormData()
     formData.append('image', file)
     
+    // Get token from auth-storage (same way as ApiClient)
+    const storage = localStorage.getItem('auth-storage')
+    let token = null
+    if (storage) {
+      const parsed = JSON.parse(storage)
+      token = parsed.state?.accessToken
+    }
+    
     const response = await fetch('/api/upload-image', {
       method: 'POST',
       headers: {
-        'Authorization': `Bearer ${localStorage.getItem('token')}`,
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
       },
       body: formData,
     })
