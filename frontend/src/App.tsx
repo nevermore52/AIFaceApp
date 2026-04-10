@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { BrowserRouter, Routes, Route, Navigate, useLocation } from 'react-router-dom'
+import { BrowserRouter, Routes, Route, Navigate, useLocation, useNavigate } from 'react-router-dom'
 import { useAuthStore } from './store/auth'
 import { authApi, userApi } from './lib/api'
 import { Layout } from './components/Layout'
@@ -87,10 +87,34 @@ function TelegramWebAppAuth({ children }: { children: React.ReactNode }) {
   return <>{children}</>
 }
 
+function TelegramDeepLinkRedirect({ children }: { children: React.ReactNode }) {
+  const navigate = useNavigate()
+  const [handled, setHandled] = useState(false)
+
+  useEffect(() => {
+    const tg = window.Telegram?.WebApp
+    if (tg?.initDataUnsafe) {
+      const startParam = (tg.initDataUnsafe as any).start_param
+      if (startParam && typeof startParam === 'string') {
+        if (startParam.startsWith('g-')) {
+          navigate(`/ideas?id=${startParam.substring(2)}`, { replace: true })
+        } else if (startParam.startsWith('h-')) {
+          navigate(`/ideas?id=${startParam.substring(2)}`, { replace: true })
+        }
+      }
+    }
+    setHandled(true)
+  }, [])
+
+  if (!handled) return null
+  return <>{children}</>
+}
+
 function App() {
   return (
     <BrowserRouter>
       <TelegramWebAppAuth>
+        <TelegramDeepLinkRedirect>
         <Routes>
           <Route path="/login" element={<LoginPage />} />
           <Route path="/auth/callback" element={<AuthCallbackPage />} />
@@ -148,6 +172,7 @@ function App() {
           </Route>
         </Routes>
         <Toaster />
+        </TelegramDeepLinkRedirect>
       </TelegramWebAppAuth>
     </BrowserRouter>
   )
