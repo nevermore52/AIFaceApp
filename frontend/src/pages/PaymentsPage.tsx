@@ -179,23 +179,25 @@ export function PaymentsPage() {
                 {isPro && (
                   <div className="absolute top-0 left-0 right-0 h-0.5 bg-gradient-to-r from-transparent via-primary to-transparent" />
                 )}
-                {sub.discount > 0 && (
-                  <div className="absolute top-3 right-3 bg-primary text-white text-[10px] font-bold px-2 py-1 rounded-md shadow-[0_0_15px_rgba(139,92,246,0.5)]">
-                    -{sub.discount}%
-                  </div>
-                )}
-                {isCurrentPlan && (
-                  <div className="absolute top-3 left-3 bg-green-500/20 text-green-400 text-[10px] font-bold px-2 py-1 rounded-md border border-green-500/20">
-                    Активен
-                  </div>
-                )}
                 <CardHeader className="pb-2 pt-4 px-4">
-                  <div className="flex items-center justify-between">
+                  {/* Row 1: name + optional "Активен" badge */}
+                  <div className="flex items-center gap-2 mb-1">
                     <CardTitle className="capitalize text-lg tracking-tight text-white/90">{sub.name}</CardTitle>
-                    <div>
-                      <span className="text-2xl font-bold text-white">{formatPrice(sub.price)}</span>
-                      <span className="text-white/40 ml-1 text-xs">/нед</span>
-                    </div>
+                    {isCurrentPlan && (
+                      <span className="bg-green-500/20 text-green-400 text-[10px] font-bold px-2 py-0.5 rounded-md border border-green-500/20">
+                        Активен
+                      </span>
+                    )}
+                  </div>
+                  {/* Row 2: price + discount badge */}
+                  <div className="flex items-center gap-2">
+                    <span className="text-2xl font-bold text-white">{formatPrice(sub.price)}</span>
+                    <span className="text-white/40 text-xs">/нед</span>
+                    {sub.discount > 0 && (
+                      <span className="bg-primary text-white text-[10px] font-bold px-2 py-0.5 rounded-md shadow-[0_0_10px_rgba(139,92,246,0.4)]">
+                        -{sub.discount}%
+                      </span>
+                    )}
                   </div>
                 </CardHeader>
                 <CardContent className="space-y-3 px-4 pb-4">
