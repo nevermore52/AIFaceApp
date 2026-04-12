@@ -307,15 +307,16 @@ func (h *AdminHandler) GetGalleryIdeas(c *gin.Context) {
 
 func (h *AdminHandler) CreateGalleryIdea(c *gin.Context) {
 	var req struct {
-		Model  string `json:"model" binding:"required"`
-		Output string `json:"output" binding:"required"`
-		Prompt string `json:"prompt" binding:"required"`
+		Model    string `json:"model" binding:"required"`
+		Output   string `json:"output" binding:"required"`
+		Prompt   string `json:"prompt" binding:"required"`
+		Priority *int   `json:"priority"`
 	}
 	if err := c.ShouldBindJSON(&req); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
-	idea, err := h.generationService.CreateGalleryIdea(req.Model, req.Output, req.Prompt)
+	idea, err := h.generationService.CreateGalleryIdea(req.Model, req.Output, req.Prompt, req.Priority)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to create gallery idea"})
 		return
@@ -330,15 +331,16 @@ func (h *AdminHandler) UpdateGalleryIdea(c *gin.Context) {
 		return
 	}
 	var req struct {
-		Model  string `json:"model" binding:"required"`
-		Output string `json:"output" binding:"required"`
-		Prompt string `json:"prompt" binding:"required"`
+		Model    string `json:"model" binding:"required"`
+		Output   string `json:"output" binding:"required"`
+		Prompt   string `json:"prompt" binding:"required"`
+		Priority *int   `json:"priority"`
 	}
 	if err := c.ShouldBindJSON(&req); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
-	if err := h.generationService.UpdateGalleryIdea(id, req.Model, req.Output, req.Prompt); err != nil {
+	if err := h.generationService.UpdateGalleryIdea(id, req.Model, req.Output, req.Prompt, req.Priority); err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to update gallery idea"})
 		return
 	}
@@ -356,4 +358,18 @@ func (h *AdminHandler) DeleteGalleryIdea(c *gin.Context) {
 		return
 	}
 	c.JSON(http.StatusOK, gin.H{"message": "Gallery idea deleted"})
+}
+
+// GetGalleryIdeaPriorities returns taken priority slots (optionally excluding one idea by id).
+func (h *AdminHandler) GetGalleryIdeaPriorities(c *gin.Context) {
+	excludeID, _ := strconv.ParseInt(c.DefaultQuery("exclude_id", "0"), 10, 64)
+	taken, err := h.generationService.GetOccupiedPriorities(excludeID)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to get priorities"})
+		return
+	}
+	if taken == nil {
+		taken = []int{}
+	}
+	c.JSON(http.StatusOK, gin.H{"taken": taken})
 }

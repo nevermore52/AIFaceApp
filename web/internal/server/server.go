@@ -169,6 +169,7 @@ func New(cfg *config.Config, db *sql.DB) *Server {
 			admin.POST("/gallery-ideas", adminHandler.CreateGalleryIdea)
 			admin.PUT("/gallery-ideas/:id", adminHandler.UpdateGalleryIdea)
 			admin.DELETE("/gallery-ideas/:id", adminHandler.DeleteGalleryIdea)
+			admin.GET("/gallery-ideas/priorities", adminHandler.GetGalleryIdeaPriorities)
 		}
 	}
 

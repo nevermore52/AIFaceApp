@@ -1101,17 +1101,23 @@ func (s *WebGenerationService) GetByUserID(userID int64, limit, offset int) ([]*
 }
 
 // GetPublicGallery returns gallery ideas for the public gallery.
-func (s *WebGenerationService) GetPublicGallery(limit, offset int) ([]*GenerationRequest, int, error) {
+// sort="all" → priority ASC NULLS LAST, created_at DESC; sort="new" (default) → created_at DESC.
+func (s *WebGenerationService) GetPublicGallery(limit, offset int, sort string) ([]*GenerationRequest, int, error) {
 	var total int
 	err := s.db.QueryRow(`SELECT COUNT(*) FROM gallery_ideas`).Scan(&total)
 	if err != nil {
 		return nil, 0, err
 	}
 
+	orderClause := `created_at DESC`
+	if sort == "all" {
+		orderClause = `priority ASC NULLS LAST, created_at DESC`
+	}
+
 	rows, err := s.db.Query(`
 		SELECT id, model, output, prompt, created_at
 		FROM gallery_ideas
-		ORDER BY created_at DESC
+		ORDER BY `+orderClause+`
 		LIMIT $1 OFFSET $2
 	`, limit, offset)
 	if err != nil {

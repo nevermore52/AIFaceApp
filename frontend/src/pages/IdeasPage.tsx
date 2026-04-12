@@ -6,10 +6,13 @@ import { Button } from '../components/ui/button'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import { useAuthStore } from '../store/auth'
 
+type SortMode = 'all' | 'new'
+
 export function IdeasPage() {
   const navigate = useNavigate()
   const { isAuthenticated } = useAuthStore()
   const [searchParams] = useSearchParams()
+  const [sort, setSort] = useState<SortMode>('all')
   const [items, setItems] = useState<GalleryItem[]>([])
   const [total, setTotal] = useState(0)
   const [loading, setLoading] = useState(true)
@@ -20,39 +23,47 @@ export function IdeasPage() {
 
   const limit = 30
 
-  useEffect(() => {
-    publicApi.getGallery(limit, 0).then((res) => {
-      setItems(res.data || [])
+  const loadPage = useCallback((sortMode: SortMode, offset: number, replace: boolean) => {
+    if (offset === 0) setLoading(true)
+    else setLoadingMore(true)
+
+    publicApi.getGallery(limit, offset, sortMode).then((res) => {
+      const data = res.data || []
+      setItems(prev => replace ? data : [...prev, ...data])
       setTotal(res.total)
 
-      // Open by URL param or Telegram startapp
-      let itemId: number | null = null
-      const idParam = searchParams.get('id')
-      if (idParam) itemId = parseInt(idParam, 10)
-
-      const tg = window.Telegram?.WebApp
-      if (tg?.initDataUnsafe) {
-        const startParam = (tg.initDataUnsafe as any).start_param
-        if (startParam && typeof startParam === 'string' && startParam.startsWith('g-')) {
-          itemId = parseInt(startParam.substring(2), 10)
+      if (offset === 0) {
+        let itemId: number | null = null
+        const idParam = searchParams.get('id')
+        if (idParam) itemId = parseInt(idParam, 10)
+        const tg = window.Telegram?.WebApp
+        if (tg?.initDataUnsafe) {
+          const startParam = (tg.initDataUnsafe as any).start_param
+          if (startParam && typeof startParam === 'string' && startParam.startsWith('g-')) {
+            itemId = parseInt(startParam.substring(2), 10)
+          }
+        }
+        if (itemId) {
+          const item = data.find((i: GalleryItem) => i.id === itemId)
+          if (item) setSelected(item)
         }
       }
-
-      if (itemId) {
-        const item = res.data?.find((i: GalleryItem) => i.id === itemId)
-        if (item) setSelected(item)
-      }
-    }).catch(console.error).finally(() => setLoading(false))
+    }).catch(console.error).finally(() => {
+      setLoading(false)
+      setLoadingMore(false)
+    })
   }, [searchParams])
+
+  // Reload when sort changes
+  useEffect(() => {
+    setItems([])
+    loadPage(sort, 0, true)
+  }, [sort])
 
   const loadMore = useCallback(() => {
     if (loadingMore || items.length >= total) return
-    setLoadingMore(true)
-    publicApi.getGallery(limit, items.length).then((res) => {
-      setItems(prev => [...prev, ...(res.data || [])])
-      setTotal(res.total)
-    }).catch(console.error).finally(() => setLoadingMore(false))
-  }, [items.length, total, loadingMore])
+    loadPage(sort, items.length, false)
+  }, [items.length, total, loadingMore, sort, loadPage])
 
   useEffect(() => {
     const el = loaderRef.current
@@ -103,6 +114,23 @@ export function IdeasPage() {
         Идеи
       </h1>
 
+      {/* Sort tabs */}
+      <div className="flex gap-2">
+        {(['all', 'new'] as SortMode[]).map((s) => (
+          <button
+            key={s}
+            onClick={() => setSort(s)}
+            className={`px-4 py-1.5 rounded-full text-sm font-medium transition-colors ${
+              sort === s
+                ? 'bg-white text-black'
+                : 'bg-white/10 text-white/60 hover:bg-white/15'
+            }`}
+          >
+            {s === 'all' ? 'Все' : 'Новые'}
+          </button>
+        ))}
+      </div>
+
       {loading ? (
         <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-2">
           {[...Array(12)].map((_, i) => (
@@ -151,7 +179,6 @@ export function IdeasPage() {
           </button>
 
           <div style={{ position: 'relative', width: '100%', maxWidth: '640px' }} onClick={(e) => e.stopPropagation()}>
-
             {/* Image */}
             <img
               src={selected.output}

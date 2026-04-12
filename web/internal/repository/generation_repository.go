@@ -203,17 +203,18 @@ type GalleryIdea struct {
 	Model     string    `json:"model"`
 	Output    string    `json:"output"`
 	Prompt    string    `json:"prompt"`
+	Priority  *int      `json:"priority"`
 	CreatedAt time.Time `json:"created_at"`
 	UpdatedAt time.Time `json:"updated_at"`
 }
 
-func (r *GenerationRepository) CreateGalleryIdea(model, output, prompt string) (*GalleryIdea, error) {
+func (r *GenerationRepository) CreateGalleryIdea(model, output, prompt string, priority *int) (*GalleryIdea, error) {
 	idea := &GalleryIdea{}
 	err := r.db.QueryRow(`
-		INSERT INTO gallery_ideas (model, output, prompt, created_at, updated_at)
-		VALUES ($1, $2, $3, NOW(), NOW())
-		RETURNING id, model, output, prompt, created_at, updated_at
-	`, model, output, prompt).Scan(&idea.ID, &idea.Model, &idea.Output, &idea.Prompt, &idea.CreatedAt, &idea.UpdatedAt)
+		INSERT INTO gallery_ideas (model, output, prompt, priority, created_at, updated_at)
+		VALUES ($1, $2, $3, $4, NOW(), NOW())
+		RETURNING id, model, output, prompt, priority, created_at, updated_at
+	`, model, output, prompt, priority).Scan(&idea.ID, &idea.Model, &idea.Output, &idea.Prompt, &idea.Priority, &idea.CreatedAt, &idea.UpdatedAt)
 	return idea, err
 }
 
@@ -225,7 +226,7 @@ func (r *GenerationRepository) GetGalleryIdeas(limit, offset int) ([]*GalleryIde
 	}
 
 	rows, err := r.db.Query(`
-		SELECT id, model, output, prompt, created_at, updated_at
+		SELECT id, model, output, prompt, priority, created_at, updated_at
 		FROM gallery_ideas
 		ORDER BY created_at DESC
 		LIMIT $1 OFFSET $2
@@ -238,7 +239,7 @@ func (r *GenerationRepository) GetGalleryIdeas(limit, offset int) ([]*GalleryIde
 	var ideas []*GalleryIdea
 	for rows.Next() {
 		idea := &GalleryIdea{}
-		if err := rows.Scan(&idea.ID, &idea.Model, &idea.Output, &idea.Prompt, &idea.CreatedAt, &idea.UpdatedAt); err != nil {
+		if err := rows.Scan(&idea.ID, &idea.Model, &idea.Output, &idea.Prompt, &idea.Priority, &idea.CreatedAt, &idea.UpdatedAt); err != nil {
 			continue
 		}
 		ideas = append(ideas, idea)
@@ -246,12 +247,72 @@ func (r *GenerationRepository) GetGalleryIdeas(limit, offset int) ([]*GalleryIde
 	return ideas, total, rows.Err()
 }
 
-func (r *GenerationRepository) UpdateGalleryIdea(id int64, model, output, prompt string) error {
+// GetGalleryIdeasSorted returns ideas sorted by mode:
+//   "all"  — priority ASC NULLS LAST, then created_at DESC
+//   "new"  — created_at DESC (default)
+func (r *GenerationRepository) GetGalleryIdeasSorted(sort string, limit, offset int) ([]*GalleryIdea, int, error) {
+	var total int
+	err := r.db.QueryRow(`SELECT COUNT(*) FROM gallery_ideas`).Scan(&total)
+	if err != nil {
+		return nil, 0, err
+	}
+
+	orderClause := `created_at DESC`
+	if sort == "all" {
+		orderClause = `priority ASC NULLS LAST, created_at DESC`
+	}
+
+	rows, err := r.db.Query(`
+		SELECT id, model, output, prompt, priority, created_at, updated_at
+		FROM gallery_ideas
+		ORDER BY `+orderClause+`
+		LIMIT $1 OFFSET $2
+	`, limit, offset)
+	if err != nil {
+		return nil, 0, err
+	}
+	defer rows.Close()
+
+	var ideas []*GalleryIdea
+	for rows.Next() {
+		idea := &GalleryIdea{}
+		if err := rows.Scan(&idea.ID, &idea.Model, &idea.Output, &idea.Prompt, &idea.Priority, &idea.CreatedAt, &idea.UpdatedAt); err != nil {
+			continue
+		}
+		ideas = append(ideas, idea)
+	}
+	return ideas, total, rows.Err()
+}
+
+// GetOccupiedPriorities returns the list of priority slots already taken.
+func (r *GenerationRepository) GetOccupiedPriorities(excludeID int64) ([]int, error) {
+	var rows *sql.Rows
+	var err error
+	if excludeID > 0 {
+		rows, err = r.db.Query(`SELECT priority FROM gallery_ideas WHERE priority IS NOT NULL AND id <> $1 ORDER BY priority`, excludeID)
+	} else {
+		rows, err = r.db.Query(`SELECT priority FROM gallery_ideas WHERE priority IS NOT NULL ORDER BY priority`)
+	}
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var result []int
+	for rows.Next() {
+		var p int
+		if err := rows.Scan(&p); err == nil {
+			result = append(result, p)
+		}
+	}
+	return result, rows.Err()
+}
+
+func (r *GenerationRepository) UpdateGalleryIdea(id int64, model, output, prompt string, priority *int) error {
 	_, err := r.db.Exec(`
 		UPDATE gallery_ideas
-		SET model = $1, output = $2, prompt = $3, updated_at = NOW()
-		WHERE id = $4
-	`, model, output, prompt, id)
+		SET model = $1, output = $2, prompt = $3, priority = $4, updated_at = NOW()
+		WHERE id = $5
+	`, model, output, prompt, priority, id)
 	return err
 }
 

@@ -456,18 +456,172 @@ function PaymentsTab() {
 }
 
 // ─── Gallery Ideas Tab ────────────────────────────────────────────────────────
+
+type IdeaFormData = { model: string; output: string; prompt: string; priority: number | null }
+
+const EMPTY_FORM: IdeaFormData = { model: '', output: '', prompt: '', priority: null }
+
+function IdeaForm({
+  data,
+  onChange,
+  models,
+  takenPriorities,
+  uploading,
+  onSubmit,
+  onCancel,
+  submitLabel,
+}: {
+  data: IdeaFormData
+  onChange: (d: IdeaFormData) => void
+  models: any[]
+  takenPriorities: number[]
+  uploading: boolean
+  onSubmit: () => void
+  onCancel?: () => void
+  submitLabel: string
+}) {
+  const [imageFile, setImageFile] = useState<File | null>(null)
+  const [imagePreview, setImagePreview] = useState<string>(data.output || '')
+
+  const uploadImage = async (file: File): Promise<string> => {
+    const fd = new FormData()
+    fd.append('image', file)
+    const storage = localStorage.getItem('auth-storage')
+    let token = null
+    if (storage) {
+      try { token = JSON.parse(storage).state?.accessToken } catch {}
+    }
+    const resp = await fetch('/api/upload-image', {
+      method: 'POST',
+      headers: token ? { Authorization: `Bearer ${token}` } : {},
+      body: fd,
+    })
+    if (!resp.ok) throw new Error('Upload failed: ' + await resp.text())
+    return (await resp.json()).url
+  }
+
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    if (!file) return
+    setImageFile(file)
+    const reader = new FileReader()
+    reader.onloadend = () => setImagePreview(reader.result as string)
+    reader.readAsDataURL(file)
+  }
+
+  const handleSubmit = async () => {
+    if (!data.model || !data.prompt) { alert('Заполните модель и промпт'); return }
+    if (!imageFile && !data.output) { alert('Загрузите изображение или укажите URL'); return }
+    if (imageFile) {
+      try {
+        const url = await uploadImage(imageFile)
+        onChange({ ...data, output: url })
+        // We need to call onSubmit with updated output — use a temp approach
+        onSubmit()
+        return
+      } catch (err) {
+        alert('Ошибка загрузки: ' + (err instanceof Error ? err.message : String(err)))
+        return
+      }
+    }
+    onSubmit()
+  }
+
+  // Available positions: 1..50 minus taken (excluding current idea's own slot)
+  const availablePositions = Array.from({ length: 50 }, (_, i) => i + 1)
+    .filter(n => !takenPriorities.includes(n))
+
+  return (
+    <div className="space-y-3">
+      {/* Model */}
+      <div>
+        <label className="text-xs text-white/50 mb-1 block">Модель</label>
+        <select
+          value={data.model}
+          onChange={(e) => onChange({ ...data, model: e.target.value })}
+          className="w-full px-3 py-2 rounded-lg bg-white/5 border border-white/10 text-white text-sm [&>option]:bg-gray-900 [&>option]:text-white"
+        >
+          <option value="">Выберите модель</option>
+          {models.map((m) => (
+            <option key={m.id} value={m.id}>{m.name} ({m.type})</option>
+          ))}
+        </select>
+      </div>
+
+      {/* Image */}
+      <div>
+        <label className="text-xs text-white/50 mb-1 block">Изображение</label>
+        <input
+          type="file"
+          accept="image/*"
+          onChange={handleFileChange}
+          className="w-full px-3 py-2 rounded-lg bg-white/5 border border-white/10 text-white text-sm file:mr-4 file:py-1 file:px-3 file:rounded file:border-0 file:text-sm file:bg-white/10 file:text-white hover:file:bg-white/20"
+        />
+        {imagePreview && (
+          <img src={imagePreview} alt="Preview" className="mt-2 w-24 h-24 object-cover rounded-lg" />
+        )}
+      </div>
+
+      {/* Prompt */}
+      <textarea
+        placeholder="Промпт"
+        value={data.prompt}
+        onChange={(e) => onChange({ ...data, prompt: e.target.value })}
+        className="w-full px-3 py-2 rounded-lg bg-white/5 border border-white/10 text-white text-sm min-h-[72px]"
+      />
+
+      {/* Priority / место */}
+      <div>
+        <label className="text-xs text-white/50 mb-1 block">Место (приоритет)</label>
+        <select
+          value={data.priority ?? ''}
+          onChange={(e) => onChange({ ...data, priority: e.target.value ? parseInt(e.target.value) : null })}
+          className="w-full px-3 py-2 rounded-lg bg-white/5 border border-white/10 text-white text-sm [&>option]:bg-gray-900 [&>option]:text-white"
+        >
+          <option value="">— без приоритета —</option>
+          {/* Always include current value even if "taken" by self */}
+          {data.priority !== null && !availablePositions.includes(data.priority) && (
+            <option value={data.priority}>{data.priority}</option>
+          )}
+          {availablePositions.map(n => (
+            <option key={n} value={n}>{n}</option>
+          ))}
+        </select>
+      </div>
+
+      <div className="flex gap-2">
+        <Button onClick={handleSubmit} size="sm" className="flex-1" disabled={uploading}>
+          {uploading ? 'Загрузка...' : submitLabel}
+        </Button>
+        {onCancel && (
+          <Button onClick={onCancel} size="sm" variant="outline">Отмена</Button>
+        )}
+      </div>
+    </div>
+  )
+}
+
 function GalleryIdeasTab() {
   const [ideas, setIdeas] = useState<any[]>([])
   const [models, setModels] = useState<any[]>([])
   const [total, setTotal] = useState(0)
   const [loading, setLoading] = useState(false)
   const [uploading, setUploading] = useState(false)
-  const [limit] = useState(20)
+  const [limit] = useState(50)
   const [offset, setOffset] = useState(0)
-  const [editingId, setEditingId] = useState<number | null>(null)
-  const [formData, setFormData] = useState({ model: '', output: '', prompt: '' })
-  const [imageFile, setImageFile] = useState<File | null>(null)
-  const [imagePreview, setImagePreview] = useState<string>('')
+
+  // Selected idea for detail panel
+  const [selected, setSelected] = useState<any | null>(null)
+  const [editing, setEditing] = useState(false)
+  const [editForm, setEditForm] = useState<IdeaFormData>(EMPTY_FORM)
+
+  // Create panel
+  const [showCreate, setShowCreate] = useState(false)
+  const [createForm, setCreateForm] = useState<IdeaFormData>(EMPTY_FORM)
+
+  // Taken priorities for current context
+  const [takenForCreate, setTakenForCreate] = useState<number[]>([])
+  const [takenForEdit, setTakenForEdit] = useState<number[]>([])
 
   const load = useCallback(async () => {
     setLoading(true)
@@ -480,113 +634,61 @@ function GalleryIdeasTab() {
     }
   }, [limit, offset])
 
-  useEffect(() => { 
+  useEffect(() => {
     load()
-    // Load models
     generationApi.getModels().then((res) => {
-      // Filter only image and video models
-      const filtered = res.filter((m: any) => m.type === 'image' || m.type === 'video')
-      setModels(filtered)
+      setModels(res.filter((m: any) => m.type === 'image' || m.type === 'video'))
     }).catch(console.error)
   }, [load])
 
-  const handleImageChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0]
-    if (file) {
-      setImageFile(file)
-      const reader = new FileReader()
-      reader.onloadend = () => {
-        setImagePreview(reader.result as string)
-      }
-      reader.readAsDataURL(file)
+  // Load taken priorities when opening create panel
+  useEffect(() => {
+    if (showCreate) {
+      adminApi.getGalleryIdeaPriorities(0).then(r => setTakenForCreate(r.taken)).catch(console.error)
     }
-  }
+  }, [showCreate])
 
-  const uploadImage = async (file: File): Promise<string> => {
-    const formData = new FormData()
-    formData.append('image', file)
-    
-    // Get token from auth-storage (same way as ApiClient)
-    const storage = localStorage.getItem('auth-storage')
-    let token = null
-    if (storage) {
-      const parsed = JSON.parse(storage)
-      token = parsed.state?.accessToken
+  // Load taken priorities (excluding self) when opening edit
+  useEffect(() => {
+    if (editing && selected) {
+      adminApi.getGalleryIdeaPriorities(selected.id).then(r => setTakenForEdit(r.taken)).catch(console.error)
     }
-    
-    const headers: Record<string, string> = {}
-    if (token) {
-      headers['Authorization'] = `Bearer ${token}`
-    }
-    
-    const response = await fetch('/api/upload-image', {
-      method: 'POST',
-      headers,
-      body: formData,
-    })
-    
-    if (!response.ok) {
-      const errorText = await response.text()
-      throw new Error(`Upload failed: ${errorText}`)
-    }
-    const data = await response.json()
-    return data.url
-  }
+  }, [editing, selected])
 
   const handleCreate = async () => {
-    if (!formData.model || !formData.prompt) {
-      alert('Заполните модель и промпт')
-      return
-    }
-    if (!imageFile && !formData.output) {
-      alert('Загрузите изображение или укажите URL')
-      return
-    }
-    
     setUploading(true)
     try {
-      let outputUrl = formData.output
-      if (imageFile) {
-        outputUrl = await uploadImage(imageFile)
-      }
-      
-      const dataToSend = { model: formData.model, output: outputUrl, prompt: formData.prompt }
-      await adminApi.createGalleryIdea(dataToSend)
-      setFormData({ model: '', output: '', prompt: '' })
-      setImageFile(null)
-      setImagePreview('')
+      await adminApi.createGalleryIdea({
+        model: createForm.model,
+        output: createForm.output,
+        prompt: createForm.prompt,
+        priority: createForm.priority,
+      })
+      setCreateForm(EMPTY_FORM)
+      setShowCreate(false)
       load()
     } catch (err) {
-      console.error('Failed to create idea:', err)
-      alert('Ошибка при создании идеи: ' + (err instanceof Error ? err.message : String(err)))
+      alert('Ошибка: ' + (err instanceof Error ? err.message : String(err)))
     } finally {
       setUploading(false)
     }
   }
 
-  const handleUpdate = async (id: number) => {
-    if (!formData.model || !formData.prompt) return
-    if (!imageFile && !formData.output) {
-      alert('Загрузите изображение или укажите URL')
-      return
-    }
-    
+  const handleUpdate = async () => {
+    if (!selected) return
     setUploading(true)
     try {
-      let outputUrl = formData.output
-      if (imageFile) {
-        outputUrl = await uploadImage(imageFile)
-      }
-      
-      await adminApi.updateGalleryIdea(id, { ...formData, output: outputUrl })
-      setEditingId(null)
-      setFormData({ model: '', output: '', prompt: '' })
-      setImageFile(null)
-      setImagePreview('')
+      await adminApi.updateGalleryIdea(selected.id, {
+        model: editForm.model,
+        output: editForm.output,
+        prompt: editForm.prompt,
+        priority: editForm.priority,
+      })
+      setEditing(false)
+      setSelected(null)
       load()
     } catch (err) {
-      console.error('Failed to update idea:', err)
-      alert('Ошибка при обновлении идеи')
+      alert('Ошибка: ' + (err instanceof Error ? err.message : String(err)))
     } finally {
       setUploading(false)
     }
@@ -596,142 +698,136 @@ function GalleryIdeasTab() {
     if (!confirm('Удалить эту идею?')) return
     try {
       await adminApi.deleteGalleryIdea(id)
+      setSelected(null)
       load()
     } catch (err) {
-      console.error('Failed to delete idea:', err)
+      console.error(err)
     }
   }
 
-  const startEdit = (idea: any) => {
-    setEditingId(idea.id)
-    setFormData({ model: idea.model, output: idea.output, prompt: idea.prompt })
-    setImagePreview(idea.output)
-    setImageFile(null)
+  const openDetail = (idea: any) => {
+    setSelected(idea)
+    setEditing(false)
   }
 
-  const cancelEdit = () => {
-    setEditingId(null)
-    setFormData({ model: '', output: '', prompt: '' })
-    setImageFile(null)
-    setImagePreview('')
+  const startEdit = () => {
+    if (!selected) return
+    setEditForm({
+      model: selected.model,
+      output: selected.output,
+      prompt: selected.prompt,
+      priority: selected.priority ?? null,
+    })
+    setEditing(true)
   }
 
   return (
     <div className="space-y-4">
-      <div className="p-4 rounded-xl border border-white/10 bg-white/5 space-y-3">
-        <p className="text-sm font-semibold text-white/70">Добавить новую идею</p>
-        
-        <div>
-          <label className="text-xs text-white/50 mb-1 block">Модель</label>
-          <select
-            value={formData.model}
-            onChange={(e) => setFormData({ ...formData, model: e.target.value })}
-            className="w-full px-3 py-2 rounded-lg bg-white/5 border border-white/10 text-white text-sm [&>option]:bg-gray-900 [&>option]:text-white"
-          >
-            <option value="">Выберите модель</option>
-            {models.map((m) => (
-              <option key={m.id} value={m.id}>{m.name} ({m.type})</option>
-            ))}
-          </select>
-          {models.length === 0 && <p className="text-xs text-white/30 mt-1">Загрузка моделей...</p>}
-        </div>
-
-        <div>
-          <label className="text-xs text-white/50 mb-1 block">Изображение</label>
-          <input
-            type="file"
-            accept="image/*"
-            onChange={handleImageChange}
-            className="w-full px-3 py-2 rounded-lg bg-white/5 border border-white/10 text-white text-sm file:mr-4 file:py-1 file:px-3 file:rounded file:border-0 file:text-sm file:bg-white/10 file:text-white hover:file:bg-white/20"
-          />
-          {imagePreview && (
-            <img src={imagePreview} alt="Preview" className="mt-2 w-32 h-32 object-cover rounded-lg" />
-          )}
-        </div>
-
-        <textarea
-          placeholder="Промпт"
-          value={formData.prompt}
-          onChange={(e) => setFormData({ ...formData, prompt: e.target.value })}
-          className="w-full px-3 py-2 rounded-lg bg-white/5 border border-white/10 text-white text-sm min-h-[80px]"
-        />
-        <Button onClick={handleCreate} size="sm" className="w-full" disabled={uploading}>
-          {uploading ? 'Загрузка...' : 'Добавить'}
+      {/* Header */}
+      <div className="flex items-center justify-between">
+        <span className="text-xs text-white/40">Всего: {total}</span>
+        <Button size="sm" onClick={() => { setShowCreate(v => !v); setCreateForm(EMPTY_FORM) }}>
+          {showCreate ? 'Отмена' : '+ Добавить'}
         </Button>
       </div>
 
-      {loading ? <div className="text-white/40 text-sm">Загрузка...</div> : (
-        <div className="space-y-2">
+      {/* Create form */}
+      {showCreate && (
+        <div className="p-4 rounded-xl border border-white/10 bg-white/5">
+          <p className="text-sm font-semibold text-white/70 mb-3">Новая идея</p>
+          <IdeaForm
+            data={createForm}
+            onChange={setCreateForm}
+            models={models}
+            takenPriorities={takenForCreate}
+            uploading={uploading}
+            onSubmit={handleCreate}
+            onCancel={() => setShowCreate(false)}
+            submitLabel="Добавить"
+          />
+        </div>
+      )}
+
+      {/* Photo grid */}
+      {loading ? (
+        <div className="grid grid-cols-3 gap-2">
+          {[...Array(9)].map((_, i) => <div key={i} className="aspect-square rounded-xl bg-white/5 animate-pulse" />)}
+        </div>
+      ) : (
+        <div className="grid grid-cols-3 gap-2">
           {ideas.map((idea) => (
-            <div key={idea.id} className="p-4 rounded-xl border border-white/5 bg-white/[0.02] space-y-3">
-              {editingId === idea.id ? (
-                <>
-                  <div>
-                    <label className="text-xs text-white/50 mb-1 block">Модель</label>
-                    <select
-                      value={formData.model}
-                      onChange={(e) => setFormData({ ...formData, model: e.target.value })}
-                      className="w-full px-3 py-2 rounded-lg bg-white/5 border border-white/10 text-white text-sm [&>option]:bg-gray-900 [&>option]:text-white"
-                    >
-                      <option value="">Выберите модель</option>
-                      {models.map((m) => (
-                        <option key={m.id} value={m.id}>{m.name} ({m.type})</option>
-                      ))}
-                    </select>
-                  </div>
-                  <div>
-                    <label className="text-xs text-white/50 mb-1 block">Изображение</label>
-                    <input
-                      type="file"
-                      accept="image/*"
-                      onChange={handleImageChange}
-                      className="w-full px-3 py-2 rounded-lg bg-white/5 border border-white/10 text-white text-sm file:mr-4 file:py-1 file:px-3 file:rounded file:border-0 file:text-sm file:bg-white/10 file:text-white hover:file:bg-white/20"
-                    />
-                    {imagePreview && (
-                      <img src={imagePreview} alt="Preview" className="mt-2 w-32 h-32 object-cover rounded-lg" />
-                    )}
-                  </div>
-                  <textarea
-                    value={formData.prompt}
-                    onChange={(e) => setFormData({ ...formData, prompt: e.target.value })}
-                    className="w-full px-3 py-2 rounded-lg bg-white/5 border border-white/10 text-white text-sm min-h-[80px]"
-                  />
-                  <div className="flex gap-2">
-                    <Button onClick={() => handleUpdate(idea.id)} size="sm" variant="default" disabled={uploading}>
-                      {uploading ? 'Загрузка...' : 'Сохранить'}
-                    </Button>
-                    <Button onClick={cancelEdit} size="sm" variant="outline">Отмена</Button>
-                  </div>
-                </>
-              ) : (
-                <>
-                  <div className="flex items-start gap-3">
-                    <img src={idea.output} alt="" className="w-20 h-20 rounded-lg object-cover" />
-                    <div className="flex-1 min-w-0">
-                      <p className="text-xs text-white/40 mb-1">{idea.model}</p>
-                      <p className="text-sm text-white/70 italic">&ldquo;{idea.prompt}&rdquo;</p>
-                    </div>
-                  </div>
-                  <div className="flex gap-2">
-                    <Button onClick={() => startEdit(idea)} size="sm" variant="outline">Редактировать</Button>
-                    <Button onClick={() => handleDelete(idea.id)} size="sm" variant="outline" className="text-red-400 hover:text-red-300">Удалить</Button>
-                  </div>
-                </>
+            <button
+              key={idea.id}
+              onClick={() => openDetail(idea)}
+              className="relative aspect-square rounded-xl overflow-hidden bg-white/[0.03] group"
+            >
+              <img src={idea.output} alt="" className="w-full h-full object-cover" loading="lazy" />
+              {idea.priority != null && (
+                <span className="absolute top-1 left-1 text-[10px] font-bold bg-[#FFB700] text-black rounded px-1.5 py-0.5">
+                  #{idea.priority}
+                </span>
               )}
-            </div>
+            </button>
           ))}
         </div>
       )}
 
-      <div className="flex justify-between items-center pt-2">
-        <span className="text-xs text-white/40">Всего: {total}</span>
-        <div className="flex gap-2">
-          <Button size="sm" variant="outline" disabled={offset === 0} onClick={() => setOffset(Math.max(0, offset - limit))}
-            className="border-white/10">← Назад</Button>
-          <Button size="sm" variant="outline" disabled={offset + limit >= total} onClick={() => setOffset(offset + limit)}
-            className="border-white/10">Вперёд →</Button>
-        </div>
+      {/* Pagination */}
+      <div className="flex justify-end gap-2 pt-1">
+        <Button size="sm" variant="outline" disabled={offset === 0} onClick={() => setOffset(Math.max(0, offset - limit))} className="border-white/10">← Назад</Button>
+        <Button size="sm" variant="outline" disabled={offset + limit >= total} onClick={() => setOffset(offset + limit)} className="border-white/10">Вперёд →</Button>
       </div>
+
+      {/* Detail drawer */}
+      {selected && (
+        <div
+          style={{ position: 'fixed', inset: 0, zIndex: 9000, background: 'rgba(0,0,0,0.7)' }}
+          onClick={(e) => { if (e.target === e.currentTarget) { setSelected(null); setEditing(false) } }}
+        >
+          <div
+            style={{ position: 'fixed', bottom: 0, left: 0, right: 0, maxHeight: '85vh', overflowY: 'auto', background: '#111', borderRadius: '20px 20px 0 0', padding: '20px' }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* Handle */}
+            <div style={{ width: 40, height: 4, background: 'rgba(255,255,255,0.2)', borderRadius: 2, margin: '0 auto 16px' }} />
+
+            {editing ? (
+              <>
+                <p className="text-sm font-semibold text-white/70 mb-3">Редактировать идею</p>
+                <IdeaForm
+                  data={editForm}
+                  onChange={setEditForm}
+                  models={models}
+                  takenPriorities={takenForEdit}
+                  uploading={uploading}
+                  onSubmit={handleUpdate}
+                  onCancel={() => setEditing(false)}
+                  submitLabel="Сохранить"
+                />
+              </>
+            ) : (
+              <>
+                <img src={selected.output} alt="" style={{ width: '100%', maxHeight: 320, objectFit: 'contain', borderRadius: 12, background: '#000', display: 'block' }} />
+                <div style={{ marginTop: 12 }}>
+                  <div className="flex items-center gap-2 mb-2">
+                    <span className="text-xs text-white/40 bg-white/10 px-2 py-1 rounded-full">{selected.model}</span>
+                    {selected.priority != null && (
+                      <span className="text-xs font-bold bg-[#FFB700] text-black px-2 py-1 rounded-full">
+                        Место #{selected.priority}
+                      </span>
+                    )}
+                  </div>
+                  <p className="text-sm text-white/70 mb-4">{selected.prompt}</p>
+                  <div className="flex gap-2">
+                    <Button size="sm" variant="outline" onClick={startEdit} className="flex-1">Редактировать</Button>
+                    <Button size="sm" variant="outline" onClick={() => handleDelete(selected.id)} className="flex-1 text-red-400 hover:text-red-300">Удалить</Button>
+                  </div>
+                </div>
+              </>
+            )}
+          </div>
+        </div>
+      )}
     </div>
   )
 }

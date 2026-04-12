@@ -94,8 +94,8 @@ export interface GalleryItem {
 }
 
 export const publicApi = {
-  getGallery: (limit = 30, offset = 0) =>
-    api.get<{ data: GalleryItem[]; total: number }>(`/gallery?limit=${limit}&offset=${offset}`),
+  getGallery: (limit = 30, offset = 0, sort: 'new' | 'all' = 'new') =>
+    api.get<{ data: GalleryItem[]; total: number }>(`/gallery?limit=${limit}&offset=${offset}&sort=${sort}`),
 }
 
 export const authApi = {
@@ -191,12 +191,14 @@ export const adminApi = {
     api.get<any>(`/admin/payments?limit=${limit}&offset=${offset}`),
   getGalleryIdeas: (limit = 20, offset = 0) =>
     api.get<any>(`/admin/gallery-ideas?limit=${limit}&offset=${offset}`),
-  createGalleryIdea: (data: { model: string; output: string; prompt: string }) =>
+  createGalleryIdea: (data: { model: string; output: string; prompt: string; priority?: number | null }) =>
     api.post<any>('/admin/gallery-ideas', data),
-  updateGalleryIdea: (id: number, data: { model: string; output: string; prompt: string }) =>
+  updateGalleryIdea: (id: number, data: { model: string; output: string; prompt: string; priority?: number | null }) =>
     api.put<any>(`/admin/gallery-ideas/${id}`, data),
   deleteGalleryIdea: (id: number) =>
     api.delete<any>(`/admin/gallery-ideas/${id}`),
+  getGalleryIdeaPriorities: (excludeId = 0) =>
+    api.get<{ taken: number[] }>(`/admin/gallery-ideas/priorities?exclude_id=${excludeId}`),
 }
 
 export const paymentApi = {

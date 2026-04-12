@@ -166,7 +166,8 @@ func (h *GenerationHandler) GetUserHistory(c *gin.Context) {
 	})
 }
 
-// GetPublicGallery returns recent completed image generations (public, no auth).
+// GetPublicGallery returns gallery ideas (public, no auth).
+// Query params: sort=all (priority first) or sort=new (newest first, default).
 func (h *GenerationHandler) GetPublicGallery(c *gin.Context) {
 	if h.webGenerationService == nil {
 		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "Generation service not available"})
@@ -174,11 +175,12 @@ func (h *GenerationHandler) GetPublicGallery(c *gin.Context) {
 	}
 	limit, _ := strconv.Atoi(c.DefaultQuery("limit", "30"))
 	offset, _ := strconv.Atoi(c.DefaultQuery("offset", "0"))
+	sort := c.DefaultQuery("sort", "new")
 	if limit > 100 {
 		limit = 100
 	}
 
-	generations, total, err := h.webGenerationService.GetPublicGallery(limit, offset)
+	generations, total, err := h.webGenerationService.GetPublicGallery(limit, offset, sort)
 	if err != nil {
 		log.Printf("GetPublicGallery error: %v", err)
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to get gallery"})
