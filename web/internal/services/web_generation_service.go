@@ -1111,7 +1111,7 @@ func (s *WebGenerationService) GetPublicGallery(limit, offset int, sort string) 
 
 	orderClause := `created_at DESC`
 	if sort == "all" {
-		orderClause = `priority ASC NULLS LAST, created_at DESC`
+		orderClause = `priority ASC NULLS LAST, MD5(id::text)`
 	}
 
 	rows, err := s.db.Query(`
