@@ -142,14 +142,15 @@ export function IdeasPage() {
           style={{ position: 'fixed', inset: 0, zIndex: 9999, background: '#000', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '16px' }}
           onClick={(e) => { if (e.target === e.currentTarget) setSelected(null) }}
         >
+          {/* Close — always visible at top-right of screen */}
+          <button
+            onClick={() => setSelected(null)}
+            style={{ position: 'fixed', top: '12px', right: '12px', zIndex: 10001, padding: '8px', borderRadius: '50%', background: 'rgba(30,30,30,0.85)', border: '1px solid rgba(255,255,255,0.15)', cursor: 'pointer', backdropFilter: 'blur(4px)' }}
+          >
+            <X className="w-5 h-5 text-white" />
+          </button>
+
           <div style={{ position: 'relative', width: '100%', maxWidth: '640px' }} onClick={(e) => e.stopPropagation()}>
-            {/* Close */}
-            <button
-              onClick={() => setSelected(null)}
-              style={{ position: 'absolute', top: '-8px', right: '-8px', zIndex: 10, padding: '8px', borderRadius: '50%', background: 'rgba(255,255,255,0.1)', border: '1px solid rgba(255,255,255,0.1)', cursor: 'pointer' }}
-            >
-              <X className="w-5 h-5 text-white" />
-            </button>
 
             {/* Image */}
             <img
