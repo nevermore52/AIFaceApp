@@ -21,7 +21,7 @@ dist/
 # Environment files
 .env
 .env.local
-
+.claude/
 # Logs
 *.log
 logs/

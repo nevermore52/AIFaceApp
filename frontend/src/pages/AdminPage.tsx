@@ -476,12 +476,14 @@ function IdeaForm({
   models: any[]
   takenPriorities: number[]
   uploading: boolean
-  onSubmit: () => void
+  // receives resolved output URL so parent doesn't depend on async state update
+  onSubmit: (resolvedOutput: string) => void
   onCancel?: () => void
   submitLabel: string
 }) {
   const [imageFile, setImageFile] = useState<File | null>(null)
   const [imagePreview, setImagePreview] = useState<string>(data.output || '')
+  const [localUploading, setLocalUploading] = useState(false)
 
   const uploadImage = async (file: File): Promise<string> => {
     const fd = new FormData()
@@ -512,20 +514,25 @@ function IdeaForm({
   const handleSubmit = async () => {
     if (!data.model || !data.prompt) { alert('Заполните модель и промпт'); return }
     if (!imageFile && !data.output) { alert('Загрузите изображение или укажите URL'); return }
+
+    let resolvedOutput = data.output
     if (imageFile) {
+      setLocalUploading(true)
       try {
-        const url = await uploadImage(imageFile)
-        onChange({ ...data, output: url })
-        // We need to call onSubmit with updated output — use a temp approach
-        onSubmit()
-        return
+        resolvedOutput = await uploadImage(imageFile)
+        onChange({ ...data, output: resolvedOutput })
       } catch (err) {
         alert('Ошибка загрузки: ' + (err instanceof Error ? err.message : String(err)))
+        setLocalUploading(false)
         return
       }
+      setLocalUploading(false)
     }
-    onSubmit()
+    // Pass resolved URL directly — no async state race
+    onSubmit(resolvedOutput)
   }
+
+  const isDisabled = uploading || localUploading
 
   // Available positions: 1..50 minus taken (excluding current idea's own slot)
   const availablePositions = Array.from({ length: 50 }, (_, i) => i + 1)
@@ -590,11 +597,11 @@ function IdeaForm({
       </div>
 
       <div className="flex gap-2">
-        <Button onClick={handleSubmit} size="sm" className="flex-1" disabled={uploading}>
-          {uploading ? 'Загрузка...' : submitLabel}
+        <Button onClick={handleSubmit} size="sm" className="flex-1" disabled={isDisabled}>
+          {isDisabled ? 'Загрузка...' : submitLabel}
         </Button>
         {onCancel && (
-          <Button onClick={onCancel} size="sm" variant="outline">Отмена</Button>
+          <Button onClick={onCancel} size="sm" variant="outline" disabled={isDisabled}>Отмена</Button>
         )}
       </div>
     </div>
@@ -655,12 +662,12 @@ function GalleryIdeasTab() {
     }
   }, [editing, selected])
 
-  const handleCreate = async () => {
+  const handleCreate = async (resolvedOutput: string) => {
     setUploading(true)
     try {
       await adminApi.createGalleryIdea({
         model: createForm.model,
-        output: createForm.output,
+        output: resolvedOutput,
         prompt: createForm.prompt,
         priority: createForm.priority,
       })
@@ -674,13 +681,13 @@ function GalleryIdeasTab() {
     }
   }
 
-  const handleUpdate = async () => {
+  const handleUpdate = async (resolvedOutput: string) => {
     if (!selected) return
     setUploading(true)
     try {
       await adminApi.updateGalleryIdea(selected.id, {
         model: editForm.model,
-        output: editForm.output,
+        output: resolvedOutput,
         prompt: editForm.prompt,
         priority: editForm.priority,
       })

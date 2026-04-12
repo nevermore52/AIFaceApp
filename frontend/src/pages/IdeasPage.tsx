@@ -146,13 +146,18 @@ export function IdeasPage() {
               <button
                 key={item.id}
                 onClick={() => setSelected(item)}
-                className="relative aspect-square rounded-xl overflow-hidden group cursor-pointer bg-white/[0.03]"
+                className="relative aspect-square rounded-xl overflow-hidden group cursor-pointer bg-white/[0.03] idea-card"
               >
                 <img
                   src={item.output}
                   alt=""
                   className="w-full h-full object-contain transition-transform duration-300 group-hover:scale-105"
                   loading="lazy"
+                  onError={(e) => {
+                    // hide cards with broken images
+                    const card = (e.currentTarget as HTMLElement).closest('.idea-card') as HTMLElement | null
+                    if (card) card.style.display = 'none'
+                  }}
                 />
               </button>
             ))}
