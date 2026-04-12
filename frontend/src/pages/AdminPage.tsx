@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback } from 'react'
+import { createPortal } from 'react-dom'
 import { useNavigate } from 'react-router-dom'
 import { useAuthStore } from '../store/auth'
 import { adminApi, generationApi } from '../lib/api'
@@ -493,7 +494,7 @@ function IdeaForm({
     if (storage) {
       try { token = JSON.parse(storage).state?.accessToken } catch {}
     }
-    const resp = await fetch('/api/upload-image', {
+    const resp = await fetch('/api/admin/upload', {
       method: 'POST',
       headers: token ? { Authorization: `Bearer ${token}` } : {},
       body: fd,
@@ -785,8 +786,8 @@ function GalleryIdeasTab() {
         <Button size="sm" variant="outline" disabled={offset + limit >= total} onClick={() => setOffset(offset + limit)} className="border-white/10">Вперёд →</Button>
       </div>
 
-      {/* Detail drawer */}
-      {selected && (
+      {/* Detail drawer — portaled to body so fixed positioning works */}
+      {selected && createPortal(
         <div
           style={{ position: 'fixed', inset: 0, zIndex: 9000, background: 'rgba(0,0,0,0.7)' }}
           onClick={(e) => { if (e.target === e.currentTarget) { setSelected(null); setEditing(false) } }}
@@ -833,7 +834,8 @@ function GalleryIdeasTab() {
               </>
             )}
           </div>
-        </div>
+        </div>,
+        document.body
       )}
     </div>
   )

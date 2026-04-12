@@ -429,6 +429,51 @@ func (h *GenerationHandler) UploadImage(c *gin.Context) {
 	})
 }
 
+// AdminUploadImage is the same as UploadImage but uses userID=0, so the file
+// is saved permanently without being subject to the per-user 10-file cleanup.
+// Used for gallery-idea images that must persist indefinitely.
+func (h *GenerationHandler) AdminUploadImage(c *gin.Context) {
+	if h.webGenerationService == nil {
+		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "Service not available"})
+		return
+	}
+
+	file, header, err := c.Request.FormFile("image")
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "No file provided"})
+		return
+	}
+	defer file.Close()
+
+	if header.Size > 20*1024*1024 {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "File too large (max 20MB)"})
+		return
+	}
+
+	buffer := make([]byte, 512)
+	n, _ := file.Read(buffer)
+	file.Seek(0, 0)
+	contentType := http.DetectContentType(buffer[:n])
+	if !strings.HasPrefix(contentType, "image/") {
+		if ct := header.Header.Get("Content-Type"); strings.HasPrefix(ct, "image/") {
+			contentType = ct
+		} else {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid file type"})
+			return
+		}
+	}
+	_ = contentType
+
+	// userID=0 → skips user_uploads tracking → file never gets auto-deleted
+	url, err := h.webGenerationService.SaveUploadedFile(file, header.Filename, h.uploadDir, h.webBaseURL, 0)
+	if err != nil {
+		log.Printf("AdminUploadImage error: %v", err)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to upload image"})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"url": url, "size": header.Size})
+}
+
 // GetUserUploads returns previously uploaded images for the current user.
 func (h *GenerationHandler) GetUserUploads(c *gin.Context) {
 	user, exists := c.Get("user")

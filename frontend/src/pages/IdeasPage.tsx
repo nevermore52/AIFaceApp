@@ -199,9 +199,25 @@ export function IdeasPage() {
 
               {selected.prompt && (
                 <div style={{ marginTop: '12px' }}>
-                  <p style={{ fontSize: '11px', fontWeight: 600, color: 'rgba(255,255,255,0.4)', marginBottom: '4px', textTransform: 'uppercase', letterSpacing: '0.1em' }}>Запрос</p>
-                  <div style={{ maxHeight: '96px', overflowY: 'auto' }}>
-                    <p style={{ fontSize: '14px', color: 'rgba(255,255,255,0.8)', lineHeight: 1.6 }}>{selected.prompt}</p>
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '6px' }}>
+                    <p style={{ fontSize: '11px', fontWeight: 600, color: 'rgba(255,255,255,0.4)', textTransform: 'uppercase', letterSpacing: '0.1em', margin: 0 }}>Запрос</p>
+                    <button
+                      onClick={async () => {
+                        try { await navigator.clipboard.writeText(selected.prompt) }
+                        catch { const el = document.createElement('textarea'); el.value = selected.prompt; document.body.appendChild(el); el.select(); document.execCommand('copy'); document.body.removeChild(el) }
+                        setCopied(true); setTimeout(() => setCopied(false), 2000)
+                      }}
+                      style={{ padding: '4px 10px', borderRadius: '6px', background: 'rgba(255,255,255,0.07)', border: '1px solid rgba(255,255,255,0.1)', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '5px', fontSize: '11px', color: copied ? '#4ade80' : 'rgba(255,255,255,0.5)' }}
+                    >
+                      {copied
+                        ? <><Check style={{ width: 12, height: 12 }} /> Скопировано</>
+                        : <><Copy style={{ width: 12, height: 12 }} /> Копировать</>
+                      }
+                    </button>
+                  </div>
+                  {/* Scrollable prompt with visible scrollbar */}
+                  <div style={{ maxHeight: '100px', overflowY: 'auto', paddingRight: '4px', scrollbarWidth: 'thin', scrollbarColor: 'rgba(255,255,255,0.2) transparent' }}>
+                    <p style={{ fontSize: '14px', color: 'rgba(255,255,255,0.8)', lineHeight: 1.6, margin: 0 }}>{selected.prompt}</p>
                   </div>
                 </div>
               )}
