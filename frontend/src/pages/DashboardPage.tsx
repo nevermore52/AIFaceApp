@@ -139,9 +139,6 @@ export function DashboardPage() {
         </div>
       )}
 
-      {/* Title */}
-      <h1 className="text-2xl font-bold tracking-tight text-white">Создать</h1>
-
       {/* TG channel card */}
       <a
         href={CHANNEL_URL}
@@ -166,6 +163,9 @@ export function DashboardPage() {
           </div>
         </div>
       </a>
+
+      {/* Title + Category grid */}
+      <h1 className="text-2xl font-bold tracking-tight text-white">Создать</h1>
 
       {/* Category grid */}
       <div className="flex gap-3 overflow-x-auto pb-1 -mx-1 px-1 scrollbar-hide">
