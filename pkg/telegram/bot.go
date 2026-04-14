@@ -1628,7 +1628,11 @@ func (b *Bot) handlePhoto(msg *tgmodels.Message) {
 		if err := b.redisClient.SetMotionControlPending(userID, fileURL, caption); err != nil {
 			log.Printf("Failed to save motion control pending: %v", err)
 		}
-		b.sendHTMLText(chatID, "✅ Фото персонажа получено!\n\nТеперь отправьте <b>опорное видео движения</b> — бот скопирует движения из него на персонажа.")
+		hint := "✅ Фото персонажа получено!\n\nТеперь отправьте <b>опорное видео движения</b> — бот скопирует движения из него на персонажа.\n\n💬 <i>Можно добавить подпись к видео — она будет использована как текстовый запрос.</i>"
+		if caption != "" {
+			hint = fmt.Sprintf("✅ Фото персонажа получено! Запрос: <i>%s</i>\n\nТеперь отправьте <b>опорное видео движения</b>.", caption)
+		}
+		b.sendHTMLText(chatID, hint)
 		return
 	}
 
@@ -1683,6 +1687,12 @@ func (b *Bot) handleVideoMessage(msg *tgmodels.Message) {
 	}
 	videoURL := b.getFileURL(file)
 
+	// Если пользователь добавил подпись к видео — используем её как промпт (перекрывает подпись с фото)
+	prompt := pending.Prompt
+	if strings.TrimSpace(msg.Caption) != "" {
+		prompt = strings.TrimSpace(msg.Caption)
+	}
+
 	modelOpt, ok := findModelOption("kling-2.6/motion-control")
 	if !ok {
 		b.sendErrorMessage(chatID, "Модель Kling Motion Control не найдена.")
@@ -1690,7 +1700,7 @@ func (b *Bot) handleVideoMessage(msg *tgmodels.Message) {
 	}
 
 	// Process the motion-control generation
-	b.processMotionControlGeneration(chatID, userID, pending.PhotoURL, videoURL, pending.Prompt, modelOpt)
+	b.processMotionControlGeneration(chatID, userID, pending.PhotoURL, videoURL, prompt, modelOpt)
 }
 
 // handleDocument обрабатывает документы как изображения (если это картинка)
