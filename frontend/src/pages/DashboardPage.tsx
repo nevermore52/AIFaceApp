@@ -182,17 +182,17 @@ export function DashboardPage() {
       <h1 className="text-2xl font-bold tracking-tight text-white">Создать</h1>
 
       {/* Category grid */}
-      <div className="flex gap-3 overflow-x-auto pb-1 -mx-1 px-1 scrollbar-hide">
+      <div className="flex gap-3 overflow-x-auto pb-1 -mx-1 px-1 scrollbar-hide" style={{ WebkitOverflowScrolling: 'touch' }}>
         {categories.map((cat) => (
           <button
             key={cat.id}
             onClick={() => handleCategoryClick(cat)}
-            className="flex flex-col items-center gap-2 flex-shrink-0 group w-[72px]"
+            className="flex flex-col items-center gap-2 flex-shrink-0 group w-[72px] md:w-[96px]"
           >
-            <div className="w-16 h-16 rounded-2xl flex items-center justify-center bg-[#1a1a1f] transition-all duration-200 group-hover:scale-105 group-active:scale-95 border border-white/10">
-              <cat.icon className="w-7 h-7 text-[#FFB700]" />
+            <div className="w-16 h-16 md:w-20 md:h-20 rounded-2xl flex items-center justify-center bg-[#1a1a1f] transition-all duration-200 group-hover:scale-105 group-active:scale-95 border border-white/10">
+              <cat.icon className="w-7 h-7 md:w-9 md:h-9 text-[#FFB700]" />
             </div>
-            <span className="text-[11px] font-medium text-white/60 group-hover:text-white transition-colors text-center leading-tight w-full">
+            <span className="text-[11px] md:text-xs font-medium text-white/60 group-hover:text-white transition-colors text-center leading-tight w-full">
               {cat.label}
             </span>
           </button>
@@ -204,39 +204,25 @@ export function DashboardPage() {
         <div className="space-y-3">
           <h2 className="text-xl font-bold tracking-tight text-white">Тренды</h2>
           {loadingTrends ? (
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
-              {[...Array(6)].map((_, i) => (
-                <div key={i} style={{ height: i % 3 === 0 ? 200 : 140, borderRadius: 16, background: 'rgba(255,255,255,0.05)' }} className="animate-pulse" />
+            <div className="columns-2 md:columns-3 lg:columns-4" style={{ gap: 8, columnGap: 8 }}>
+              {[...Array(8)].map((_, i) => (
+                <div key={i} style={{ breakInside: 'avoid', marginBottom: 8, borderRadius: 16, background: 'rgba(255,255,255,0.05)', aspectRatio: i % 3 === 0 ? '3/4' : '4/3' }} className="animate-pulse" />
               ))}
             </div>
           ) : (
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
-              {/* Left column — even indices */}
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-                {trends.filter((_, i) => i % 2 === 0).map((t, ci) => (
-                  <button key={t.id} onClick={() => setSelectedTrend(t)}
-                    style={{ position: 'relative', width: '100%', aspectRatio: ci % 2 === 0 ? '3/4' : '4/3', borderRadius: 16, overflow: 'hidden', cursor: 'pointer', border: 'none', padding: 0, display: 'block', flexShrink: 0 }}
+            <div className="columns-2 md:columns-3 lg:columns-4" style={{ gap: 8, columnGap: 8 }}>
+              {trends.map((t, i) => (
+                <div key={t.id} style={{ breakInside: 'avoid', marginBottom: 8 }}>
+                  <button onClick={() => setSelectedTrend(t)}
+                    style={{ position: 'relative', width: '100%', aspectRatio: i % 3 === 0 ? '3/4' : '4/3', borderRadius: 16, overflow: 'hidden', cursor: 'pointer', border: 'none', padding: 0, display: 'block' }}
                   >
                     <img src={t.output} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} loading="lazy" />
                     <div style={{ position: 'absolute', bottom: 0, left: 0, right: 0, height: '65%', background: 'linear-gradient(to top, rgba(0,0,0,0.85), transparent)', pointerEvents: 'none' }} />
                     {t.title && <div style={{ position: 'absolute', bottom: 8, left: 10, right: 10, color: 'white', fontSize: 13, fontWeight: 600, lineHeight: 1.3, pointerEvents: 'none', textAlign: 'left' }}>{t.title}</div>}
                     {t.is_popular && <div style={{ position: 'absolute', top: 8, left: 8, background: '#FFB700', color: '#000', fontSize: 10, fontWeight: 700, padding: '3px 8px', borderRadius: 20, pointerEvents: 'none' }}>Популярное</div>}
                   </button>
-                ))}
-              </div>
-              {/* Right column — odd indices, inverted tall/short pattern */}
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-                {trends.filter((_, i) => i % 2 === 1).map((t, ci) => (
-                  <button key={t.id} onClick={() => setSelectedTrend(t)}
-                    style={{ position: 'relative', width: '100%', aspectRatio: ci % 2 === 0 ? '4/3' : '3/4', borderRadius: 16, overflow: 'hidden', cursor: 'pointer', border: 'none', padding: 0, display: 'block', flexShrink: 0 }}
-                  >
-                    <img src={t.output} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} loading="lazy" />
-                    <div style={{ position: 'absolute', bottom: 0, left: 0, right: 0, height: '65%', background: 'linear-gradient(to top, rgba(0,0,0,0.85), transparent)', pointerEvents: 'none' }} />
-                    {t.title && <div style={{ position: 'absolute', bottom: 8, left: 10, right: 10, color: 'white', fontSize: 13, fontWeight: 600, lineHeight: 1.3, pointerEvents: 'none', textAlign: 'left' }}>{t.title}</div>}
-                    {t.is_popular && <div style={{ position: 'absolute', top: 8, left: 8, background: '#FFB700', color: '#000', fontSize: 10, fontWeight: 700, padding: '3px 8px', borderRadius: 20, pointerEvents: 'none' }}>Популярное</div>}
-                  </button>
-                ))}
-              </div>
+                </div>
+              ))}
             </div>
           )}
         </div>
