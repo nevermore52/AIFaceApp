@@ -225,21 +225,39 @@ func (c *Client) DeleteMotionControlPending(userID int64) error {
 	return c.rdb.Del(c.ctx, key).Err()
 }
 
-// SetMotionControlPendingVideo temporarily stores a reference video URL
-// for when the video arrives in the same album as the photo (race condition).
-func (c *Client) SetMotionControlPendingVideo(userID int64, videoURL string) error {
-	key := fmt.Sprintf("user:%d:motion_control_pending_video", userID)
-	return c.rdb.Set(c.ctx, key, videoURL, 30*time.Second).Err()
+// MotionControlPendingVideo stores reference video URL + duration for album race-condition handling.
+type MotionControlPendingVideo struct {
+	VideoURL string `json:"video_url"`
+	Duration int    `json:"duration"`
 }
 
-// GetAndDeleteMotionControlPendingVideo retrieves and atomically deletes the pending video URL.
-func (c *Client) GetAndDeleteMotionControlPendingVideo(userID int64) (string, error) {
+// SetMotionControlPendingVideo temporarily stores a reference video URL + duration
+// for when the video arrives in the same album as the photo (race condition).
+func (c *Client) SetMotionControlPendingVideo(userID int64, videoURL string, duration int) error {
+	key := fmt.Sprintf("user:%d:motion_control_pending_video", userID)
+	data := MotionControlPendingVideo{VideoURL: videoURL, Duration: duration}
+	bytes, err := json.Marshal(data)
+	if err != nil {
+		return err
+	}
+	return c.rdb.Set(c.ctx, key, string(bytes), 30*time.Second).Err()
+}
+
+// GetAndDeleteMotionControlPendingVideo retrieves and atomically deletes the pending video info.
+func (c *Client) GetAndDeleteMotionControlPendingVideo(userID int64) (*MotionControlPendingVideo, error) {
 	key := fmt.Sprintf("user:%d:motion_control_pending_video", userID)
 	val, err := c.rdb.GetDel(c.ctx, key).Result()
 	if err == redis.Nil {
-		return "", nil
+		return nil, nil
 	}
-	return val, err
+	if err != nil {
+		return nil, err
+	}
+	var data MotionControlPendingVideo
+	if err := json.Unmarshal([]byte(val), &data); err != nil {
+		return nil, err
+	}
+	return &data, nil
 }
 
 func NewClient(cfg config.RedisConfig) (*Client, error) {

@@ -1631,18 +1631,18 @@ func (b *Bot) handlePhoto(msg *tgmodels.Message) {
 
 		// Если фото пришло в альбоме вместе с видео — видео уже припарковано, запускаем сразу
 		if msg.MediaGroupID != "" {
-			if videoURL, verr := b.redisClient.GetAndDeleteMotionControlPendingVideo(userID); verr == nil && videoURL != "" {
+			if pendingVid, verr := b.redisClient.GetAndDeleteMotionControlPendingVideo(userID); verr == nil && pendingVid != nil {
 				_ = b.redisClient.DeleteMotionControlPending(userID)
 				if mcOpt, ok := findModelOption("kling-2.6/motion-control"); ok {
-					b.processMotionControlGeneration(chatID, userID, fileURL, videoURL, caption, mcOpt)
+					b.processMotionControlGeneration(chatID, userID, fileURL, pendingVid.VideoURL, caption, pendingVid.Duration, mcOpt)
 				}
 				return
 			}
 			// Видео ещё не пришло — подождём через отложенный запуск
 			go func() {
 				time.Sleep(3 * time.Second)
-				videoURL, verr := b.redisClient.GetAndDeleteMotionControlPendingVideo(userID)
-				if verr != nil || videoURL == "" {
+				pendingVid, verr := b.redisClient.GetAndDeleteMotionControlPendingVideo(userID)
+				if verr != nil || pendingVid == nil {
 					return
 				}
 				pending, _ := b.redisClient.GetMotionControlPending(userID)
@@ -1651,7 +1651,7 @@ func (b *Bot) handlePhoto(msg *tgmodels.Message) {
 				}
 				_ = b.redisClient.DeleteMotionControlPending(userID)
 				if mcOpt, ok := findModelOption("kling-2.6/motion-control"); ok {
-					b.processMotionControlGeneration(chatID, userID, fileURL, videoURL, pending.Prompt, mcOpt)
+					b.processMotionControlGeneration(chatID, userID, fileURL, pendingVid.VideoURL, pending.Prompt, pendingVid.Duration, mcOpt)
 				}
 			}()
 			return
@@ -1688,20 +1688,23 @@ func (b *Bot) handleVideoMessage(msg *tgmodels.Message) {
 	if err != nil {
 		log.Printf("handleVideoMessage: redis error: %v", err)
 	}
+	// Extract video duration from Telegram message metadata
+	videoDuration := 0
+	var fileID string
+	if msg.Video != nil {
+		fileID = msg.Video.FileID
+		videoDuration = msg.Video.Duration
+	} else if msg.Animation != nil {
+		fileID = msg.Animation.FileID
+		videoDuration = msg.Animation.Duration
+	}
+
 	if pending == nil {
 		// No pending state yet — if this video is part of an album (sent together with a photo),
 		// park it briefly so the photo handler can pick it up.
-		if msg.MediaGroupID != "" {
-			var fileID string
-			if msg.Video != nil {
-				fileID = msg.Video.FileID
-			} else if msg.Animation != nil {
-				fileID = msg.Animation.FileID
-			}
-			if fileID != "" {
-				if file, ferr := b.api.GetFile(b.ctx, &tgbot.GetFileParams{FileID: fileID}); ferr == nil {
-					_ = b.redisClient.SetMotionControlPendingVideo(userID, b.getFileURL(file))
-				}
+		if msg.MediaGroupID != "" && fileID != "" {
+			if file, ferr := b.api.GetFile(b.ctx, &tgbot.GetFileParams{FileID: fileID}); ferr == nil {
+				_ = b.redisClient.SetMotionControlPendingVideo(userID, b.getFileURL(file), videoDuration)
 			}
 		}
 		return
@@ -1710,13 +1713,6 @@ func (b *Bot) handleVideoMessage(msg *tgmodels.Message) {
 	// Clear the pending state
 	_ = b.redisClient.DeleteMotionControlPending(userID)
 
-	// Get the video file ID
-	var fileID string
-	if msg.Video != nil {
-		fileID = msg.Video.FileID
-	} else if msg.Animation != nil {
-		fileID = msg.Animation.FileID
-	}
 	if fileID == "" {
 		b.sendErrorMessage(chatID, "Не удалось получить видео. Попробуйте ещё раз.")
 		return
@@ -1743,7 +1739,7 @@ func (b *Bot) handleVideoMessage(msg *tgmodels.Message) {
 	}
 
 	// Process the motion-control generation
-	b.processMotionControlGeneration(chatID, userID, pending.PhotoURL, videoURL, prompt, modelOpt)
+	b.processMotionControlGeneration(chatID, userID, pending.PhotoURL, videoURL, prompt, videoDuration, modelOpt)
 }
 
 // handleDocument обрабатывает документы как изображения (если это картинка)
@@ -3780,18 +3776,29 @@ func (b *Bot) processVideoGeneration(chatID int64, userID int64, photoURL string
 }
 
 // processMotionControlGeneration handles Kling 2.6 motion-control generation
-func (b *Bot) processMotionControlGeneration(chatID int64, userID int64, photoURL, videoURL, prompt string, modelOpt ModelOption) {
+func (b *Bot) processMotionControlGeneration(chatID int64, userID int64, photoURL, videoURL, prompt string, videoDuration int, modelOpt ModelOption) {
 	if !b.ensureCategoryEnabled(chatID, ModelCategoryVideo) {
 		return
 	}
 
-	// Default duration=5, mode=720p
-	duration := "5"
-	mode := "720p"
+	mode := b.getUserVideoResolution(userID)
+	if mode == "" {
+		mode = "720p"
+	}
+
+	// Duration must be known — reject if Telegram didn't provide it
+	if videoDuration < 1 {
+		b.sendErrorMessage(chatID, "Не удалось определить длительность видео. Попробуйте отправить видео ещё раз.")
+		return
+	}
+	durationInt := videoDuration
+	duration := fmt.Sprintf("%d", durationInt)
 
 	// Cost: 720p=1 token/sec, 1080p=ceil(1.5 tokens/sec)
-	durationInt := 5
-	requestCost := durationInt // 720p default
+	requestCost := durationInt
+	if mode == "1080p" {
+		requestCost = (durationInt*3 + 1) / 2 // ceil(durationInt * 1.5)
+	}
 
 	userRec, err := b.userService.GetUserByTelegramID(userID)
 	if err != nil {
