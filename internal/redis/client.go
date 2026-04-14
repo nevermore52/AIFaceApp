@@ -225,6 +225,23 @@ func (c *Client) DeleteMotionControlPending(userID int64) error {
 	return c.rdb.Del(c.ctx, key).Err()
 }
 
+// SetMotionControlPendingVideo temporarily stores a reference video URL
+// for when the video arrives in the same album as the photo (race condition).
+func (c *Client) SetMotionControlPendingVideo(userID int64, videoURL string) error {
+	key := fmt.Sprintf("user:%d:motion_control_pending_video", userID)
+	return c.rdb.Set(c.ctx, key, videoURL, 30*time.Second).Err()
+}
+
+// GetAndDeleteMotionControlPendingVideo retrieves and atomically deletes the pending video URL.
+func (c *Client) GetAndDeleteMotionControlPendingVideo(userID int64) (string, error) {
+	key := fmt.Sprintf("user:%d:motion_control_pending_video", userID)
+	val, err := c.rdb.GetDel(c.ctx, key).Result()
+	if err == redis.Nil {
+		return "", nil
+	}
+	return val, err
+}
+
 func NewClient(cfg config.RedisConfig) (*Client, error) {
 	rdb := redis.NewClient(&redis.Options{
 		Addr:     cfg.URL,

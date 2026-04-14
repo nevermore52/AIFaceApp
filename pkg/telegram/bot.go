@@ -1628,6 +1628,35 @@ func (b *Bot) handlePhoto(msg *tgmodels.Message) {
 		if err := b.redisClient.SetMotionControlPending(userID, fileURL, caption); err != nil {
 			log.Printf("Failed to save motion control pending: %v", err)
 		}
+
+		// Если фото пришло в альбоме вместе с видео — видео уже припарковано, запускаем сразу
+		if msg.MediaGroupID != "" {
+			if videoURL, verr := b.redisClient.GetAndDeleteMotionControlPendingVideo(userID); verr == nil && videoURL != "" {
+				_ = b.redisClient.DeleteMotionControlPending(userID)
+				if mcOpt, ok := findModelOption("kling-2.6/motion-control"); ok {
+					b.processMotionControlGeneration(chatID, userID, fileURL, videoURL, caption, mcOpt)
+				}
+				return
+			}
+			// Видео ещё не пришло — подождём через отложенный запуск
+			go func() {
+				time.Sleep(3 * time.Second)
+				videoURL, verr := b.redisClient.GetAndDeleteMotionControlPendingVideo(userID)
+				if verr != nil || videoURL == "" {
+					return
+				}
+				pending, _ := b.redisClient.GetMotionControlPending(userID)
+				if pending == nil {
+					return
+				}
+				_ = b.redisClient.DeleteMotionControlPending(userID)
+				if mcOpt, ok := findModelOption("kling-2.6/motion-control"); ok {
+					b.processMotionControlGeneration(chatID, userID, fileURL, videoURL, pending.Prompt, mcOpt)
+				}
+			}()
+			return
+		}
+
 		hint := "✅ Фото персонажа получено!\n\nТеперь отправьте <b>опорное видео движения</b> — бот скопирует движения из него на персонажа.\n\n💬 <i>Можно добавить подпись к видео — она будет использована как текстовый запрос.</i>"
 		if caption != "" {
 			hint = fmt.Sprintf("✅ Фото персонажа получено! Запрос: <i>%s</i>\n\nТеперь отправьте <b>опорное видео движения</b>.", caption)
@@ -1660,7 +1689,21 @@ func (b *Bot) handleVideoMessage(msg *tgmodels.Message) {
 		log.Printf("handleVideoMessage: redis error: %v", err)
 	}
 	if pending == nil {
-		// No pending motion-control — ignore the video
+		// No pending state yet — if this video is part of an album (sent together with a photo),
+		// park it briefly so the photo handler can pick it up.
+		if msg.MediaGroupID != "" {
+			var fileID string
+			if msg.Video != nil {
+				fileID = msg.Video.FileID
+			} else if msg.Animation != nil {
+				fileID = msg.Animation.FileID
+			}
+			if fileID != "" {
+				if file, ferr := b.api.GetFile(b.ctx, &tgbot.GetFileParams{FileID: fileID}); ferr == nil {
+					_ = b.redisClient.SetMotionControlPendingVideo(userID, b.getFileURL(file))
+				}
+			}
+		}
 		return
 	}
 
@@ -3567,7 +3610,7 @@ func (b *Bot) processVideoGenerationMultiPhoto(chatID int64, userID int64, photo
 		return
 	}
 
-	if err := b.userService.ConsumeQuota(userRec.ID, models.QuotaCategoryVideo, requestCost); err != nil {
+	if err := b.userService.ConsumeQuota(userID, models.QuotaCategoryVideo, requestCost); err != nil {
 		b.sendInsufficientQuotaMessage(chatID, models.QuotaCategoryVideo, requestCost, err)
 		return
 	}
@@ -3633,7 +3676,7 @@ func (b *Bot) processVideoGeneration(chatID int64, userID int64, photoURL string
 		return
 	}
 
-	if err := b.userService.ConsumeQuota(userRec.ID, models.QuotaCategoryVideo, requestCost); err != nil {
+	if err := b.userService.ConsumeQuota(userID, models.QuotaCategoryVideo, requestCost); err != nil {
 		b.sendErrorMessage(chatID, fmt.Sprintf("Недостаточно видео токенов. Нужно: %d. %s", requestCost, err.Error()))
 		return
 	}
@@ -3756,7 +3799,7 @@ func (b *Bot) processMotionControlGeneration(chatID int64, userID int64, photoUR
 		return
 	}
 
-	if err := b.userService.ConsumeQuota(userRec.ID, models.QuotaCategoryVideo, requestCost); err != nil {
+	if err := b.userService.ConsumeQuota(userID, models.QuotaCategoryVideo, requestCost); err != nil {
 		b.sendErrorMessage(chatID, fmt.Sprintf("Недостаточно видео токенов. Нужно: %d. %s", requestCost, err.Error()))
 		return
 	}
