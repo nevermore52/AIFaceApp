@@ -234,9 +234,9 @@ func (s *WebGenerationService) getTokenCost(model string, req CreateGenerationRe
 		"seedream/4.5-edit":        3,
 		"veo3_fast":                10,
 		"wan/2-6-image-to-video":   20,
-		"kling-2.6/image-to-video":   10,
-		"kling-2.6/motion-control":   1,
-		"music-suno":                 1,
+		"kling-2.6/image-to-video": 10,
+		"kling-2.6/motion-control": 1,
+		"music-suno":               1,
 		"google/gemini-3-flash":    1,
 		"openai/gpt-5-mini":        1,
 		"openai/gpt-5-nano":        1,
@@ -903,7 +903,7 @@ func (s *WebGenerationService) HandleCallback(payload kieapi.CallbackPayload) er
 	}
 
 	// Явная ошибка
-	if status == "failed" || status == "error" || status == "cancelled" || status == "canceled" {
+	if status == "failed" || status == "error" || status == "cancelled" || status == "canceled" || status == "fail" {
 		reason := payload.Msg
 		if reason == "" || strings.ToLower(reason) == "success" {
 			reason = fmt.Sprintf("status=%s", payload.StatusValue())

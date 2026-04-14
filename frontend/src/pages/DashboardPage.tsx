@@ -209,12 +209,12 @@ export function DashboardPage() {
               ))}
             </div>
           ) : (
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, maxWidth: 600, margin: '0 auto' }}>
               {/* Left column — even indices */}
               <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
                 {trends.filter((_, i) => i % 2 === 0).map((t, ci) => (
                   <button key={t.id} onClick={() => setSelectedTrend(t)}
-                    style={{ position: 'relative', width: '100%', height: ci % 2 === 0 ? 200 : 145, borderRadius: 16, overflow: 'hidden', cursor: 'pointer', border: 'none', padding: 0, display: 'block', flexShrink: 0 }}
+                    style={{ position: 'relative', width: '100%', aspectRatio: ci % 2 === 0 ? '3/4' : '4/3', borderRadius: 16, overflow: 'hidden', cursor: 'pointer', border: 'none', padding: 0, display: 'block', flexShrink: 0 }}
                   >
                     <img src={t.output} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} loading="lazy" />
                     <div style={{ position: 'absolute', bottom: 0, left: 0, right: 0, height: '65%', background: 'linear-gradient(to top, rgba(0,0,0,0.85), transparent)', pointerEvents: 'none' }} />
@@ -227,7 +227,7 @@ export function DashboardPage() {
               <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
                 {trends.filter((_, i) => i % 2 === 1).map((t, ci) => (
                   <button key={t.id} onClick={() => setSelectedTrend(t)}
-                    style={{ position: 'relative', width: '100%', height: ci % 2 === 0 ? 145 : 200, borderRadius: 16, overflow: 'hidden', cursor: 'pointer', border: 'none', padding: 0, display: 'block', flexShrink: 0 }}
+                    style={{ position: 'relative', width: '100%', aspectRatio: ci % 2 === 0 ? '4/3' : '3/4', borderRadius: 16, overflow: 'hidden', cursor: 'pointer', border: 'none', padding: 0, display: 'block', flexShrink: 0 }}
                   >
                     <img src={t.output} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} loading="lazy" />
                     <div style={{ position: 'absolute', bottom: 0, left: 0, right: 0, height: '65%', background: 'linear-gradient(to top, rgba(0,0,0,0.85), transparent)', pointerEvents: 'none' }} />
