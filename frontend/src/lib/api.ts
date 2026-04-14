@@ -93,9 +93,23 @@ export interface GalleryItem {
   prompt: string
 }
 
+export interface TrendItem {
+  id: number
+  title: string
+  output: string
+  prompt: string
+  model: string
+  is_popular: boolean
+  priority: number | null
+  created_at: string
+  updated_at: string
+}
+
 export const publicApi = {
   getGallery: (limit = 30, offset = 0, sort: 'new' | 'all' = 'new') =>
     api.get<{ data: GalleryItem[]; total: number }>(`/gallery?limit=${limit}&offset=${offset}&sort=${sort}`),
+  getTrends: (limit = 20, offset = 0) =>
+    api.get<{ data: TrendItem[]; total: number }>(`/trends?limit=${limit}&offset=${offset}`),
 }
 
 export const authApi = {
@@ -199,6 +213,16 @@ export const adminApi = {
     api.delete<any>(`/admin/gallery-ideas/${id}`),
   getGalleryIdeaPriorities: (excludeId = 0) =>
     api.get<{ taken: number[] }>(`/admin/gallery-ideas/priorities?exclude_id=${excludeId}`),
+  getTrends: (limit = 50, offset = 0) =>
+    api.get<any>(`/admin/trends?limit=${limit}&offset=${offset}`),
+  createTrend: (data: { title: string; output: string; prompt: string; model: string; is_popular: boolean; priority?: number | null }) =>
+    api.post<any>('/admin/trends', data),
+  updateTrend: (id: number, data: { title: string; output: string; prompt: string; model: string; is_popular: boolean; priority?: number | null }) =>
+    api.put<any>(`/admin/trends/${id}`, data),
+  deleteTrend: (id: number) =>
+    api.delete<any>(`/admin/trends/${id}`),
+  getTrendPriorities: (excludeId = 0) =>
+    api.get<{ taken: number[] }>(`/admin/trends/priorities?exclude_id=${excludeId}`),
 }
 
 export const paymentApi = {

@@ -64,3 +64,29 @@ func (s *GenerationService) UpdateGalleryIdea(id int64, model, output, prompt st
 func (s *GenerationService) DeleteGalleryIdea(id int64) error {
 	return s.repo.DeleteGalleryIdea(id)
 }
+
+// ─── Trends ──────────────────────────────────────────────────────────────────
+
+func (s *GenerationService) CreateTrend(title, output, prompt, model string, isPopular bool, priority *int) (*repository.Trend, error) {
+	return s.repo.CreateTrend(title, output, prompt, model, isPopular, priority)
+}
+
+func (s *GenerationService) GetTrends(limit, offset int) ([]*repository.Trend, int, error) {
+	return s.repo.GetTrends(limit, offset)
+}
+
+func (s *GenerationService) GetPublicTrends(limit, offset int) ([]*repository.Trend, int, error) {
+	return s.repo.GetPublicTrends(limit, offset)
+}
+
+func (s *GenerationService) UpdateTrend(id int64, title, output, prompt, model string, isPopular bool, priority *int) error {
+	return s.repo.UpdateTrend(id, title, output, prompt, model, isPopular, priority)
+}
+
+func (s *GenerationService) DeleteTrend(id int64) error {
+	return s.repo.DeleteTrend(id)
+}
+
+func (s *GenerationService) GetOccupiedTrendPriorities(excludeID int64) ([]int, error) {
+	return s.repo.GetOccupiedTrendPriorities(excludeID)
+}

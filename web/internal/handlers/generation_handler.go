@@ -200,6 +200,24 @@ func (h *GenerationHandler) GetPublicGallery(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"data": items, "total": total})
 }
 
+// GetPublicTrends returns trends (public, no auth).
+func (h *GenerationHandler) GetPublicTrends(c *gin.Context) {
+	limit, _ := strconv.Atoi(c.DefaultQuery("limit", "20"))
+	offset, _ := strconv.Atoi(c.DefaultQuery("offset", "0"))
+	if limit > 100 {
+		limit = 100
+	}
+
+	trends, total, err := h.generationService.GetPublicTrends(limit, offset)
+	if err != nil {
+		log.Printf("GetPublicTrends error: %v", err)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to get trends"})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{"data": trends, "total": total})
+}
+
 func (h *GenerationHandler) GetModels(c *gin.Context) {
 	if h.webGenerationService == nil {
 		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "Generation service not available"})

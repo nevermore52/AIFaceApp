@@ -6,7 +6,7 @@ import { adminApi, generationApi } from '../lib/api'
 import { Card, CardContent, CardHeader, CardTitle } from '../components/ui/card'
 import { Button } from '../components/ui/button'
 
-type Tab = 'stats' | 'users' | 'top_users' | 'generations' | 'payments' | 'gallery_ideas'
+type Tab = 'stats' | 'users' | 'top_users' | 'generations' | 'payments' | 'gallery_ideas' | 'trends'
 
 const TABS: { id: Tab; label: string }[] = [
   { id: 'stats', label: '📊 Статистика' },
@@ -15,6 +15,7 @@ const TABS: { id: Tab; label: string }[] = [
   { id: 'generations', label: '🎨 Генерации' },
   { id: 'payments', label: '💳 Платежи' },
   { id: 'gallery_ideas', label: '💡 Идеи' },
+  { id: 'trends', label: '🔥 Тренды' },
 ]
 
 function StatCard({ label, value }: { label: string; value: string | number }) {
@@ -841,6 +842,369 @@ function GalleryIdeasTab() {
   )
 }
 
+// ─── Trends Tab ──────────────────────────────────────────────────────────────
+
+type TrendFormData = { title: string; output: string; prompt: string; model: string; isPopular: boolean; priority: number | null }
+const EMPTY_TREND_FORM: TrendFormData = { title: '', output: '', prompt: '', model: '', isPopular: false, priority: null }
+
+function TrendForm({
+  data,
+  onChange,
+  models,
+  takenPriorities,
+  uploading,
+  onSubmit,
+  onCancel,
+  submitLabel,
+}: {
+  data: TrendFormData
+  onChange: (d: TrendFormData) => void
+  models: any[]
+  takenPriorities: number[]
+  uploading: boolean
+  onSubmit: (resolvedOutput: string) => void
+  onCancel?: () => void
+  submitLabel: string
+}) {
+  const [imageFile, setImageFile] = useState<File | null>(null)
+  const [imagePreview, setImagePreview] = useState<string>(data.output || '')
+  const [localUploading, setLocalUploading] = useState(false)
+
+  const uploadImage = async (file: File): Promise<string> => {
+    const fd = new FormData()
+    fd.append('image', file)
+    const storage = localStorage.getItem('auth-storage')
+    let token = null
+    if (storage) {
+      try { token = JSON.parse(storage).state?.accessToken } catch {}
+    }
+    const resp = await fetch('/api/admin/upload', {
+      method: 'POST',
+      headers: token ? { Authorization: `Bearer ${token}` } : {},
+      body: fd,
+    })
+    if (!resp.ok) throw new Error('Upload failed: ' + await resp.text())
+    return (await resp.json()).url
+  }
+
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    if (!file) return
+    setImageFile(file)
+    const reader = new FileReader()
+    reader.onloadend = () => setImagePreview(reader.result as string)
+    reader.readAsDataURL(file)
+  }
+
+  const handleSubmit = async () => {
+    if (!data.output && !imageFile) { alert('Загрузите изображение'); return }
+    let resolvedOutput = data.output
+    if (imageFile) {
+      setLocalUploading(true)
+      try {
+        resolvedOutput = await uploadImage(imageFile)
+        onChange({ ...data, output: resolvedOutput })
+      } catch (err) {
+        alert('Ошибка загрузки: ' + (err instanceof Error ? err.message : String(err)))
+        setLocalUploading(false)
+        return
+      }
+      setLocalUploading(false)
+    }
+    onSubmit(resolvedOutput)
+  }
+
+  const isDisabled = uploading || localUploading
+  const availablePositions = Array.from({ length: 50 }, (_, i) => i + 1).filter(n => !takenPriorities.includes(n))
+
+  return (
+    <div className="space-y-3">
+      <div>
+        <label className="text-xs text-white/50 mb-1 block">Название</label>
+        <input
+          type="text"
+          placeholder="Название тренда"
+          value={data.title}
+          onChange={(e) => onChange({ ...data, title: e.target.value })}
+          className="w-full px-3 py-2 rounded-lg bg-white/5 border border-white/10 text-white text-sm"
+        />
+      </div>
+      <div>
+        <label className="text-xs text-white/50 mb-1 block">Модель</label>
+        <select
+          value={data.model}
+          onChange={(e) => onChange({ ...data, model: e.target.value })}
+          className="w-full px-3 py-2 rounded-lg bg-white/5 border border-white/10 text-white text-sm [&>option]:bg-gray-900 [&>option]:text-white"
+        >
+          <option value="">Выберите модель</option>
+          {models.map((m) => (
+            <option key={m.id} value={m.id}>{m.name} ({m.type})</option>
+          ))}
+        </select>
+      </div>
+      <div>
+        <label className="text-xs text-white/50 mb-1 block">Изображение</label>
+        <input
+          type="file"
+          accept="image/*"
+          onChange={handleFileChange}
+          className="w-full px-3 py-2 rounded-lg bg-white/5 border border-white/10 text-white text-sm file:mr-4 file:py-1 file:px-3 file:rounded file:border-0 file:text-sm file:bg-white/10 file:text-white hover:file:bg-white/20"
+        />
+        {imagePreview && (
+          <img src={imagePreview} alt="Preview" className="mt-2 w-24 h-24 object-cover rounded-lg" />
+        )}
+      </div>
+      <textarea
+        placeholder="Промпт"
+        value={data.prompt}
+        onChange={(e) => onChange({ ...data, prompt: e.target.value })}
+        className="w-full px-3 py-2 rounded-lg bg-white/5 border border-white/10 text-white text-sm min-h-[72px]"
+      />
+      <div className="flex items-center gap-3">
+        <label className="text-xs text-white/50">Популярное</label>
+        <button
+          type="button"
+          onClick={() => onChange({ ...data, isPopular: !data.isPopular })}
+          className={`w-10 h-5 rounded-full transition-colors relative ${data.isPopular ? 'bg-[#FFB700]' : 'bg-white/20'}`}
+        >
+          <span className={`absolute top-0.5 w-4 h-4 rounded-full bg-white transition-all ${data.isPopular ? 'left-5' : 'left-0.5'}`} />
+        </button>
+      </div>
+      <div>
+        <label className="text-xs text-white/50 mb-1 block">Место (приоритет)</label>
+        <select
+          value={data.priority ?? ''}
+          onChange={(e) => onChange({ ...data, priority: e.target.value ? parseInt(e.target.value) : null })}
+          className="w-full px-3 py-2 rounded-lg bg-white/5 border border-white/10 text-white text-sm [&>option]:bg-gray-900 [&>option]:text-white"
+        >
+          <option value="">— без приоритета —</option>
+          {data.priority !== null && !availablePositions.includes(data.priority) && (
+            <option value={data.priority}>{data.priority}</option>
+          )}
+          {availablePositions.map(n => (
+            <option key={n} value={n}>{n}</option>
+          ))}
+        </select>
+      </div>
+      <div className="flex gap-2">
+        <Button onClick={handleSubmit} size="sm" className="flex-1" disabled={isDisabled}>
+          {isDisabled ? 'Загрузка...' : submitLabel}
+        </Button>
+        {onCancel && (
+          <Button onClick={onCancel} size="sm" variant="outline" disabled={isDisabled}>Отмена</Button>
+        )}
+      </div>
+    </div>
+  )
+}
+
+function TrendsTab() {
+  const [trends, setTrends] = useState<any[]>([])
+  const [models, setModels] = useState<any[]>([])
+  const [total, setTotal] = useState(0)
+  const [loading, setLoading] = useState(false)
+  const [uploading, setUploading] = useState(false)
+  const [limit] = useState(50)
+  const [offset, setOffset] = useState(0)
+
+  const [selected, setSelected] = useState<any | null>(null)
+  const [editing, setEditing] = useState(false)
+  const [editForm, setEditForm] = useState<TrendFormData>(EMPTY_TREND_FORM)
+
+  const [showCreate, setShowCreate] = useState(false)
+  const [createForm, setCreateForm] = useState<TrendFormData>(EMPTY_TREND_FORM)
+
+  const [takenForCreate, setTakenForCreate] = useState<number[]>([])
+  const [takenForEdit, setTakenForEdit] = useState<number[]>([])
+
+  const load = useCallback(async () => {
+    setLoading(true)
+    try {
+      const res = await adminApi.getTrends(limit, offset)
+      setTrends(res.data || [])
+      setTotal(res.total)
+    } finally {
+      setLoading(false)
+    }
+  }, [limit, offset])
+
+  useEffect(() => {
+    load()
+    generationApi.getModels().then(res => {
+      setModels(res.filter((m: any) => m.type === 'image' || m.type === 'video'))
+    }).catch(console.error)
+  }, [load])
+
+  useEffect(() => {
+    if (showCreate) adminApi.getTrendPriorities(0).then(r => setTakenForCreate(r.taken)).catch(console.error)
+  }, [showCreate])
+
+  useEffect(() => {
+    if (editing && selected) adminApi.getTrendPriorities(selected.id).then(r => setTakenForEdit(r.taken)).catch(console.error)
+  }, [editing, selected])
+
+  const handleCreate = async (resolvedOutput: string) => {
+    setUploading(true)
+    try {
+      await adminApi.createTrend({ title: createForm.title, output: resolvedOutput, prompt: createForm.prompt, model: createForm.model, is_popular: createForm.isPopular, priority: createForm.priority })
+      setCreateForm(EMPTY_TREND_FORM)
+      setShowCreate(false)
+      load()
+    } catch (err) {
+      alert('Ошибка: ' + (err instanceof Error ? err.message : String(err)))
+    } finally {
+      setUploading(false)
+    }
+  }
+
+  const handleUpdate = async (resolvedOutput: string) => {
+    if (!selected) return
+    setUploading(true)
+    try {
+      await adminApi.updateTrend(selected.id, { title: editForm.title, output: resolvedOutput, prompt: editForm.prompt, model: editForm.model, is_popular: editForm.isPopular, priority: editForm.priority })
+      setEditing(false)
+      setSelected(null)
+      load()
+    } catch (err) {
+      alert('Ошибка: ' + (err instanceof Error ? err.message : String(err)))
+    } finally {
+      setUploading(false)
+    }
+  }
+
+  const handleDelete = async (id: number) => {
+    if (!confirm('Удалить этот тренд?')) return
+    try {
+      await adminApi.deleteTrend(id)
+      setSelected(null)
+      load()
+    } catch (err) {
+      console.error(err)
+    }
+  }
+
+  const startEdit = () => {
+    if (!selected) return
+    setEditForm({
+      title: selected.title || '',
+      output: selected.output,
+      prompt: selected.prompt || '',
+      model: selected.model || '',
+      isPopular: selected.is_popular || false,
+      priority: selected.priority ?? null,
+    })
+    setEditing(true)
+  }
+
+  return (
+    <div className="space-y-4">
+      <div className="flex items-center justify-between">
+        <span className="text-xs text-white/40">Всего: {total}</span>
+        <Button size="sm" onClick={() => { setShowCreate(v => !v); setCreateForm(EMPTY_TREND_FORM) }}>
+          {showCreate ? 'Отмена' : '+ Добавить'}
+        </Button>
+      </div>
+
+      {showCreate && (
+        <div className="p-4 rounded-xl border border-white/10 bg-white/5">
+          <p className="text-sm font-semibold text-white/70 mb-3">Новый тренд</p>
+          <TrendForm
+            data={createForm}
+            onChange={setCreateForm}
+            models={models}
+            takenPriorities={takenForCreate}
+            uploading={uploading}
+            onSubmit={handleCreate}
+            onCancel={() => setShowCreate(false)}
+            submitLabel="Добавить"
+          />
+        </div>
+      )}
+
+      {loading ? (
+        <div className="grid grid-cols-3 gap-2">
+          {[...Array(9)].map((_, i) => <div key={i} className="aspect-square rounded-xl bg-white/5 animate-pulse" />)}
+        </div>
+      ) : (
+        <div className="grid grid-cols-3 gap-2">
+          {trends.map((t) => (
+            <button
+              key={t.id}
+              onClick={() => { setSelected(t); setEditing(false) }}
+              className="relative aspect-square rounded-xl overflow-hidden bg-white/[0.03] group"
+            >
+              <img src={t.output} alt="" className="w-full h-full object-cover" loading="lazy" />
+              {t.is_popular && (
+                <span className="absolute top-1 left-1 text-[10px] font-bold bg-[#FFB700] text-black rounded px-1.5 py-0.5">★</span>
+              )}
+              {t.priority != null && (
+                <span className="absolute top-1 right-1 text-[10px] font-bold bg-white/20 text-white rounded px-1.5 py-0.5">#{t.priority}</span>
+              )}
+              {t.title && (
+                <div className="absolute bottom-0 left-0 right-0 px-1.5 pb-1.5 pt-4" style={{ background: 'linear-gradient(to top, rgba(0,0,0,0.8), transparent)' }}>
+                  <p className="text-[10px] text-white font-medium leading-tight line-clamp-2">{t.title}</p>
+                </div>
+              )}
+            </button>
+          ))}
+        </div>
+      )}
+
+      <div className="flex justify-end gap-2 pt-1">
+        <Button size="sm" variant="outline" disabled={offset === 0} onClick={() => setOffset(Math.max(0, offset - limit))} className="border-white/10">← Назад</Button>
+        <Button size="sm" variant="outline" disabled={offset + limit >= total} onClick={() => setOffset(offset + limit)} className="border-white/10">Вперёд →</Button>
+      </div>
+
+      {selected && createPortal(
+        <div
+          style={{ position: 'fixed', inset: 0, zIndex: 9000, background: 'rgba(0,0,0,0.7)' }}
+          onClick={(e) => { if (e.target === e.currentTarget) { setSelected(null); setEditing(false) } }}
+        >
+          <div
+            style={{ position: 'fixed', bottom: 0, left: 0, right: 0, maxHeight: '85vh', overflowY: 'auto', background: '#111', borderRadius: '20px 20px 0 0', padding: '20px' }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div style={{ width: 40, height: 4, background: 'rgba(255,255,255,0.2)', borderRadius: 2, margin: '0 auto 16px' }} />
+            {editing ? (
+              <>
+                <p className="text-sm font-semibold text-white/70 mb-3">Редактировать тренд</p>
+                <TrendForm
+                  data={editForm}
+                  onChange={setEditForm}
+                  models={models}
+                  takenPriorities={takenForEdit}
+                  uploading={uploading}
+                  onSubmit={handleUpdate}
+                  onCancel={() => setEditing(false)}
+                  submitLabel="Сохранить"
+                />
+              </>
+            ) : (
+              <>
+                <img src={selected.output} alt="" style={{ width: '100%', maxHeight: 320, objectFit: 'contain', borderRadius: 12, background: '#000', display: 'block' }} />
+                <div style={{ marginTop: 12 }}>
+                  {selected.title && <p style={{ margin: '0 0 8px', fontSize: '16px', fontWeight: 700, color: 'white' }}>{selected.title}</p>}
+                  <div className="flex items-center gap-2 mb-2 flex-wrap">
+                    {selected.model && <span className="text-xs text-white/40 bg-white/10 px-2 py-1 rounded-full">{selected.model}</span>}
+                    {selected.is_popular && <span className="text-xs font-bold bg-[#FFB700] text-black px-2 py-1 rounded-full">Популярное</span>}
+                    {selected.priority != null && <span className="text-xs font-bold bg-white/10 text-white/60 px-2 py-1 rounded-full">Место #{selected.priority}</span>}
+                  </div>
+                  {selected.prompt && <p className="text-sm text-white/70 mb-4">{selected.prompt}</p>}
+                  <div className="flex gap-2">
+                    <Button size="sm" variant="outline" onClick={startEdit} className="flex-1">Редактировать</Button>
+                    <Button size="sm" variant="outline" onClick={() => handleDelete(selected.id)} className="flex-1 text-red-400 hover:text-red-300">Удалить</Button>
+                  </div>
+                </div>
+              </>
+            )}
+          </div>
+        </div>,
+        document.body
+      )}
+    </div>
+  )
+}
+
 // ─── Main Page ────────────────────────────────────────────────────────────────
 export function AdminPage() {
   const { user } = useAuthStore()
@@ -890,6 +1254,7 @@ export function AdminPage() {
           {tab === 'generations' && <GenerationsTab />}
           {tab === 'payments' && <PaymentsTab />}
           {tab === 'gallery_ideas' && <GalleryIdeasTab />}
+          {tab === 'trends' && <TrendsTab />}
         </CardContent>
       </Card>
     </div>

@@ -102,6 +102,7 @@ func New(cfg *config.Config, db *sql.DB) *Server {
 
 		// Public endpoints
 		api.GET("/gallery", generationHandler.GetPublicGallery)
+		api.GET("/trends", generationHandler.GetPublicTrends)
 
 		// Public callback endpoints
 		api.POST("/callbacks/kieapi", generationHandler.HandleKieAPICallback)
@@ -170,6 +171,11 @@ func New(cfg *config.Config, db *sql.DB) *Server {
 			admin.PUT("/gallery-ideas/:id", adminHandler.UpdateGalleryIdea)
 			admin.DELETE("/gallery-ideas/:id", adminHandler.DeleteGalleryIdea)
 			admin.GET("/gallery-ideas/priorities", adminHandler.GetGalleryIdeaPriorities)
+			admin.GET("/trends", adminHandler.GetTrends)
+			admin.POST("/trends", adminHandler.CreateTrend)
+			admin.PUT("/trends/:id", adminHandler.UpdateTrend)
+			admin.DELETE("/trends/:id", adminHandler.DeleteTrend)
+			admin.GET("/trends/priorities", adminHandler.GetTrendPriorities)
 			// Permanent upload for admin assets — no auto-cleanup
 			admin.POST("/upload", generationHandler.AdminUploadImage)
 		}

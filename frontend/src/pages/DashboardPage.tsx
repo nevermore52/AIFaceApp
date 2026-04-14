@@ -1,9 +1,10 @@
 import { useEffect, useState, useRef, useCallback } from 'react'
+import { createPortal } from 'react-dom'
 import { useNavigate } from 'react-router-dom'
 import { useAuthStore } from '../store/auth'
-import { userApi } from '../lib/api'
+import { userApi, publicApi, type TrendItem } from '../lib/api'
 import { Button } from '../components/ui/button'
-import { Image, Film, Music, Sparkles, Send, Banana, Wand2, ChevronRight } from 'lucide-react'
+import { Image, Film, Music, Sparkles, Send, Banana, Wand2, ChevronRight, X, Copy, Check } from 'lucide-react'
 
 const CHANNEL_URL = 'https://t.me/aifaceapps'
 const BANNER_DISMISS_KEY = 'channel_banner_dismissed_at'
@@ -39,6 +40,11 @@ export function DashboardPage() {
   const [bonusChecking, setBonusChecking] = useState(false)
   const [bonusSuccess, setBonusSuccess] = useState(false)
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null)
+
+  const [trends, setTrends] = useState<TrendItem[]>([])
+  const [loadingTrends, setLoadingTrends] = useState(true)
+  const [selectedTrend, setSelectedTrend] = useState<TrendItem | null>(null)
+  const [trendCopied, setTrendCopied] = useState(false)
 
   const refreshQuota = useCallback(() => {
     if (isAuthenticated) {
@@ -92,6 +98,13 @@ export function DashboardPage() {
   }
 
   useEffect(() => () => { if (pollRef.current) clearInterval(pollRef.current) }, [])
+
+  useEffect(() => {
+    publicApi.getTrends(20, 0)
+      .then(res => setTrends(res.data || []))
+      .catch(console.error)
+      .finally(() => setLoadingTrends(false))
+  }, [])
 
   const handleCategoryClick = (cat: CategoryItem) => {
     if (!isAuthenticated) {
@@ -185,6 +198,49 @@ export function DashboardPage() {
         ))}
       </div>
 
+      {/* Trends section */}
+      {(loadingTrends || trends.length > 0) && (
+        <div className="space-y-3">
+          <h2 className="text-xl font-bold tracking-tight text-white">Тренды</h2>
+          {loadingTrends ? (
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
+              {[...Array(6)].map((_, i) => (
+                <div key={i} style={{ height: i % 3 === 0 ? 200 : 140, borderRadius: 16, background: 'rgba(255,255,255,0.05)' }} className="animate-pulse" />
+              ))}
+            </div>
+          ) : (
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
+              {/* Left column — even indices */}
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                {trends.filter((_, i) => i % 2 === 0).map((t, ci) => (
+                  <button key={t.id} onClick={() => setSelectedTrend(t)}
+                    style={{ position: 'relative', width: '100%', height: ci % 2 === 0 ? 200 : 145, borderRadius: 16, overflow: 'hidden', cursor: 'pointer', border: 'none', padding: 0, display: 'block', flexShrink: 0 }}
+                  >
+                    <img src={t.output} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} loading="lazy" />
+                    <div style={{ position: 'absolute', bottom: 0, left: 0, right: 0, height: '65%', background: 'linear-gradient(to top, rgba(0,0,0,0.85), transparent)', pointerEvents: 'none' }} />
+                    {t.title && <div style={{ position: 'absolute', bottom: 8, left: 10, right: 10, color: 'white', fontSize: 13, fontWeight: 600, lineHeight: 1.3, pointerEvents: 'none', textAlign: 'left' }}>{t.title}</div>}
+                    {t.is_popular && <div style={{ position: 'absolute', top: 8, left: 8, background: '#FFB700', color: '#000', fontSize: 10, fontWeight: 700, padding: '3px 8px', borderRadius: 20, pointerEvents: 'none' }}>Популярное</div>}
+                  </button>
+                ))}
+              </div>
+              {/* Right column — odd indices, inverted tall/short pattern */}
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                {trends.filter((_, i) => i % 2 === 1).map((t, ci) => (
+                  <button key={t.id} onClick={() => setSelectedTrend(t)}
+                    style={{ position: 'relative', width: '100%', height: ci % 2 === 0 ? 145 : 200, borderRadius: 16, overflow: 'hidden', cursor: 'pointer', border: 'none', padding: 0, display: 'block', flexShrink: 0 }}
+                  >
+                    <img src={t.output} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} loading="lazy" />
+                    <div style={{ position: 'absolute', bottom: 0, left: 0, right: 0, height: '65%', background: 'linear-gradient(to top, rgba(0,0,0,0.85), transparent)', pointerEvents: 'none' }} />
+                    {t.title && <div style={{ position: 'absolute', bottom: 8, left: 10, right: 10, color: 'white', fontSize: 13, fontWeight: 600, lineHeight: 1.3, pointerEvents: 'none', textAlign: 'left' }}>{t.title}</div>}
+                    {t.is_popular && <div style={{ position: 'absolute', top: 8, left: 8, background: '#FFB700', color: '#000', fontSize: 10, fontWeight: 700, padding: '3px 8px', borderRadius: 20, pointerEvents: 'none' }}>Популярное</div>}
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+
       {/* Not authenticated card */}
       {!isAuthenticated && (
         <div className="rounded-2xl border border-white/5 bg-white/[0.02] p-8 text-center space-y-4">
@@ -201,6 +257,79 @@ export function DashboardPage() {
             Войти в аккаунт
           </Button>
         </div>
+      )}
+      {/* Trend detail overlay — portal to body */}
+      {selectedTrend && createPortal(
+        <div
+          style={{ position: 'fixed', inset: 0, zIndex: 9999, background: '#000', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '16px' }}
+          onClick={(e) => { if (e.target === e.currentTarget) setSelectedTrend(null) }}
+        >
+          <button
+            onClick={() => setSelectedTrend(null)}
+            style={{ position: 'fixed', top: '12px', right: '12px', zIndex: 10001, padding: '8px', borderRadius: '50%', background: 'rgba(30,30,30,0.85)', border: '1px solid rgba(255,255,255,0.15)', cursor: 'pointer', backdropFilter: 'blur(4px)' }}
+          >
+            <X className="w-5 h-5 text-white" />
+          </button>
+
+          <div style={{ position: 'relative', width: '100%', maxWidth: '640px' }} onClick={(e) => e.stopPropagation()}>
+            <img
+              src={selectedTrend.output}
+              alt=""
+              style={{ width: '100%', maxHeight: 'calc(100vh - 220px)', objectFit: 'contain', display: 'block', borderRadius: '16px 16px 0 0', background: '#000' }}
+            />
+            <div style={{ background: '#111', borderRadius: '0 0 16px 16px', borderTop: '1px solid rgba(255,255,255,0.05)', padding: '16px' }}>
+              {selectedTrend.title && (
+                <p style={{ margin: '0 0 8px', fontSize: '16px', fontWeight: 700, color: 'white' }}>{selectedTrend.title}</p>
+              )}
+              <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap', marginBottom: '8px' }}>
+                {selectedTrend.model && (
+                  <span style={{ fontSize: '10px', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.1em', color: 'rgba(255,255,255,0.5)', background: 'rgba(255,255,255,0.1)', padding: '4px 12px', borderRadius: '9999px' }}>
+                    {selectedTrend.model}
+                  </span>
+                )}
+                {selectedTrend.is_popular && (
+                  <span style={{ fontSize: '10px', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.1em', color: '#000', background: '#FFB700', padding: '4px 12px', borderRadius: '9999px' }}>
+                    Популярное
+                  </span>
+                )}
+              </div>
+              {selectedTrend.prompt && (
+                <div style={{ marginTop: '8px' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '6px' }}>
+                    <p style={{ fontSize: '11px', fontWeight: 600, color: 'rgba(255,255,255,0.4)', textTransform: 'uppercase', letterSpacing: '0.1em', margin: 0 }}>Запрос</p>
+                    <button
+                      onClick={async () => {
+                        try { await navigator.clipboard.writeText(selectedTrend.prompt) }
+                        catch { const el = document.createElement('textarea'); el.value = selectedTrend.prompt; document.body.appendChild(el); el.select(); document.execCommand('copy'); document.body.removeChild(el) }
+                        setTrendCopied(true); setTimeout(() => setTrendCopied(false), 2000)
+                      }}
+                      style={{ padding: '4px 10px', borderRadius: '6px', background: 'rgba(255,255,255,0.07)', border: '1px solid rgba(255,255,255,0.1)', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '5px', fontSize: '11px', color: trendCopied ? '#4ade80' : 'rgba(255,255,255,0.5)' }}
+                    >
+                      {trendCopied
+                        ? <><Check style={{ width: 12, height: 12 }} /> Скопировано</>
+                        : <><Copy style={{ width: 12, height: 12 }} /> Копировать</>
+                      }
+                    </button>
+                  </div>
+                  <div style={{ maxHeight: '100px', overflowY: 'auto', paddingRight: '4px', scrollbarWidth: 'thin', scrollbarColor: 'rgba(255,255,255,0.2) transparent' }}>
+                    <p style={{ fontSize: '14px', color: 'rgba(255,255,255,0.8)', lineHeight: 1.6, margin: 0 }}>{selectedTrend.prompt}</p>
+                  </div>
+                </div>
+              )}
+              <div style={{ marginTop: '12px' }}>
+                <Button
+                  size="sm"
+                  onClick={() => { setSelectedTrend(null); navigate('/generate', { state: { prompt: selectedTrend.prompt, model: selectedTrend.model } }) }}
+                  className="w-full rounded-xl bg-gradient-to-r from-[#FFD700] via-[#FFB700] to-[#FF8C00] text-black font-bold hover:opacity-90 gap-2 h-11"
+                >
+                  <Sparkles className="h-4 w-4" />
+                  Создать в таком стиле
+                </Button>
+              </div>
+            </div>
+          </div>
+        </div>,
+        document.body
       )}
     </div>
   )

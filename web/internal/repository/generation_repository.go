@@ -320,3 +320,115 @@ func (r *GenerationRepository) DeleteGalleryIdea(id int64) error {
 	_, err := r.db.Exec(`DELETE FROM gallery_ideas WHERE id = $1`, id)
 	return err
 }
+
+// ─── Trends ──────────────────────────────────────────────────────────────────
+
+type Trend struct {
+	ID        int64     `json:"id"`
+	Title     string    `json:"title"`
+	Output    string    `json:"output"`
+	Prompt    string    `json:"prompt"`
+	Model     string    `json:"model"`
+	IsPopular bool      `json:"is_popular"`
+	Priority  *int      `json:"priority"`
+	CreatedAt time.Time `json:"created_at"`
+	UpdatedAt time.Time `json:"updated_at"`
+}
+
+func (r *GenerationRepository) CreateTrend(title, output, prompt, model string, isPopular bool, priority *int) (*Trend, error) {
+	t := &Trend{}
+	err := r.db.QueryRow(`
+		INSERT INTO trends (title, output, prompt, model, is_popular, priority, created_at, updated_at)
+		VALUES ($1, $2, $3, $4, $5, $6, NOW(), NOW())
+		RETURNING id, title, output, prompt, model, is_popular, priority, created_at, updated_at
+	`, title, output, prompt, model, isPopular, priority).Scan(
+		&t.ID, &t.Title, &t.Output, &t.Prompt, &t.Model, &t.IsPopular, &t.Priority, &t.CreatedAt, &t.UpdatedAt,
+	)
+	return t, err
+}
+
+func (r *GenerationRepository) GetTrends(limit, offset int) ([]*Trend, int, error) {
+	var total int
+	if err := r.db.QueryRow(`SELECT COUNT(*) FROM trends`).Scan(&total); err != nil {
+		return nil, 0, err
+	}
+	rows, err := r.db.Query(`
+		SELECT id, title, output, prompt, model, is_popular, priority, created_at, updated_at
+		FROM trends ORDER BY created_at DESC LIMIT $1 OFFSET $2
+	`, limit, offset)
+	if err != nil {
+		return nil, 0, err
+	}
+	defer rows.Close()
+	var list []*Trend
+	for rows.Next() {
+		t := &Trend{}
+		if err := rows.Scan(&t.ID, &t.Title, &t.Output, &t.Prompt, &t.Model, &t.IsPopular, &t.Priority, &t.CreatedAt, &t.UpdatedAt); err != nil {
+			continue
+		}
+		list = append(list, t)
+	}
+	return list, total, rows.Err()
+}
+
+// GetPublicTrends returns trends for the public API: priority first, then fixed pseudo-random.
+func (r *GenerationRepository) GetPublicTrends(limit, offset int) ([]*Trend, int, error) {
+	var total int
+	if err := r.db.QueryRow(`SELECT COUNT(*) FROM trends`).Scan(&total); err != nil {
+		return nil, 0, err
+	}
+	rows, err := r.db.Query(`
+		SELECT id, title, output, prompt, model, is_popular, priority, created_at, updated_at
+		FROM trends
+		ORDER BY priority ASC NULLS LAST, MD5(id::text)
+		LIMIT $1 OFFSET $2
+	`, limit, offset)
+	if err != nil {
+		return nil, 0, err
+	}
+	defer rows.Close()
+	var list []*Trend
+	for rows.Next() {
+		t := &Trend{}
+		if err := rows.Scan(&t.ID, &t.Title, &t.Output, &t.Prompt, &t.Model, &t.IsPopular, &t.Priority, &t.CreatedAt, &t.UpdatedAt); err != nil {
+			continue
+		}
+		list = append(list, t)
+	}
+	return list, total, rows.Err()
+}
+
+func (r *GenerationRepository) UpdateTrend(id int64, title, output, prompt, model string, isPopular bool, priority *int) error {
+	_, err := r.db.Exec(`
+		UPDATE trends SET title=$1, output=$2, prompt=$3, model=$4, is_popular=$5, priority=$6, updated_at=NOW()
+		WHERE id=$7
+	`, title, output, prompt, model, isPopular, priority, id)
+	return err
+}
+
+func (r *GenerationRepository) DeleteTrend(id int64) error {
+	_, err := r.db.Exec(`DELETE FROM trends WHERE id = $1`, id)
+	return err
+}
+
+func (r *GenerationRepository) GetOccupiedTrendPriorities(excludeID int64) ([]int, error) {
+	var rows *sql.Rows
+	var err error
+	if excludeID > 0 {
+		rows, err = r.db.Query(`SELECT priority FROM trends WHERE priority IS NOT NULL AND id <> $1 ORDER BY priority`, excludeID)
+	} else {
+		rows, err = r.db.Query(`SELECT priority FROM trends WHERE priority IS NOT NULL ORDER BY priority`)
+	}
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var result []int
+	for rows.Next() {
+		var p int
+		if err := rows.Scan(&p); err == nil {
+			result = append(result, p)
+		}
+	}
+	return result, rows.Err()
+}

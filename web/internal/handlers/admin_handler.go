@@ -373,3 +373,91 @@ func (h *AdminHandler) GetGalleryIdeaPriorities(c *gin.Context) {
 	}
 	c.JSON(http.StatusOK, gin.H{"taken": taken})
 }
+
+// ─── Trends ──────────────────────────────────────────────────────────────────
+
+func (h *AdminHandler) GetTrends(c *gin.Context) {
+	limit, _ := strconv.Atoi(c.DefaultQuery("limit", "50"))
+	offset, _ := strconv.Atoi(c.DefaultQuery("offset", "0"))
+	if limit > 200 {
+		limit = 200
+	}
+	list, total, err := h.generationService.GetTrends(limit, offset)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to get trends"})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"data": list, "total": total, "limit": limit, "offset": offset})
+}
+
+func (h *AdminHandler) CreateTrend(c *gin.Context) {
+	var req struct {
+		Title     string `json:"title"`
+		Output    string `json:"output" binding:"required"`
+		Prompt    string `json:"prompt"`
+		Model     string `json:"model"`
+		IsPopular bool   `json:"is_popular"`
+		Priority  *int   `json:"priority"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+	t, err := h.generationService.CreateTrend(req.Title, req.Output, req.Prompt, req.Model, req.IsPopular, req.Priority)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to create trend"})
+		return
+	}
+	c.JSON(http.StatusOK, t)
+}
+
+func (h *AdminHandler) UpdateTrend(c *gin.Context) {
+	id, err := strconv.ParseInt(c.Param("id"), 10, 64)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid ID"})
+		return
+	}
+	var req struct {
+		Title     string `json:"title"`
+		Output    string `json:"output" binding:"required"`
+		Prompt    string `json:"prompt"`
+		Model     string `json:"model"`
+		IsPopular bool   `json:"is_popular"`
+		Priority  *int   `json:"priority"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+	if err := h.generationService.UpdateTrend(id, req.Title, req.Output, req.Prompt, req.Model, req.IsPopular, req.Priority); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to update trend"})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"message": "Trend updated"})
+}
+
+func (h *AdminHandler) DeleteTrend(c *gin.Context) {
+	id, err := strconv.ParseInt(c.Param("id"), 10, 64)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid ID"})
+		return
+	}
+	if err := h.generationService.DeleteTrend(id); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to delete trend"})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"message": "Trend deleted"})
+}
+
+func (h *AdminHandler) GetTrendPriorities(c *gin.Context) {
+	excludeID, _ := strconv.ParseInt(c.DefaultQuery("exclude_id", "0"), 10, 64)
+	taken, err := h.generationService.GetOccupiedTrendPriorities(excludeID)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to get priorities"})
+		return
+	}
+	if taken == nil {
+		taken = []int{}
+	}
+	c.JSON(http.StatusOK, gin.H{"taken": taken})
+}
