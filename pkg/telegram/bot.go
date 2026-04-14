@@ -1694,9 +1694,11 @@ func (b *Bot) handleVideoMessage(msg *tgmodels.Message) {
 	if msg.Video != nil {
 		fileID = msg.Video.FileID
 		videoDuration = msg.Video.Duration
+		log.Printf("handleVideoMessage: userID=%d mediaGroup=%s duration=%d fileID=%s", userID, msg.MediaGroupID, videoDuration, fileID)
 	} else if msg.Animation != nil {
 		fileID = msg.Animation.FileID
 		videoDuration = msg.Animation.Duration
+		log.Printf("handleVideoMessage: animation userID=%d mediaGroup=%s duration=%d fileID=%s", userID, msg.MediaGroupID, videoDuration, fileID)
 	}
 
 	if pending == nil {
