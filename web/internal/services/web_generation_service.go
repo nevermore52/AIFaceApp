@@ -271,10 +271,12 @@ func (s *WebGenerationService) getTokenCost(model string, req CreateGenerationRe
 	}
 
 	if model == "wan/2-6-image-to-video" {
-		// Длительность видео: 5с (базовое 20 токенов), 10с (+10)
+		// Длительность видео: 5с=20, 10с=40, 15с=60 токенов
 		switch req.Duration {
 		case "10":
-			return baseCost + 10
+			return baseCost + 20
+		case "15":
+			return baseCost + 40
 		default:
 			return baseCost
 		}
@@ -322,7 +324,7 @@ func (s *WebGenerationService) CreateGeneration(userID int64, username string, r
 		modelType = "music"
 	} else if isTextModel(model) {
 		modelType = "text"
-	} else if strings.Contains(model, "video") {
+	} else if strings.Contains(model, "video") || model == "kling-2.6/motion-control" {
 		modelType = "video"
 	}
 
@@ -1695,7 +1697,9 @@ func (s *WebGenerationService) SaveUploadedFile(file io.Reader, originalFilename
 	ext := ".jpg"
 	if idx := strings.LastIndex(originalFilename, "."); idx >= 0 {
 		e := strings.ToLower(originalFilename[idx:])
-		if e == ".jpg" || e == ".jpeg" || e == ".png" || e == ".webp" || e == ".gif" || e == ".heic" || e == ".heif" || e == ".avif" {
+		switch e {
+		case ".jpg", ".jpeg", ".png", ".webp", ".gif", ".heic", ".heif", ".avif",
+			".mp4", ".mov", ".avi", ".mkv", ".webm", ".m4v":
 			ext = e
 		}
 	}

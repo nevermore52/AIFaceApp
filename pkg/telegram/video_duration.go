@@ -42,11 +42,11 @@ func (b *Bot) sendVideoDurationMenu(chatID int64, userID int64, messageID int) {
 
 	var rows [][]tgmodels.InlineKeyboardButton
 	rows = append(rows, []tgmodels.InlineKeyboardButton{
-		durationOptionButton("⚡ 5 сек (2 ген.)", "5", current),
-		durationOptionButton("🎬 10 сек (4 ген.)", "10", current),
+		durationOptionButton("⚡ 5 сек (20 токенов)", "5", current),
+		durationOptionButton("🎬 10 сек (40 токенов)", "10", current),
 	})
 	rows = append(rows, []tgmodels.InlineKeyboardButton{
-		durationOptionButton("🎥 15 сек (6 ген.)", "15", current),
+		durationOptionButton("🎥 15 сек (60 токенов)", "15", current),
 	})
 
 	backCallback := "models_menu:video"
@@ -54,9 +54,9 @@ func (b *Bot) sendVideoDurationMenu(chatID int64, userID int64, messageID int) {
 		newInlineKeyboardButtonData("◀️ Назад", backCallback),
 	})
 
-	costMap := map[string]int{"5": 2, "10": 4, "15": 6}
+	costMap := map[string]int{"5": 20, "10": 40, "15": 60}
 	cost := costMap[current]
-	text := fmt.Sprintf("⏱️ Длительность видео: %s сек\n💰 Стоимость: %d генераций", current, cost)
+	text := fmt.Sprintf("⏱️ Длительность видео: %s сек\n💰 Стоимость: %d видео токенов", current, cost)
 	markup := newInlineKeyboardMarkup(rows...)
 
 	if messageID > 0 {
@@ -92,8 +92,8 @@ func (b *Bot) sendVideoDurationMenuKling(chatID int64, userID int64, messageID i
 
 	var rows [][]tgmodels.InlineKeyboardButton
 	rows = append(rows, []tgmodels.InlineKeyboardButton{
-		durationOptionButtonKling("⚡ 5 сек (1 ген.)", "5", current),
-		durationOptionButtonKling("🎬 10 сек (2 ген.)", "10", current),
+		durationOptionButtonKling("⚡ 5 сек (10 токенов)", "5", current),
+		durationOptionButtonKling("🎬 10 сек (20 токенов)", "10", current),
 	})
 
 	backCallback := "models_menu:video"
@@ -101,11 +101,11 @@ func (b *Bot) sendVideoDurationMenuKling(chatID int64, userID int64, messageID i
 		newInlineKeyboardButtonData("◀️ Назад", backCallback),
 	})
 
-	// Kling: 5s = 1 gen, 10s = 2 gen
-	costMap := map[string]int{"5": 1, "10": 2}
+	// Kling: 5s = 10 токенов, 10s = 20 токенов
+	costMap := map[string]int{"5": 10, "10": 20}
 	cost := costMap[current]
 	if cost == 0 {
-		cost = 1
+		cost = 10
 	}
 	sound := b.getUserVideoSound(userID)
 	soundNote := ""
@@ -113,7 +113,7 @@ func (b *Bot) sendVideoDurationMenuKling(chatID int64, userID int64, messageID i
 		cost *= 2
 		soundNote = " (со звуком x2)"
 	}
-	text := fmt.Sprintf("⏱️ Длительность видео: %s сек\n💰 Стоимость: %d генераций%s", current, cost, soundNote)
+	text := fmt.Sprintf("⏱️ Длительность видео: %s сек\n💰 Стоимость: %d видео токенов%s", current, cost, soundNote)
 	markup := newInlineKeyboardMarkup(rows...)
 
 	if messageID > 0 {

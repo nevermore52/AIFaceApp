@@ -41,7 +41,7 @@ func (b *Bot) sendKlingAnimateMenu(chatID int64, userID int64, messageID int) {
 	totalCost := b.getKlingVideoCost(userID)
 
 	// Animate button with total cost
-	animateLabel := fmt.Sprintf("💰 Оживить (%d ген.)", totalCost)
+	animateLabel := fmt.Sprintf("💰 Оживить (%d токенов)", totalCost)
 	rows = append(rows, []tgmodels.InlineKeyboardButton{
 		newInlineKeyboardButtonData(animateLabel, "kling_animate_start"),
 	})

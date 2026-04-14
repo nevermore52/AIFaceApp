@@ -1601,7 +1601,8 @@ func (b *Bot) handlePhoto(msg *tgmodels.Message) {
 	}
 
 	// Проверяем, есть ли подпись к фото (caption) — только для фото-моделей и видео-моделей
-	if caption == "" && (modelOpt.Category == ModelCategoryPhoto || modelOpt.Category == ModelCategoryVideo) {
+	// Motion-control не требует обязательного промпта (достаточно видео движения)
+	if caption == "" && modelOpt.ID != "kling-2.6/motion-control" && (modelOpt.Category == ModelCategoryPhoto || modelOpt.Category == ModelCategoryVideo) {
 		text := loc.PhotoReceived + "\n\n" + loc.PhotoAddCaption
 		reply := newMessageConfig(chatID, text)
 		_, _ = b.sendMsg(reply)
@@ -1626,7 +1627,7 @@ func (b *Bot) handlePhoto(msg *tgmodels.Message) {
 		if err := b.redisClient.SetMotionControlPending(userID, fileURL, caption); err != nil {
 			log.Printf("Failed to save motion control pending: %v", err)
 		}
-		b.sendText(chatID, "✅ Фото персонажа получено!\n\nТеперь отправьте <b>опорное видео движения</b> — бот скопирует движения из него на персонажа.")
+		b.sendHTMLText(chatID, "✅ Фото персонажа получено!\n\nТеперь отправьте <b>опорное видео движения</b> — бот скопирует движения из него на персонажа.")
 		return
 	}
 
@@ -3579,7 +3580,7 @@ func (b *Bot) processVideoGenerationMultiPhoto(chatID int64, userID int64, photo
 		b.sendErrorMessage(chatID, fmt.Sprintf("Ошибка запуска видео генерации: %v", err))
 		return
 	}
-	b.sendText(chatID, fmt.Sprintf("🔄 Запустили видео генерацию! ID: %d\nМодель: %s\nФото: %d\nДлительность: %s сек\nРазрешение: %s\nСписано: %d видео-запрос(ов)\n\nОжидайте результат...", req.ID, modelOpt.Label, len(photoURLs), duration, resolution, requestCost))
+	b.sendText(chatID, fmt.Sprintf("🔄 Запустили видео генерацию! ID: %d\nМодель: %s\nФото: %d\nДлительность: %s сек\nРазрешение: %s\nСписано: %d видео токенов\n\nОжидайте результат...", req.ID, modelOpt.Label, len(photoURLs), duration, resolution, requestCost))
 }
 
 // processVideoGeneration обрабатывает видео-генерацию из фото (image_to_video)
@@ -3651,7 +3652,7 @@ func (b *Bot) processVideoGeneration(chatID int64, userID int64, photoURL string
 		if sound == "true" {
 			soundLabel = "Со звуком"
 		}
-		b.sendText(chatID, fmt.Sprintf("🔄 Запустили видео генерацию! ID: %d\nМодель: %s\nДлительность: %s сек\nЗвук: %s\nСписано: %d видео-запрос(ов)\n\nОжидайте результат...", req.ID, modelOpt.Label, duration, soundLabel, requestCost))
+		b.sendText(chatID, fmt.Sprintf("🔄 Запустили видео генерацию! ID: %d\nМодель: %s\nДлительность: %s сек\nЗвук: %s\nСписано: %d видео токенов\n\nОжидайте результат...", req.ID, modelOpt.Label, duration, soundLabel, requestCost))
 		return
 	}
 
@@ -3676,7 +3677,7 @@ func (b *Bot) processVideoGeneration(chatID int64, userID int64, photoURL string
 			b.sendErrorMessage(chatID, fmt.Sprintf("Ошибка запуска видео генерации: %v", err))
 			return
 		}
-		b.sendText(chatID, fmt.Sprintf("🔄 Запустили видео генерацию! ID: %d\nМодель: %s\nДлительность: %s сек\nРазрешение: %s\nСписано: %d видео-запрос(ов)\n\nОжидайте результат...", req.ID, modelOpt.Label, duration, resolution, requestCost))
+		b.sendText(chatID, fmt.Sprintf("🔄 Запустили видео генерацию! ID: %d\nМодель: %s\nДлительность: %s сек\nРазрешение: %s\nСписано: %d видео токенов\n\nОжидайте результат...", req.ID, modelOpt.Label, duration, resolution, requestCost))
 		return
 	}
 
@@ -3699,12 +3700,12 @@ func (b *Bot) processVideoGeneration(chatID int64, userID int64, photoURL string
 			b.sendErrorMessage(chatID, fmt.Sprintf("Ошибка запуска видео генерации: %v", err))
 			return
 		}
-		b.sendText(chatID, fmt.Sprintf("🔄 Запустили видео генерацию! ID: %d\nМодель: %s\nСписано: %d видео-запрос(ов)\n\nОжидайте результат...", req.ID, modelOpt.Label, requestCost))
+		b.sendText(chatID, fmt.Sprintf("🔄 Запустили видео генерацию! ID: %d\nМодель: %s\nСписано: %d видео токенов\n\nОжидайте результат...", req.ID, modelOpt.Label, requestCost))
 		return
 	}
 
 	// Фолбек для других видео-моделей (синхронный путь)
-	b.sendText(chatID, fmt.Sprintf("🔄 Запустили видео генерацию\nМодель: %s\nСписано: %d видео-запрос(ов)", modelOpt.Label, requestCost))
+	b.sendText(chatID, fmt.Sprintf("🔄 Запустили видео генерацию\nМодель: %s\nСписано: %d видео токенов", modelOpt.Label, requestCost))
 
 	apiModel := modelOpt.ApiModel
 	if apiModel == "" {
@@ -3719,7 +3720,7 @@ func (b *Bot) processVideoGeneration(chatID int64, userID int64, photoURL string
 			return
 		}
 
-		caption := fmt.Sprintf("🎬 Видео готово\nМодель: %s\nСписано: %d видео-запрос(ов)", modelOpt.Label, requestCost)
+		caption := fmt.Sprintf("🎬 Видео готово\nМодель: %s\nСписано: %d видео токенов", modelOpt.Label, requestCost)
 		b.sendVideoResult(chatID, caption, resultURL)
 	})
 }

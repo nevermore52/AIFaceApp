@@ -109,15 +109,15 @@ const NANO_BANANA_PRO_RESOLUTIONS = [
 
 // Длительность для Wan 2.6
 const WAN_DURATIONS = [
-  { id: '5', label: '5 сек (2 генерации)', value: '5', cost: 2 },
-  { id: '10', label: '10 сек (4 генерации)', value: '10', cost: 4 },
-  { id: '15', label: '15 сек (6 генераций)', value: '15', cost: 6 },
+  { id: '5', label: '5 сек (20 токенов)', value: '5', cost: 20 },
+  { id: '10', label: '10 сек (40 токенов)', value: '10', cost: 40 },
+  { id: '15', label: '15 сек (60 токенов)', value: '15', cost: 60 },
 ]
 
 // Длительность для Kling 2.6
 const KLING_DURATIONS = [
-  { id: '5', label: '5 сек (1 генерация)', value: '5', cost: 1 },
-  { id: '10', label: '10 сек (2 генерации)', value: '10', cost: 2 },
+  { id: '5', label: '5 сек (10 токенов)', value: '5', cost: 10 },
+  { id: '10', label: '10 сек (20 токенов)', value: '10', cost: 20 },
 ]
 
 // Режимы для Kling 2.6 Motion Control
