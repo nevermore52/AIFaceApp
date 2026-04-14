@@ -31,6 +31,7 @@ const ERROR_MAP: Array<[RegExp | string, string]> = [
   [/not authenticated/i,            'Требуется авторизация. Войдите в аккаунт.'],
   [/generation service not available/i, 'Сервис генерации временно недоступен. Попробуйте позже.'],
   [/payment service not configured/i,   'Платёжный сервис временно недоступен.'],
+  [/video resolution must be at least/i, 'Разрешение видео слишком маленькое. Минимум 340×340 пикселей.'],
   [/invalid request/i,              'Неверный запрос. Проверьте введённые данные.'],
   [/model is required/i,            'Выберите модель.'],
   [/prompt is required/i,           'Введите текст запроса.'],

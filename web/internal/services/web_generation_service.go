@@ -532,7 +532,8 @@ func (s *WebGenerationService) processGeneration(genReq *GenerationRequest, req 
 			input["input_urls"] = s.reuploadImagesToKie(req.ImageURLs)
 		}
 		if len(req.VideoURLs) > 0 {
-			input["video_urls"] = s.reuploadImagesToKie(req.VideoURLs)
+			// Pass video URLs directly — KieAPI upload endpoint doesn't support videos
+			input["video_urls"] = req.VideoURLs
 		}
 		duration := req.Duration
 		if duration == "" {

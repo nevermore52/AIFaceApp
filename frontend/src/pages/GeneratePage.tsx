@@ -1106,15 +1106,22 @@ export function GeneratePage() {
                   onChange={(e) => {
                     const file = e.target.files?.[0]
                     if (!file) return
-                    setMotionVideoFile(file)
                     const objectUrl = URL.createObjectURL(file)
-                    setMotionVideoPreview(objectUrl)
                     const vid = document.createElement('video')
                     vid.preload = 'metadata'
                     vid.onloadedmetadata = () => {
                       const secs = Math.ceil(vid.duration)
-                      setMotionDuration(secs > 0 ? secs : 0)
+                      const w = vid.videoWidth
+                      const h = vid.videoHeight
                       URL.revokeObjectURL(vid.src)
+                      if (w < 340 || h < 340) {
+                        setError(`Разрешение видео ${w}×${h} слишком маленькое. Минимум 340×340 пикселей.`)
+                        if (motionVideoInputRef.current) motionVideoInputRef.current.value = ''
+                        return
+                      }
+                      setMotionVideoFile(file)
+                      setMotionVideoPreview(objectUrl)
+                      setMotionDuration(secs > 0 ? secs : 0)
                     }
                     vid.src = objectUrl
                   }}
@@ -1134,6 +1141,7 @@ export function GeneratePage() {
                   <>
                     <Video className="w-5 h-5 text-white/20 mb-1" />
                     <p className="text-[11px] text-white/30 text-center px-4">Нажмите, чтобы загрузить опорное видео</p>
+                    <p className="text-[10px] text-white/20 text-center px-4">мин. разрешение 340×340</p>
                   </>
                 )}
               </div>
