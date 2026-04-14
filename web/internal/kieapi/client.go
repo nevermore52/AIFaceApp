@@ -259,7 +259,7 @@ func (c *Client) UploadFile(data []byte, filename string) (string, error) {
 	}
 	mw.Close()
 
-	url := c.baseURL + "/api/v1/upload"
+	url := c.baseURL + "/api/v1/jobs/upload"
 	httpReq, err := http.NewRequest(http.MethodPost, url, &buf)
 	if err != nil {
 		return "", fmt.Errorf("create upload request: %w", err)

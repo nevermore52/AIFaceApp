@@ -105,7 +105,8 @@ export function IdeasPage() {
       navigate('/login', { state: { from: '/generate' } })
       return
     }
-    navigate('/generate', { state: { prompt: item.prompt, model: item.model } })
+    // Pass image URL for video models that need input image
+    navigate('/generate', { state: { prompt: item.prompt, model: item.model, imageUrl: item.output } })
   }
 
   return (

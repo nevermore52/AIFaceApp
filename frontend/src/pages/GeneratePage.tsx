@@ -198,10 +198,14 @@ export function GeneratePage() {
       return
     }
 
-    const state = location.state as { prompt?: string; model?: string; category?: string } | null
+    const state = location.state as { prompt?: string; model?: string; category?: string; imageUrl?: string } | null
     if (state?.prompt) setPrompt(state.prompt)
     if (state?.category && ['image', 'video', 'music', 'text'].includes(state.category)) {
       setSelectedCategory(state.category as Category)
+    }
+    // If imageUrl is provided, add it to libraryUrls for video models
+    if (state?.imageUrl) {
+      setLibraryUrls([state.imageUrl])
     }
 
     setLoading(true)
