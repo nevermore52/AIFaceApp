@@ -66,6 +66,8 @@ const CATEGORY_PLACEHOLDERS: Record<Category, string> = {
   text: 'Введите ваш запрос.',
 }
 
+const MOTION_CONTROL_PLACEHOLDER = 'Опишите желаемый результат. Например, стиль, настроение или детали движения.'
+
 const CATEGORY_GENERATING_TEXT: Record<Category, string> = {
   image: 'Нейросеть рисует...',
   video: 'Нейросеть снимает видео...',
@@ -273,7 +275,7 @@ export function GeneratePage() {
     // Kling 2.6 Motion Control: дефолт 720p
     else if (selectedModel === 'kling-2.6/motion-control') {
       setSelectedResolution('720p')
-      setMotionDuration(5)
+      setMotionDuration(0)
     }
     // Wan 2.6: дефолт 5 сек
     else if (selectedModel === 'wan/2-6-image-to-video') {
@@ -438,7 +440,8 @@ export function GeneratePage() {
   }
 
   const handleGenerate = async () => {
-    if (!selectedModel || !prompt.trim()) {
+    const isPromptOptional = selectedModel === 'kling-2.6/motion-control'
+    if (!selectedModel || (!prompt.trim() && !isPromptOptional)) {
       setError('Выберите модель и введите промпт')
       return
     }
@@ -516,7 +519,7 @@ export function GeneratePage() {
 
       // Kling 2.6 Motion Control: длительность, режим, опорное видео
       if (selectedModel === 'kling-2.6/motion-control') {
-        params.duration = String(Math.min(30, Math.max(3, motionDuration)))
+        params.duration = String(motionDuration > 0 ? motionDuration : 5)
         params.resolution = selectedResolution
         if (motionVideoFile) {
           setUploadingImage(true)
@@ -638,11 +641,14 @@ export function GeneratePage() {
 
     // Kling 2.6 Motion Control: 720p=1 токен/сек, 1080p=ceil(1.5 токена/сек)
     if (selectedModel === 'kling-2.6/motion-control') {
-      const dur = Math.min(30, Math.max(3, motionDuration))
-      if (selectedResolution === '1080p') {
-        baseCost = Math.ceil(dur * 1.5)
+      if (motionDuration > 0) {
+        if (selectedResolution === '1080p') {
+          baseCost = Math.ceil(motionDuration * 1.5)
+        } else {
+          baseCost = motionDuration
+        }
       } else {
-        baseCost = dur
+        baseCost = 0
       }
     }
 
@@ -902,11 +908,12 @@ export function GeneratePage() {
         <div className="space-y-1">
           <div className="flex items-center gap-1 ml-1">
             <label className="text-[13px] lg:text-sm font-medium text-white/90">Запрос</label>
-            <span className="text-orange-400 font-bold">*</span>
+            {selectedModel !== 'kling-2.6/motion-control' && <span className="text-orange-400 font-bold">*</span>}
+            {selectedModel === 'kling-2.6/motion-control' && <span className="text-white/30 text-[11px]">(необязательно)</span>}
           </div>
           <textarea
             className="w-full rounded-xl border border-white/10 bg-white/[0.03] px-3.5 lg:px-4 py-3 lg:py-4 text-sm lg:text-base transition-all focus:border-primary/50 focus:ring-0 hover:bg-white/[0.05] min-h-[80px] lg:min-h-[100px] max-h-[120px] lg:max-h-[150px] resize-none"
-            placeholder={CATEGORY_PLACEHOLDERS[selectedCategory]}
+            placeholder={selectedModel === 'kling-2.6/motion-control' ? MOTION_CONTROL_PLACEHOLDER : CATEGORY_PLACEHOLDERS[selectedCategory]}
             value={prompt}
             onChange={(e: ChangeEvent<HTMLTextAreaElement>) => setPrompt(e.target.value)}
           />
@@ -1100,7 +1107,16 @@ export function GeneratePage() {
                     const file = e.target.files?.[0]
                     if (!file) return
                     setMotionVideoFile(file)
-                    setMotionVideoPreview(URL.createObjectURL(file))
+                    const objectUrl = URL.createObjectURL(file)
+                    setMotionVideoPreview(objectUrl)
+                    const vid = document.createElement('video')
+                    vid.preload = 'metadata'
+                    vid.onloadedmetadata = () => {
+                      const secs = Math.ceil(vid.duration)
+                      setMotionDuration(secs > 0 ? secs : 0)
+                      URL.revokeObjectURL(vid.src)
+                    }
+                    vid.src = objectUrl
                   }}
                 />
                 {motionVideoPreview ? (
@@ -1108,7 +1124,7 @@ export function GeneratePage() {
                     <Video className="w-5 h-5 text-primary shrink-0" />
                     <span className="text-sm text-white/70 truncate">{motionVideoFile?.name}</span>
                     <button
-                      onClick={(e) => { e.stopPropagation(); setMotionVideoFile(null); setMotionVideoPreview(null) }}
+                      onClick={(e) => { e.stopPropagation(); setMotionVideoFile(null); setMotionVideoPreview(null); setMotionDuration(0) }}
                       className="ml-auto p-1 bg-white/10 hover:bg-white/20 rounded-lg transition-all"
                     >
                       <X className="w-3.5 h-3.5 text-white/60" />
@@ -1144,25 +1160,13 @@ export function GeneratePage() {
               </div>
             </div>
 
-            {/* Длительность 3–30 сек */}
-            <div className="space-y-1">
-              <label className="text-[13px] lg:text-sm font-medium text-white/90 ml-1">
-                Длительность: {motionDuration} сек
-              </label>
-              <input
-                type="range"
-                min={3}
-                max={30}
-                step={1}
-                value={motionDuration}
-                onChange={(e) => setMotionDuration(Number(e.target.value))}
-                className="w-full accent-primary"
-              />
-              <div className="flex justify-between text-[10px] text-white/30 px-0.5">
-                <span>3 сек</span>
-                <span>30 сек</span>
+            {/* Длительность — определяется автоматически из видео */}
+            {motionDuration > 0 && (
+              <div className="flex items-center gap-2 px-3 py-2 rounded-xl bg-white/[0.03] border border-white/10">
+                <span className="text-[12px] text-white/50">⏱ Длительность видео:</span>
+                <span className="text-[13px] font-semibold text-white/90">{motionDuration} сек</span>
               </div>
-            </div>
+            )}
           </>
         )}
 

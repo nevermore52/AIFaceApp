@@ -24,7 +24,7 @@ func NewPaymentService(paymentRepo *repository.PaymentRepository, userRepo *repo
 			"image": {10: 99, 50: 389, 100: 669, 250: 1499, 500: 2899},
 			"text":  {10: 10, 50: 45, 100: 80, 250: 200, 500: 345},
 			"music": {1: 25, 5: 119, 10: 202, 50: 812, 100: 1599},
-			"video": {1: 99, 5: 379, 10: 699, 25: 1650, 50: 3100, 100: 5900},
+			"video": {10: 99, 50: 379, 100: 699, 250: 1650, 500: 3100, 1000: 5900},
 		},
 		subPrices: map[string]int{
 			"mini":  299,
@@ -51,8 +51,8 @@ func (s *PaymentService) GetPackages() []models.PricePackage {
 func (s *PaymentService) GetSubscriptions() []models.SubscriptionPlan {
 	return []models.SubscriptionPlan{
 		{Name: "mini", Price: 299, TextDaily: 50, ImageWeekly: 25, MusicWeekly: 3, VideoWeekly: 0, Discount: 10},
-		{Name: "start", Price: 499, TextDaily: 100, ImageWeekly: 40, MusicWeekly: 5, VideoWeekly: 2, Discount: 15},
-		{Name: "pro", Price: 799, TextDaily: 200, ImageWeekly: 90, MusicWeekly: 10, VideoWeekly: 5, Discount: 20},
+		{Name: "start", Price: 499, TextDaily: 100, ImageWeekly: 40, MusicWeekly: 5, VideoWeekly: 20, Discount: 15},
+		{Name: "pro", Price: 799, TextDaily: 200, ImageWeekly: 90, MusicWeekly: 10, VideoWeekly: 50, Discount: 20},
 	}
 }
 
