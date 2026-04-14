@@ -110,6 +110,11 @@ export function ImageLibraryPicker({ maxSelect, alreadySelected, onSelect, onUpl
                       alt=""
                       className="w-full h-full object-cover"
                       loading="lazy"
+                      onError={() => {
+                        setUploads(prev => prev.filter(u => u.url !== item.url))
+                        setSelected(prev => { const s = new Set(prev); s.delete(item.url); return s })
+                        generationApi.deleteUserUpload(item.url).catch(() => {})
+                      }}
                     />
                     {isSelected && (
                       <div className="absolute inset-0 bg-yellow-400/20 flex items-end justify-end p-1">

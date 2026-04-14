@@ -63,7 +63,7 @@ func NewWebGenerationService(db *sql.DB, kieClient *kieapi.Client, callbackURL s
 		chatContexts:  make(map[string][]map[string]string),
 	}
 	if uploadDir != "" {
-		go s.runUploadCleanup(uploadDir, 30*24*time.Hour, time.Hour)
+		go s.runUploadCleanup(uploadDir, 7*24*time.Hour, time.Hour)
 	}
 	return s
 }
@@ -1606,39 +1606,10 @@ func (s *WebGenerationService) normalizeImageURLs(imageURLs []string) []string {
 
 // reuploadImagesToKie downloads each URL and re-uploads it to KieAPI storage.
 // This avoids "Image fetch failed" errors caused by Imgur hotlink protection.
+// Currently disabled as KieAPI upload endpoint is not available - using original URLs.
 func (s *WebGenerationService) reuploadImagesToKie(urls []string) []string {
-	if s.kieClient == nil {
-		return urls
-	}
-	result := make([]string, 0, len(urls))
-	for i, rawURL := range urls {
-		if rawURL == "" {
-			continue
-		}
-		resp, err := s.httpClient.Get(rawURL)
-		if err != nil {
-			log.Printf("reuploadImagesToKie: failed to download url[%d] %s: %v", i, rawURL, err)
-			result = append(result, rawURL) // keep original as fallback
-			continue
-		}
-		data, err := io.ReadAll(resp.Body)
-		resp.Body.Close()
-		if err != nil || resp.StatusCode >= 400 {
-			log.Printf("reuploadImagesToKie: error reading url[%d] status=%d err=%v", i, resp.StatusCode, err)
-			result = append(result, rawURL)
-			continue
-		}
-		filename := fmt.Sprintf("image%d.jpg", i)
-		kieURL, err := s.kieClient.UploadFile(data, filename)
-		if err != nil {
-			log.Printf("reuploadImagesToKie: KieAPI upload failed for url[%d]: %v, keeping original", i, err)
-			result = append(result, rawURL)
-			continue
-		}
-		log.Printf("reuploadImagesToKie: %s -> %s", rawURL, kieURL)
-		result = append(result, kieURL)
-	}
-	return result
+	// KieAPI upload endpoint is currently unavailable, return original URLs
+	return urls
 }
 
 // registerSunoTaskInBot notifies the bot about a new Suno task
@@ -1723,7 +1694,7 @@ func (s *WebGenerationService) SaveUploadedFile(file io.Reader, originalFilename
 	log.Printf("Image saved locally: %s -> %s", fullPath, url)
 
 	if userID > 0 {
-		const maxUploads = 10
+		const maxUploads = 200
 		// Insert new record
 		_, _ = s.db.Exec(`INSERT INTO user_uploads (user_id, url, filename) VALUES ($1, $2, $3)`, userID, url, filename)
 		// Delete oldest records beyond the limit, also removing their files from disk
@@ -1747,6 +1718,21 @@ func (s *WebGenerationService) SaveUploadedFile(file io.Reader, originalFilename
 	}
 
 	return url, nil
+}
+
+// DeleteUserUpload removes a user upload record and its file from disk.
+func (s *WebGenerationService) DeleteUserUpload(userID int64, url string, uploadDir string) error {
+	var filename string
+	err := s.db.QueryRow(`SELECT filename FROM user_uploads WHERE user_id = $1 AND url = $2`, userID, url).Scan(&filename)
+	if err != nil {
+		// Record not found or already deleted — no-op
+		return nil
+	}
+	if filename != "" && uploadDir != "" {
+		_ = os.Remove(uploadDir + "/" + filename)
+	}
+	_, err = s.db.Exec(`DELETE FROM user_uploads WHERE user_id = $1 AND url = $2`, userID, url)
+	return err
 }
 
 // GetUserUploads returns the most recent uploaded images for a user.
@@ -1789,31 +1775,36 @@ func (s *WebGenerationService) GetUserUploads(userID int64, limit int) ([]map[st
 	return result, nil
 }
 
-// runUploadCleanup periodically deletes uploaded files older than maxAge.
+// runUploadCleanup periodically deletes user-uploaded files older than maxAge.
+// Only files tracked in user_uploads with user_id > 0 are eligible for deletion.
+// Admin-uploaded files (user_id = 0, used for gallery ideas and trends) are never deleted.
 func (s *WebGenerationService) runUploadCleanup(uploadDir string, maxAge, interval time.Duration) {
 	ticker := time.NewTicker(interval)
 	defer ticker.Stop()
 	for range ticker.C {
-		entries, err := os.ReadDir(uploadDir)
+		cutoff := time.Now().Add(-maxAge)
+		rows, err := s.db.Query(`
+			SELECT filename FROM user_uploads
+			WHERE user_id > 0 AND created_at < $1
+		`, cutoff)
 		if err != nil {
 			continue
 		}
-		cutoff := time.Now().Add(-maxAge)
-		for _, e := range entries {
-			if e.IsDir() {
+		var toDelete []string
+		for rows.Next() {
+			var filename string
+			if err := rows.Scan(&filename); err != nil {
 				continue
 			}
-			info, err := e.Info()
-			if err != nil {
-				continue
+			toDelete = append(toDelete, filename)
+		}
+		rows.Close()
+		for _, filename := range toDelete {
+			path := uploadDir + "/" + filename
+			if err := os.Remove(path); err == nil {
+				log.Printf("Deleted expired upload: %s", path)
 			}
-			if info.ModTime().Before(cutoff) {
-				path := uploadDir + "/" + e.Name()
-				if err := os.Remove(path); err == nil {
-					log.Printf("Deleted expired upload: %s", path)
-					_, _ = s.db.Exec(`DELETE FROM user_uploads WHERE filename = $1`, e.Name())
-				}
-			}
+			_, _ = s.db.Exec(`DELETE FROM user_uploads WHERE filename = $1`, filename)
 		}
 	}
 }

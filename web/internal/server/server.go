@@ -143,6 +143,7 @@ func New(cfg *config.Config, db *sql.DB) *Server {
 			protected.POST("/upload-image", generationHandler.UploadImage)
 			protected.POST("/upload-video", generationHandler.UploadVideo)
 			protected.GET("/user-uploads", generationHandler.GetUserUploads)
+			protected.DELETE("/user-uploads", generationHandler.DeleteUserUpload)
 
 			protected.GET("/payments/packages", paymentHandler.GetPackages)
 			protected.GET("/payments/subscriptions", paymentHandler.GetSubscriptions)

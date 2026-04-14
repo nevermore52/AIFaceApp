@@ -543,6 +543,27 @@ func (h *GenerationHandler) AdminUploadImage(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"url": url, "size": header.Size})
 }
 
+// DeleteUserUpload removes a stale upload record (called when image fails to load in browser).
+func (h *GenerationHandler) DeleteUserUpload(c *gin.Context) {
+	user, exists := c.Get("user")
+	if !exists {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "Not authenticated"})
+		return
+	}
+	u := user.(*models.User)
+
+	url := c.Query("url")
+	if url == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "url required"})
+		return
+	}
+
+	if err := h.webGenerationService.DeleteUserUpload(u.ID, url, h.uploadDir); err != nil {
+		log.Printf("DeleteUserUpload error: %v", err)
+	}
+	c.JSON(http.StatusOK, gin.H{"ok": true})
+}
+
 // GetUserUploads returns previously uploaded images for the current user.
 func (h *GenerationHandler) GetUserUploads(c *gin.Context) {
 	user, exists := c.Get("user")

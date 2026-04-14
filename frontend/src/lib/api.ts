@@ -183,6 +183,8 @@ export const generationApi = {
     api.post<{ id: number; status: string }>('/generations', data),
   getUserUploads: () =>
     api.get<{ uploads: { url: string; filename: string }[] }>('/user-uploads'),
+  deleteUserUpload: (url: string) =>
+    api.delete<{ ok: boolean }>(`/user-uploads?url=${encodeURIComponent(url)}`),
 }
 
 export const adminApi = {
