@@ -253,7 +253,7 @@ func (h *GenerationHandler) CreateGeneration(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "Model is required"})
 		return
 	}
-	if req.Prompt == "" {
+	if req.Prompt == "" && req.Model != "kling-2.6/motion-control" {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "Prompt is required"})
 		return
 	}

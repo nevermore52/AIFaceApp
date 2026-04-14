@@ -102,7 +102,7 @@ type GenerationRequest struct {
 
 type CreateGenerationRequest struct {
 	Model       string   `json:"model" binding:"required"`
-	Prompt      string   `json:"prompt" binding:"required"`
+	Prompt      string   `json:"prompt"`
 	ImageURLs   []string `json:"image_urls"`
 	VideoURLs   []string `json:"video_urls"` // Reference video URLs (motion-control)
 	AspectRatio string   `json:"aspect_ratio"`
