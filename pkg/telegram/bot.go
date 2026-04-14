@@ -6012,7 +6012,11 @@ func friendlyGenerationError(err error) string {
 	if err == nil {
 		return ""
 	}
-	msg := strings.ToLower(err.Error())
+	msg := strings.ToLower(strings.TrimSpace(err.Error()))
+	// API sometimes returns "success" or similar non-error strings as the error body
+	if msg == "" || msg == "success" || msg == "ok" || msg == "null" {
+		return "Нейросеть вернула ошибку. Прочитайте правила нашего бота /rules и попробуйте ещё раз."
+	}
 	if strings.Contains(msg, "public figure") {
 		return "На фото обнаружена известная личность. К сожалению, генерация видео с публичными персонами недоступна. Попробуйте другое фото."
 	}
