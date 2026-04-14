@@ -1587,17 +1587,18 @@ func (b *Bot) handlePhoto(msg *tgmodels.Message) {
 		return
 	}
 
-	// Альбом до 4 фото для Nano Banana / Nano Banana Pro
-	if msg.MediaGroupID != "" {
-		b.handleAlbumPhoto(msg)
-		return
-	}
-
 	// Текущая модель
 	modelID := b.getUserModel(userID)
 	modelOpt, ok := findModelOption(modelID)
 	if !ok {
 		modelOpt = ModelOption{ID: modelID, Category: ModelCategoryPhoto, RequestCost: 1}
+	}
+
+	// Альбом до 4 фото для Nano Banana / Nano Banana Pro
+	// Motion-control обрабатывается как обычное фото (не как альбом)
+	if msg.MediaGroupID != "" && modelOpt.ID != "kling-2.6/motion-control" {
+		b.handleAlbumPhoto(msg)
+		return
 	}
 
 	// Проверяем, есть ли подпись к фото (caption) — только для фото-моделей и видео-моделей
@@ -6608,7 +6609,7 @@ func (b *Bot) sendGenerationStatus(chatID int64, req *models.GenerationRequest) 
 				if _, err := b.sendVideo(chatID, &tgmodels.InputFileString{Data: output}, caption, "HTML"); err != nil {
 					log.Printf("Failed to send generation video by URL: %v", err)
 					if videoBytes, fileName, dlErr := downloadFileToBytes(output, "mp4"); dlErr == nil {
-						if _, sendErr := b.sendDocument(chatID, &tgmodels.InputFileUpload{Filename: fileName, Data: bytes.NewReader(videoBytes)}, caption); sendErr != nil {
+						if _, sendErr := b.sendVideo(chatID, &tgmodels.InputFileUpload{Filename: fileName, Data: bytes.NewReader(videoBytes)}, caption, "HTML"); sendErr != nil {
 							log.Printf("Failed to send generation video bytes: %v", sendErr)
 							b.sendHTMLText(chatID, truncate(baseText+"\n\n🎬 <a href=\""+output+"\">Видео (открыть)</a>", 3800))
 						}

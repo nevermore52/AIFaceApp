@@ -4,7 +4,7 @@ import { useNavigate } from 'react-router-dom'
 import { useAuthStore } from '../store/auth'
 import { userApi, publicApi, type TrendItem } from '../lib/api'
 import { Button } from '../components/ui/button'
-import { Image, Film, Music, Sparkles, Send, Banana, Wand2, ChevronRight, X, Copy, Check } from 'lucide-react'
+import { Image, Film, Music, Sparkles, Send, Banana, Wand2, ChevronRight, X, Copy, Check, Clapperboard } from 'lucide-react'
 
 const CHANNEL_URL = 'https://t.me/aifaceapps'
 const BANNER_DISMISS_KEY = 'channel_banner_dismissed_at'
@@ -28,6 +28,7 @@ const categories: CategoryItem[] = [
   { id: 'image', label: 'Картинка', icon: Image, action: { category: 'image' } },
   { id: 'video', label: 'Видео', icon: Film, action: { category: 'video' } },
   { id: 'nbpro', label: 'Nano Banana Pro', icon: Banana, action: { category: 'image', model: 'google/nano-banana-pro' } },
+  { id: 'motion', label: 'Kling Motion', icon: Clapperboard, action: { model: 'kling-2.6/motion-control', category: 'video' } },
   { id: 'music', label: 'Аудио', icon: Music, action: { category: 'music' } },
   { id: 'animate', label: 'Оживить фото', icon: Wand2, action: { model: 'veo3_fast', prompt: 'Оживи фото', category: 'video' } },
 ]
@@ -209,7 +210,7 @@ export function DashboardPage() {
               ))}
             </div>
           ) : (
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, maxWidth: 600, margin: '0 auto' }}>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
               {/* Left column — even indices */}
               <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
                 {trends.filter((_, i) => i % 2 === 0).map((t, ci) => (
