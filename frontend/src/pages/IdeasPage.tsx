@@ -151,7 +151,7 @@ export function IdeasPage() {
                 <img
                   src={item.output}
                   alt=""
-                  className="w-full h-full object-contain transition-transform duration-300 group-hover:scale-105"
+                  className="w-full h-full object-cover transition-transform duration-300 group-hover:scale-105"
                   loading="lazy"
                   onError={(e) => {
                     // hide cards with broken images
