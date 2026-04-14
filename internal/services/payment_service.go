@@ -49,12 +49,12 @@ func NewPaymentService(provider *payments.PaymentProvider, userService *UserServ
 				100: 1599,
 			},
 			"video": {
-				1:   99,
-				5:   379,
-				10:  699,
-				25:  1650,
-				50:  3100,
-				100: 5900,
+				10:   99,
+				50:   379,
+				100:  699,
+				250:  1650,
+				500:  3100,
+				1000: 5900,
 			},
 		},
 		subPrices: map[string]int{

@@ -69,12 +69,18 @@ export function PaymentsPage() {
       case 'text':
         return 'Текст'
       case 'music':
-        return 'Музыка'
+        return 'Муз. токены'
       case 'video':
-        return 'Видео'
+        return 'Видео токены'
       default:
         return category
     }
+  }
+
+  const getUnitLabel = (category: string) => {
+    if (category === 'video') return 'токенов'
+    if (category === 'music') return 'токенов'
+    return 'шт.'
   }
 
   const handlePurchase = async (category: string, qty: number) => {
@@ -206,8 +212,8 @@ export function PaymentsPage() {
                     {[
                       { icon: MessageSquare, color: 'text-blue-400', label: 'Текст', val: sub.text_daily, unit: '/д' },
                       { icon: Image, color: 'text-green-400', label: 'Фото', val: sub.image_weekly, unit: '/н' },
-                      { icon: Music, color: 'text-purple-400', label: 'Муз', val: sub.music_weekly, unit: '/н' },
-                      { icon: Video, color: 'text-orange-400', label: 'Видео', val: sub.video_weekly || '—', unit: '/н' },
+                      { icon: Music, color: 'text-purple-400', label: 'Муз.т', val: sub.music_weekly, unit: '/н' },
+                      { icon: Video, color: 'text-orange-400', label: 'Вид.т', val: sub.video_weekly || '—', unit: '/н' },
                     ].map(({ icon: Icon, color, label, val, unit }) => (
                       <div key={label} className="flex flex-col items-center rounded-xl bg-white/[0.03] px-1 py-2 gap-1">
                         <Icon className={`h-3 w-3 ${color}`} />
@@ -255,7 +261,7 @@ export function PaymentsPage() {
       <div>
         <h2 className="text-xl font-semibold mb-3 flex items-center gap-2 text-white/90">
           <div className="h-8 w-1 bg-primary rounded-full" />
-          Пакеты генераций
+          Пакеты
         </h2>
 
         {/* Discount badges */}
@@ -292,7 +298,7 @@ export function PaymentsPage() {
                       const { final: effectivePrice, hasDiscount } = getEffectivePrice(pkg)
                       return (
                         <div key={key} className="flex justify-between items-center p-3 rounded-xl hover:bg-white/[0.03] transition-all group/item">
-                          <span className="text-sm text-white/60 group-hover/item:text-white/90 transition-colors">{pkg.qty} шт.</span>
+                          <span className="text-sm text-white/60 group-hover/item:text-white/90 transition-colors">{pkg.qty} {getUnitLabel(pkg.category)}</span>
                           <Button size="sm" variant="secondary"
                             className="h-8 min-w-[90px] rounded-lg bg-white/5 border border-white/5 hover:bg-primary hover:text-white transition-all text-xs font-bold"
                             onClick={() => handlePurchase(pkg.category, pkg.qty)}
@@ -355,7 +361,7 @@ export function PaymentsPage() {
                     disabled={isPurchasing || !isAuthenticated}
                     className="flex items-center justify-between px-4 py-3 rounded-2xl bg-white/[0.04] border border-white/[0.06] active:scale-[0.97] transition-all disabled:opacity-40"
                   >
-                    <span className="text-sm text-white/70 font-medium">{pkg.qty} шт.</span>
+                    <span className="text-sm text-white/70 font-medium">{pkg.qty} {getUnitLabel(pkg.category)}</span>
                     {isPurchasing ? (
                       <span className="h-4 w-4 animate-spin rounded-full border-2 border-white/20 border-t-white" />
                     ) : hasDiscount ? (
@@ -393,7 +399,7 @@ export function PaymentsPage() {
                   <div key={payment.id} className="flex justify-between items-center p-5 hover:bg-white/[0.02] transition-colors group">
                     <div className="space-y-1">
                       <p className="font-medium text-white/80 group-hover:text-white transition-colors">
-                        {getCategoryName(payment.category)} <span className="text-white/20 px-2">/</span> {payment.qty} ед.
+                        {getCategoryName(payment.category)} <span className="text-white/20 px-2">/</span> {payment.qty} {getUnitLabel(payment.category)}
                       </p>
                       <p className="text-[10px] uppercase tracking-wider text-white/20">
                         {formatDate(payment.at || payment.created_at)}

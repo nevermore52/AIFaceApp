@@ -188,6 +188,43 @@ func (c *Client) GetUserLanguage(userID int64) (string, error) {
 	return lang, nil
 }
 
+// MotionControlPending stores character photo URL + prompt while waiting for reference video
+type MotionControlPending struct {
+	PhotoURL string `json:"photo_url"`
+	Prompt   string `json:"prompt"`
+}
+
+func (c *Client) SetMotionControlPending(userID int64, photoURL, prompt string) error {
+	key := fmt.Sprintf("user:%d:motion_control_pending", userID)
+	data := MotionControlPending{PhotoURL: photoURL, Prompt: prompt}
+	bytes, err := json.Marshal(data)
+	if err != nil {
+		return err
+	}
+	return c.rdb.Set(c.ctx, key, string(bytes), 10*time.Minute).Err()
+}
+
+func (c *Client) GetMotionControlPending(userID int64) (*MotionControlPending, error) {
+	key := fmt.Sprintf("user:%d:motion_control_pending", userID)
+	val, err := c.rdb.Get(c.ctx, key).Result()
+	if err == redis.Nil {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+	var data MotionControlPending
+	if err := json.Unmarshal([]byte(val), &data); err != nil {
+		return nil, err
+	}
+	return &data, nil
+}
+
+func (c *Client) DeleteMotionControlPending(userID int64) error {
+	key := fmt.Sprintf("user:%d:motion_control_pending", userID)
+	return c.rdb.Del(c.ctx, key).Err()
+}
+
 func NewClient(cfg config.RedisConfig) (*Client, error) {
 	rdb := redis.NewClient(&redis.Options{
 		Addr:     cfg.URL,

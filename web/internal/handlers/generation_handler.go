@@ -447,6 +447,57 @@ func (h *GenerationHandler) UploadImage(c *gin.Context) {
 	})
 }
 
+// UploadVideo handles temporary video uploads (reference videos for motion-control)
+func (h *GenerationHandler) UploadVideo(c *gin.Context) {
+	user, exists := c.Get("user")
+	if !exists {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "Not authenticated"})
+		return
+	}
+
+	u := user.(*models.User)
+
+	file, header, err := c.Request.FormFile("video")
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "No file provided"})
+		return
+	}
+	defer file.Close()
+
+	// 100MB limit for videos
+	if header.Size > 100*1024*1024 {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "File too large (max 100MB)"})
+		return
+	}
+
+	// Validate file type via magic bytes
+	buffer := make([]byte, 512)
+	n, _ := file.Read(buffer)
+	file.Seek(0, 0)
+
+	contentType := http.DetectContentType(buffer[:n])
+	if !strings.HasPrefix(contentType, "video/") {
+		if ct := header.Header.Get("Content-Type"); strings.HasPrefix(ct, "video/") {
+			contentType = ct
+		} else {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid file type, expected video"})
+			return
+		}
+	}
+
+	url, err := h.webGenerationService.SaveUploadedFile(file, header.Filename, h.uploadDir, h.webBaseURL, u.ID)
+	if err != nil {
+		log.Printf("Error saving video for user %d: %v", u.ID, err)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to upload video"})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"url":  url,
+		"size": header.Size,
+	})
+}
+
 // AdminUploadImage is the same as UploadImage but uses userID=0, so the file
 // is saved permanently without being subject to the per-user 10-file cleanup.
 // Used for gallery-idea images that must persist indefinitely.

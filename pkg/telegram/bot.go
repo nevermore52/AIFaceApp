@@ -1220,9 +1220,10 @@ var modelOptions = []ModelOption{
 	{ID: "google/nano-banana-pro", Label: "Nano Banana Pro", Desc: locRU.ModelNanoBananaPro, Category: ModelCategoryPhoto, RequestCost: 4, EmojiID: "5463289097336405244"},
 	{ID: "nano-banana-2", Label: "Nano Banana 2", Desc: locRU.ModelNanoBanana2, Category: ModelCategoryPhoto, RequestCost: 2, EmojiID: "5258203794772085854"},
 	{ID: "seedream/4.5-edit", Label: "👙 Seedream 4.5", Desc: locRU.ModelSeedream, Category: ModelCategoryPhoto, RequestCost: 3},
-	{ID: "veo3_fast", ApiModel: "veo3_fast", Label: "🎬 Veo 3.1 Fast", Desc: locRU.ModelVeo3Fast, Category: ModelCategoryVideo, RequestCost: 1},
-	{ID: "wan/2-6-image-to-video", ApiModel: "wan/2-6-image-to-video", Label: "🎥 Wan 2.6", Desc: locRU.ModelWan26, Category: ModelCategoryVideo, RequestCost: 2},
-	{ID: "kling-2.6/image-to-video", ApiModel: "kling-2.6/image-to-video", Label: "🎬 Kling 2.6", Desc: locRU.ModelKling26, Category: ModelCategoryVideo, RequestCost: 1},
+	{ID: "veo3_fast", ApiModel: "veo3_fast", Label: "🎬 Veo 3.1 Fast", Desc: locRU.ModelVeo3Fast, Category: ModelCategoryVideo, RequestCost: 10},
+	{ID: "wan/2-6-image-to-video", ApiModel: "wan/2-6-image-to-video", Label: "🎥 Wan 2.6", Desc: locRU.ModelWan26, Category: ModelCategoryVideo, RequestCost: 20},
+	{ID: "kling-2.6/image-to-video", ApiModel: "kling-2.6/image-to-video", Label: "🎬 Kling 2.6", Desc: locRU.ModelKling26, Category: ModelCategoryVideo, RequestCost: 10},
+	{ID: "kling-2.6/motion-control", ApiModel: "kling-2.6/motion-control", Label: "🎭 Kling Motion", Desc: locRU.ModelKlingMotion, Category: ModelCategoryVideo, RequestCost: 5},
 	{ID: "music-suno", ApiModel: "suno", Label: "Suno Music", Desc: locRU.ModelSunoMusic, Category: ModelCategoryMusic, RequestCost: 1, TaskType: "music", EmojiID: "5217933090483098080"},
 	{ID: "google/gemini-3-flash", Label: "Gemini 3 Flash", Desc: "", Category: ModelCategoryChat, RequestCost: 1, EmojiID: "5443038326535759644"},
 	{ID: "openai/gpt-5-mini", Label: "GPT-5 mini", Desc: locRU.ModelGPT5Mini, Category: ModelCategoryChat, RequestCost: 1, EmojiID: "5443038326535759644"},
@@ -1519,6 +1520,12 @@ func (b *Bot) handleMessage(msg *tgmodels.Message) {
 		return
 	}
 
+	// Обрабатываем видео (опорное видео для motion-control)
+	if msg.Video != nil || msg.Animation != nil {
+		b.handleVideoMessage(msg)
+		return
+	}
+
 	// Обрабатываем документы как изображения (если это картинка)
 	if msg.Document != nil {
 		b.handleDocument(msg)
@@ -1614,6 +1621,15 @@ func (b *Bot) handlePhoto(msg *tgmodels.Message) {
 
 	fileURL := b.getFileURL(file)
 
+	// Если выбрана motion-control — сохраняем фото и просим опорное видео
+	if modelOpt.ID == "kling-2.6/motion-control" {
+		if err := b.redisClient.SetMotionControlPending(userID, fileURL, caption); err != nil {
+			log.Printf("Failed to save motion control pending: %v", err)
+		}
+		b.sendText(chatID, "✅ Фото персонажа получено!\n\nТеперь отправьте <b>опорное видео движения</b> — бот скопирует движения из него на персонажа.")
+		return
+	}
+
 	// Если выбрана видео-модель — запускаем видео-генерацию с промптом
 	if modelOpt.Category == ModelCategoryVideo {
 		b.processVideoGeneration(chatID, userID, fileURL, caption, modelOpt)
@@ -1625,6 +1641,54 @@ func (b *Bot) handlePhoto(msg *tgmodels.Message) {
 
 	// Запускаем генерацию
 	b.processGeneration(chatID, userID, []string{fileURL}, genType, caption)
+}
+
+// handleVideoMessage handles incoming video/animation messages (for motion-control reference video)
+func (b *Bot) handleVideoMessage(msg *tgmodels.Message) {
+	userID := msg.From.ID
+	chatID := msg.Chat.ID
+
+	// Check if there's a pending motion-control generation for this user
+	pending, err := b.redisClient.GetMotionControlPending(userID)
+	if err != nil {
+		log.Printf("handleVideoMessage: redis error: %v", err)
+	}
+	if pending == nil {
+		// No pending motion-control — ignore the video
+		return
+	}
+
+	// Clear the pending state
+	_ = b.redisClient.DeleteMotionControlPending(userID)
+
+	// Get the video file ID
+	var fileID string
+	if msg.Video != nil {
+		fileID = msg.Video.FileID
+	} else if msg.Animation != nil {
+		fileID = msg.Animation.FileID
+	}
+	if fileID == "" {
+		b.sendErrorMessage(chatID, "Не удалось получить видео. Попробуйте ещё раз.")
+		return
+	}
+
+	file, err := b.api.GetFile(b.ctx, &tgbot.GetFileParams{FileID: fileID})
+	if err != nil {
+		log.Printf("handleVideoMessage: GetFile error: %v", err)
+		b.sendErrorMessage(chatID, "Не удалось получить файл видео.")
+		return
+	}
+	videoURL := b.getFileURL(file)
+
+	modelOpt, ok := findModelOption("kling-2.6/motion-control")
+	if !ok {
+		b.sendErrorMessage(chatID, "Модель Kling Motion Control не найдена.")
+		return
+	}
+
+	// Process the motion-control generation
+	b.processMotionControlGeneration(chatID, userID, pending.PhotoURL, videoURL, pending.Prompt, modelOpt)
 }
 
 // handleDocument обрабатывает документы как изображения (если это картинка)
@@ -3299,6 +3363,8 @@ func (b *Bot) modelDescriptionLoc(id string, loc *Localization) string {
 		return loc.ModelWan26
 	case "kling-2.6/image-to-video":
 		return loc.ModelKling26
+	case "kling-2.6/motion-control":
+		return loc.ModelKlingMotion
 	case "music-suno":
 		return loc.ModelSunoMusic
 	case "google/gemini-3-flash":
@@ -3556,7 +3622,7 @@ func (b *Bot) processVideoGeneration(chatID int64, userID int64, photoURL string
 	}
 
 	if err := b.userService.ConsumeQuota(userRec.ID, models.QuotaCategoryVideo, requestCost); err != nil {
-		b.sendErrorMessage(chatID, fmt.Sprintf("Недостаточно видео-запросов. Нужно: %d. %s", requestCost, err.Error()))
+		b.sendErrorMessage(chatID, fmt.Sprintf("Недостаточно видео токенов. Нужно: %d. %s", requestCost, err.Error()))
 		return
 	}
 
@@ -3656,6 +3722,53 @@ func (b *Bot) processVideoGeneration(chatID int64, userID int64, photoURL string
 		caption := fmt.Sprintf("🎬 Видео готово\nМодель: %s\nСписано: %d видео-запрос(ов)", modelOpt.Label, requestCost)
 		b.sendVideoResult(chatID, caption, resultURL)
 	})
+}
+
+// processMotionControlGeneration handles Kling 2.6 motion-control generation
+func (b *Bot) processMotionControlGeneration(chatID int64, userID int64, photoURL, videoURL, prompt string, modelOpt ModelOption) {
+	if !b.ensureCategoryEnabled(chatID, ModelCategoryVideo) {
+		return
+	}
+
+	// Default duration=5, mode=720p
+	duration := "5"
+	mode := "720p"
+
+	// Cost: 720p=1 token/sec, 1080p=ceil(1.5 tokens/sec)
+	durationInt := 5
+	requestCost := durationInt // 720p default
+
+	userRec, err := b.userService.GetUserByTelegramID(userID)
+	if err != nil {
+		b.sendErrorMessage(chatID, "Ошибка получения данных пользователя")
+		return
+	}
+
+	if err := b.userService.ConsumeQuota(userRec.ID, models.QuotaCategoryVideo, requestCost); err != nil {
+		b.sendErrorMessage(chatID, fmt.Sprintf("Недостаточно видео токенов. Нужно: %d. %s", requestCost, err.Error()))
+		return
+	}
+
+	opts := services.GenerationOptions{
+		InputImages:        []string{photoURL},
+		InputImage:         photoURL,
+		VideoURLs:          []string{videoURL},
+		Prompt:             prompt,
+		TokensCost:         requestCost,
+		ChatID:             chatID,
+		Model:              modelOpt.ID,
+		ModelType:          string(modelOpt.Category),
+		Username:           userRec.Username,
+		AspectRatio:        duration,
+		NanoBananaProvider: mode,
+	}
+	req, err := b.generationService.StartGeneration(userRec.ID, opts)
+	if err != nil {
+		_ = b.userService.AddExtraQuota(userRec.ID, models.QuotaCategoryVideo, requestCost)
+		b.sendErrorMessage(chatID, fmt.Sprintf("Ошибка запуска генерации: %v", err))
+		return
+	}
+	b.sendText(chatID, fmt.Sprintf("🔄 Запустили Motion Control генерацию! ID: %d\nМодель: %s\nРежим: %s\nДлительность: %s сек\nСписано: %d видео токенов\n\nОжидайте результат...", req.ID, modelOpt.Label, mode, duration, requestCost))
 }
 
 // sendAudioResult отправляет аудио из URL или data: ссылки
@@ -5385,6 +5498,9 @@ func (b *Bot) sendModelMenu(chatID int64, userID int64, category ModelCategory, 
 		text += "\n<b>" + fmt.Sprintf(loc.ModelsCostFrom, minCost) + "</b>"
 	} else if current == "kling-2.6/image-to-video" {
 		minCost := 1
+		text += "\n<b>" + fmt.Sprintf(loc.ModelsCostFromSingular, minCost) + "</b>"
+	} else if current == "kling-2.6/motion-control" {
+		minCost := 3
 		text += "\n<b>" + fmt.Sprintf(loc.ModelsCostFromSingular, minCost) + "</b>"
 	} else if cost := modelRequestCost(current); cost > 0 {
 		text += "\n<b>Расход:</b> " + fmt.Sprintf("%d %s", cost, requestWord(cost, loc))

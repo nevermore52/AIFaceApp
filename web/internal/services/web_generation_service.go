@@ -10,6 +10,7 @@ import (
 	"log"
 	"net/http"
 	"os"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -103,6 +104,7 @@ type CreateGenerationRequest struct {
 	Model       string   `json:"model" binding:"required"`
 	Prompt      string   `json:"prompt" binding:"required"`
 	ImageURLs   []string `json:"image_urls"`
+	VideoURLs   []string `json:"video_urls"` // Reference video URLs (motion-control)
 	AspectRatio string   `json:"aspect_ratio"`
 	// Nano Banana 2/Pro параметры
 	Resolution   string `json:"resolution"`
@@ -152,6 +154,7 @@ func (s *WebGenerationService) GetAvailableModels() []ModelInfo {
 		{ID: "veo3_fast", Name: "Veo 3.1 Fast", Type: "video", Description: "Генерация видео", TokenCost: 1, Placeholder: "Опишите, что вы хотите получить в видео"},
 		{ID: "wan/2-6-image-to-video", Name: "Wan 2.6", Type: "video", Description: "Генерация видео из изображения", TokenCost: 2, Placeholder: "Опишите, что вы хотите получить в видео"},
 		{ID: "kling-2.6/image-to-video", Name: "Kling 2.6", Type: "video", Description: "Генерация видео с звуком", TokenCost: 1, Placeholder: "Опишите, что вы хотите получить в видео"},
+		{ID: "kling-2.6/motion-control", Name: "Kling 2.6 Motion", Type: "video", Description: "Перенос движения на персонажа", TokenCost: 1, Placeholder: "Опишите сцену для видео"},
 		{ID: "music-suno", Name: "Suno Music", Type: "music", Description: "Генерация музыки", TokenCost: 1, Placeholder: "Опишите, что вы хотите получить в песне"},
 		{ID: "google/gemini-3-flash", Name: "Gemini 3 Flash", Type: "text", Description: "Текстовая модель", TokenCost: 1, Placeholder: "Введите запрос"},
 		{ID: "openai/gpt-5-mini", Name: "GPT-5 mini", Type: "text", Description: "Текстовая модель", TokenCost: 1, Placeholder: "Введите запрос"},
@@ -229,10 +232,11 @@ func (s *WebGenerationService) getTokenCost(model string, req CreateGenerationRe
 		"google/nano-banana-pro":   4,
 		"nano-banana-2":            2,
 		"seedream/4.5-edit":        3,
-		"veo3_fast":                1,
-		"wan/2-6-image-to-video":   2,
-		"kling-2.6/image-to-video": 1,
-		"music-suno":               1,
+		"veo3_fast":                10,
+		"wan/2-6-image-to-video":   20,
+		"kling-2.6/image-to-video":   10,
+		"kling-2.6/motion-control":   1,
+		"music-suno":                 1,
 		"google/gemini-3-flash":    1,
 		"openai/gpt-5-mini":        1,
 		"openai/gpt-5-nano":        1,
@@ -267,20 +271,36 @@ func (s *WebGenerationService) getTokenCost(model string, req CreateGenerationRe
 	}
 
 	if model == "wan/2-6-image-to-video" {
-		// Длительность видео: 5с (базовое), 10с (+1)
+		// Длительность видео: 5с (базовое 20 токенов), 10с (+10)
 		switch req.Duration {
 		case "10":
-			return baseCost + 1
+			return baseCost + 10
 		default:
 			return baseCost
 		}
 	}
 
 	if model == "kling-2.6/image-to-video" {
-		// Звук: без звука (базовое), со звуком (+1)
+		// Звук: без звука (базовое), со звуком (+10)
 		if req.Sound == "true" {
-			return baseCost + 1
+			return baseCost + 10
 		}
+	}
+
+	if model == "kling-2.6/motion-control" {
+		// 720p: 1 токен/сек, 1080p: ceil(1.5 токена/сек)
+		dur, err := strconv.Atoi(req.Duration)
+		if err != nil || dur < 3 {
+			dur = 3
+		}
+		if dur > 30 {
+			dur = 30
+		}
+		mode := req.Resolution
+		if mode == "1080p" {
+			return (dur*3 + 1) / 2 // ceil(dur * 1.5)
+		}
+		return dur // 720p: 1 токен/сек
 	}
 
 	return baseCost
@@ -504,6 +524,25 @@ func (s *WebGenerationService) processGeneration(genReq *GenerationRequest, req 
 			sound = true
 		}
 		input["sound"] = sound
+	} else if model == "kling-2.6/motion-control" {
+		// Kling 2.6 Motion Control: фото персонажа + опорное видео + режим + длительность
+		if len(req.ImageURLs) > 0 {
+			input["input_urls"] = s.reuploadImagesToKie(req.ImageURLs)
+		}
+		if len(req.VideoURLs) > 0 {
+			input["video_urls"] = s.reuploadImagesToKie(req.VideoURLs)
+		}
+		duration := req.Duration
+		if duration == "" {
+			duration = "3"
+		}
+		input["duration"] = duration
+		mode := req.Resolution
+		if mode != "720p" && mode != "1080p" {
+			mode = "720p"
+		}
+		input["mode"] = mode
+		input["character_orientation"] = "video"
 	} else if model == "veo3_fast" {
 		// Veo 3.1 Fast: imageUrls (camelCase), максимум 2 изображения
 		if len(req.ImageURLs) > 0 {

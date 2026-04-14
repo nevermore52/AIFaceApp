@@ -64,19 +64,19 @@ func (s *WebPaymentService) GetPackages() []PackageInfo {
 		{Category: "text", Qty: 100, Price: 80},
 		{Category: "text", Qty: 250, Price: 200},
 		{Category: "text", Qty: 500, Price: 345},
-		// Music packages
+		// Music packages (музыкальные токены)
 		{Category: "music", Qty: 1, Price: 25},
 		{Category: "music", Qty: 5, Price: 119},
 		{Category: "music", Qty: 10, Price: 202},
 		{Category: "music", Qty: 50, Price: 812},
 		{Category: "music", Qty: 100, Price: 1599},
-		// Video packages
-		{Category: "video", Qty: 1, Price: 99},
-		{Category: "video", Qty: 5, Price: 379},
-		{Category: "video", Qty: 10, Price: 699},
-		{Category: "video", Qty: 25, Price: 1650},
-		{Category: "video", Qty: 50, Price: 3100},
-		{Category: "video", Qty: 100, Price: 5900},
+		// Video packages (видео токены; 1 генерация = 10 токенов)
+		{Category: "video", Qty: 10, Price: 99},
+		{Category: "video", Qty: 50, Price: 379},
+		{Category: "video", Qty: 100, Price: 699},
+		{Category: "video", Qty: 250, Price: 1650},
+		{Category: "video", Qty: 500, Price: 3100},
+		{Category: "video", Qty: 1000, Price: 5900},
 	}
 }
 
@@ -99,7 +99,7 @@ func (s *WebPaymentService) GetSubscriptions() []SubscriptionInfo {
 			TextDaily:   100,
 			ImageWeekly: 40,
 			MusicWeekly: 5,
-			VideoWeekly: 2,
+			VideoWeekly: 20,
 			Discount:    15,
 			TextModels:  []string{"Gemini 3 Flash", "GPT-5 nano"},
 			Features:    []string{"x2 контекст", "Скидка 15% на все генерации"},
@@ -110,7 +110,7 @@ func (s *WebPaymentService) GetSubscriptions() []SubscriptionInfo {
 			TextDaily:   200,
 			ImageWeekly: 90,
 			MusicWeekly: 10,
-			VideoWeekly: 5,
+			VideoWeekly: 50,
 			Discount:    20,
 			TextModels:  []string{"Gemini 3 Flash", "GPT-5 nano"},
 			Features:    []string{"6 стилей общения GPT", "x3 контекст", "Без рекламы", "Скидка 20% на все генерации"},

@@ -75,6 +75,7 @@ type LogRequestOptions struct {
 type GenerationOptions struct {
 	InputImage         string
 	InputImages        []string
+	VideoURLs          []string // Reference video URLs (for motion-control)
 	Prompt             string
 	TokensCost         int
 	TokensPrimaryUsed  int
@@ -351,6 +352,26 @@ func (s *GenerationService) processGeneration(req *models.GenerationRequest, opt
 		}
 		debugLog("processGeneration Kling Video task created: requestID=%d taskID=%s", req.ID, taskID)
 		// Start timeout checker: 6 minutes for kling video models
+		s.startKieAPITimeoutChecker(req.ID, taskID, 6*time.Minute, opts.ChatID)
+		return
+	}
+
+	// kling-2.6/motion-control — KieAPI task with input_urls, video_urls, mode, duration
+	if strings.EqualFold(strings.TrimSpace(opts.Model), "kling-2.6/motion-control") {
+		taskID, err := s.createKlingMotionTask(req.ID, opts, images)
+		if err != nil {
+			debugLog("processGeneration Kling Motion FAILED: requestID=%d, error=%v", req.ID, err)
+			_ = s.updateRequestStatus(req.ID, "failed", err.Error())
+			req.Status = "failed"
+			errMsg := err.Error()
+			req.ErrorMsg = &errMsg
+			if s.notify != nil {
+				s.notify(opts.ChatID, req)
+			}
+			s.markDone(req.ID)
+			return
+		}
+		debugLog("processGeneration Kling Motion task created: requestID=%d taskID=%s", req.ID, taskID)
 		s.startKieAPITimeoutChecker(req.ID, taskID, 6*time.Minute, opts.ChatID)
 		return
 	}
@@ -684,6 +705,60 @@ func (s *GenerationService) createKlingVideoTask(requestID int64, opts Generatio
 
 	payload := kieapi.CreateTaskRequest{
 		Model:       "kling-2.6/image-to-video",
+		CallBackURL: callbackURL,
+		Input:       input,
+	}
+
+	taskID, err := s.kieAPI.CreateTask(payload)
+	if err != nil {
+		return "", err
+	}
+	if err := s.updateExternalTaskID(requestID, taskID); err != nil {
+		return "", err
+	}
+	return taskID, nil
+}
+
+func (s *GenerationService) createKlingMotionTask(requestID int64, opts GenerationOptions, images []string) (string, error) {
+	if s.kieAPI == nil {
+		return "", fmt.Errorf("kieapi client is not configured")
+	}
+	callbackURL := strings.TrimSpace(os.Getenv("KIEAPI_CALLBACK_URL"))
+	if callbackURL == "" {
+		callbackURL = strings.TrimSpace(os.Getenv("KIE_CALLBACK_URL"))
+	}
+	if callbackURL == "" {
+		return "", fmt.Errorf("KIEAPI_CALLBACK_URL is not set")
+	}
+
+	// Duration via AspectRatio field, mode (720p/1080p) via NanoBananaProvider field
+	duration := "5"
+	mode := "720p"
+
+	if opts.AspectRatio != "" {
+		duration = opts.AspectRatio
+	}
+	if opts.NanoBananaProvider != "" {
+		mode = opts.NanoBananaProvider
+	}
+
+	input := map[string]any{
+		"duration":              duration,
+		"mode":                  mode,
+		"character_orientation": "video",
+	}
+	if len(images) > 0 {
+		input["input_urls"] = images
+	}
+	if len(opts.VideoURLs) > 0 {
+		input["video_urls"] = opts.VideoURLs
+	}
+	if opts.Prompt != "" {
+		input["prompt"] = opts.Prompt
+	}
+
+	payload := kieapi.CreateTaskRequest{
+		Model:       "kling-2.6/motion-control",
 		CallBackURL: callbackURL,
 		Input:       input,
 	}

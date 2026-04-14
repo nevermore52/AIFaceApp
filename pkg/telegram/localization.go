@@ -164,6 +164,7 @@ type Localization struct {
 	ModelVeo3Fast      string
 	ModelWan26         string
 	ModelKling26       string
+	ModelKlingMotion   string
 	ModelSunoMusic     string
 	ModelGeminiFlash   string
 	ModelGPT5Mini      string
@@ -516,6 +517,7 @@ var locRU = Localization{
 	ModelVeo3Fast:      "Видео из фото. \n<tg-emoji emoji-id=\"5382194935057372936\">⏱</tg-emoji> Среднее время: 2-5 мин.",
 	ModelWan26:         "Видео из фото. Выбор длительности (5/10/15 сек) и разрешения. \n<tg-emoji emoji-id=\"5382194935057372936\">⏱</tg-emoji> Среднее время: 2-5 мин.",
 	ModelKling26:       "Видео из фото. Выбор длительности (5/10 сек) и звука. \n<tg-emoji emoji-id=\"5382194935057372936\">⏱</tg-emoji> Среднее время: 2-5 мин.",
+	ModelKlingMotion:   "Перенос движения на персонажа. Отправьте фото персонажа + опорное видео движения. \n<tg-emoji emoji-id=\"5382194935057372936\">⏱</tg-emoji> Среднее время: 2-5 мин.",
 	ModelSunoMusic:     "Генерация музыки. Выбор голоса и режима. \n<tg-emoji emoji-id=\"5382194935057372936\">⏱</tg-emoji> Среднее время: 2-5 мин.",
 	ModelGeminiFlash:   "Быстрые текстовые ответы. Доступно с подпиской Start+.",
 	ModelGPT5Mini:      "Быстрые текстовые ответы. Доступно всем пользователям.",
@@ -664,8 +666,8 @@ var locRU = Localization{
 	GenServiceError:              "Сервис вернул ошибку. Прочитайте правила /rules и попробуйте переформулировать запрос.",
 	QuotaTextRequests:            "текстовые запросы",
 	QuotaImageRequests:           "генерации изображений",
-	QuotaMusicRequests:           "генерации музыки",
-	QuotaVideoRequests:           "видео-запросы",
+	QuotaMusicRequests:           "музыкальные токены",
+	QuotaVideoRequests:           "видео токены",
 	QuotaRequests:                "запросы",
 	BuyExtraQuota:                "💰 Купить генерации",
 	BackToSubscriptions:          "◀️ Назад к подпискам",
@@ -832,6 +834,7 @@ var locEN = Localization{
 	ModelVeo3Fast:               "Video from photo. Send 1 photo with a caption. Average wait time 2–5 minutes.",
 	ModelWan26:                  "Video from photo with duration (5/10/15 sec) and resolution (720p/1080p) selection. Supports up to 4 photos. Cost: 2 per 5 seconds. Average wait time 3–7 minutes.",
 	ModelKling26:                "Video from photo with duration (5/10 sec) and sound selection. Cost: 5s=1 gen, 10s=2 gen, with sound x2. Average wait time 2–5 minutes.",
+	ModelKlingMotion:            "Motion transfer to a character. Send a character photo + reference motion video. Cost: 720p=1 token/sec, 1080p=1.5 tokens/sec. Average wait time 2–5 minutes.",
 	ModelSunoMusic:              "Music generation. Wait time 5–10 minutes.",
 	ModelGeminiFlash:            "Text: fast replies. Available with Start+ subscription.",
 	ModelGPT5Mini:               "Text: fast replies. Available to all users.",
@@ -993,8 +996,8 @@ var locEN = Localization{
 	GenServiceError:              "Service returned an error. Read the bot rules /rules and try to rephrase your request.",
 	QuotaTextRequests:            "text requests",
 	QuotaImageRequests:           "image requests",
-	QuotaMusicRequests:           "music requests",
-	QuotaVideoRequests:           "video requests",
+	QuotaMusicRequests:           "music tokens",
+	QuotaVideoRequests:           "video tokens",
 	QuotaRequests:                "requests",
 	BuyExtraQuota:                "💰 Buy extra requests",
 	BackToSubscriptions:          "◀️ Back to subscriptions",

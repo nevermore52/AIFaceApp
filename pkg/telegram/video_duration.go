@@ -146,18 +146,18 @@ func (b *Bot) getVideoDurationCost(userID int64) int {
 	if err != nil || durationInt <= 0 {
 		durationInt = 5
 	}
-	// 5 сек = 2 генерации, 10 сек = 4 генерации, 15 сек = 6 генераций
-	return (durationInt / 5) * 2
+	// 5 сек = 20 видео токенов, 10 сек = 40, 15 сек = 60
+	return (durationInt / 5) * 20
 }
 
 func (b *Bot) getKlingVideoCost(userID int64) int {
 	duration := b.getUserVideoDuration(userID)
 	sound := b.getUserVideoSound(userID)
 
-	// Kling: 5 сек = 1 генерация, 10 сек = 2 генерации
-	baseCost := 1
+	// Kling: 5 сек = 10 видео токенов, 10 сек = 20 токенов
+	baseCost := 10
 	if duration == "10" {
-		baseCost = 2
+		baseCost = 20
 	}
 
 	// Со звуком = x2

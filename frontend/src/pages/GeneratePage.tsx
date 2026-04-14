@@ -120,6 +120,12 @@ const KLING_DURATIONS = [
   { id: '10', label: '10 сек (2 генерации)', value: '10', cost: 2 },
 ]
 
+// Режимы для Kling 2.6 Motion Control
+const KLING_MOTION_MODES = [
+  { id: '720p', label: '720p', value: '720p' },
+  { id: '1080p', label: '1080p', value: '1080p' },
+]
+
 // Режимы для Suno Music
 const SUNO_MODES = [
   { id: 'instrumental', label: 'Без голоса (инструментал)', value: 'instrumental' },
@@ -138,6 +144,7 @@ const MAX_IMAGES_PER_MODEL: Record<string, number> = {
   'nano-banana-2': 4,
   'seedream/4.5-edit': 4,
   'veo3_fast': 2,
+  'kling-2.6/motion-control': 1,
 }
 
 // Модели, требующие подписку
@@ -161,6 +168,9 @@ export function GeneratePage() {
   const [withSound, setWithSound] = useState(false)
   const [sunoMode, setSunoMode] = useState('instrumental')
   const [sunoVoice, setSunoVoice] = useState('m')
+  const [motionVideoFile, setMotionVideoFile] = useState<File | null>(null)
+  const [motionVideoPreview, setMotionVideoPreview] = useState<string | null>(null)
+  const [motionDuration, setMotionDuration] = useState(5)
   const [prompt, setPrompt] = useState('')
   const [chatHistory, setChatHistory] = useState<{ role: string; content: string }[]>([])
   const [imageFiles, setImageFiles] = useState<File[]>([])
@@ -177,6 +187,7 @@ export function GeneratePage() {
   const [showLibraryPicker, setShowLibraryPicker] = useState(false)
   const [libraryUrls, setLibraryUrls] = useState<string[]>([]) // URLs выбранных из библиотеки
   const fileInputRef = useRef<HTMLInputElement>(null)
+  const motionVideoInputRef = useRef<HTMLInputElement>(null)
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null)
 
   useEffect(() => {
@@ -258,6 +269,11 @@ export function GeneratePage() {
     // Kling 2.6: дефолт 5 сек
     else if (selectedModel === 'kling-2.6/image-to-video') {
       setVideoDuration('5')
+    }
+    // Kling 2.6 Motion Control: дефолт 720p
+    else if (selectedModel === 'kling-2.6/motion-control') {
+      setSelectedResolution('720p')
+      setMotionDuration(5)
     }
     // Wan 2.6: дефолт 5 сек
     else if (selectedModel === 'wan/2-6-image-to-video') {
@@ -402,6 +418,25 @@ export function GeneratePage() {
     return data.url
   }
 
+  const uploadVideoToServer = async (file: File): Promise<string> => {
+    const formData = new FormData()
+    formData.append('video', file)
+    if (!accessToken) throw new Error('Не авторизованы')
+    const response = await fetch('/api/upload-video', {
+      method: 'POST',
+      body: formData,
+      headers: { Authorization: `Bearer ${accessToken}` },
+    })
+    if (!response.ok) {
+      const text = await response.text()
+      let msg = 'Не удалось загрузить видео'
+      try { msg = JSON.parse(text).error || msg } catch {}
+      throw new Error(msg)
+    }
+    const data = await response.json()
+    return data.url
+  }
+
   const handleGenerate = async () => {
     if (!selectedModel || !prompt.trim()) {
       setError('Выберите модель и введите промпт')
@@ -477,6 +512,25 @@ export function GeneratePage() {
       if (selectedModel === 'kling-2.6/image-to-video') {
         params.duration = videoDuration
         params.sound = withSound ? 'true' : 'false'
+      }
+
+      // Kling 2.6 Motion Control: длительность, режим, опорное видео
+      if (selectedModel === 'kling-2.6/motion-control') {
+        params.duration = String(Math.min(30, Math.max(3, motionDuration)))
+        params.resolution = selectedResolution
+        if (motionVideoFile) {
+          setUploadingImage(true)
+          try {
+            const videoUrl = await uploadVideoToServer(motionVideoFile)
+            params.video_urls = [videoUrl]
+          } catch (uploadErr: any) {
+            setError(uploadErr?.message || 'Ошибка загрузки опорного видео')
+            setGenerating(false)
+            setUploadingImage(false)
+            return
+          }
+          setUploadingImage(false)
+        }
       }
 
       // Suno Music: режим и голос
@@ -582,6 +636,16 @@ export function GeneratePage() {
       if (withSound) baseCost *= 2 // Со звуком цена x2
     }
 
+    // Kling 2.6 Motion Control: 720p=1 токен/сек, 1080p=ceil(1.5 токена/сек)
+    if (selectedModel === 'kling-2.6/motion-control') {
+      const dur = Math.min(30, Math.max(3, motionDuration))
+      if (selectedResolution === '1080p') {
+        baseCost = Math.ceil(dur * 1.5)
+      } else {
+        baseCost = dur
+      }
+    }
+
     // Suno Music: всегда 1 генерация
     if (selectedModel === 'music-suno') {
       baseCost = 1
@@ -665,7 +729,7 @@ export function GeneratePage() {
                       "text-[11px] font-semibold px-2 py-0.5 rounded-full whitespace-nowrap",
                       isSelected ? "bg-yellow-500/20 text-yellow-300" : "bg-white/5 text-white/30"
                     )}>
-                      {['nano-banana-2', 'google/nano-banana-pro', 'wan/2-6-image-to-video', 'kling-2.6/image-to-video'].includes(model.id)
+                      {['nano-banana-2', 'google/nano-banana-pro', 'wan/2-6-image-to-video', 'kling-2.6/image-to-video', 'kling-2.6/motion-control'].includes(model.id)
                         ? `от ${model.token_cost}`
                         : model.token_cost}
                     </span>
@@ -1014,6 +1078,94 @@ export function GeneratePage() {
           </>
         )}
 
+        {/* Kling 2.6 Motion Control */}
+        {selectedModel === 'kling-2.6/motion-control' && (
+          <>
+            {/* Опорное видео */}
+            <div className="space-y-1">
+              <div className="flex items-center gap-1 ml-1">
+                <label className="text-[13px] font-medium text-white/90">Опорное видео движения</label>
+                <span className="text-orange-400 font-bold">*</span>
+              </div>
+              <div
+                onClick={() => motionVideoInputRef.current?.click()}
+                className="relative flex flex-col items-center justify-center w-full h-24 rounded-xl border border-white/10 bg-white/[0.03] hover:bg-white/[0.05] cursor-pointer transition-all"
+              >
+                <input
+                  ref={motionVideoInputRef}
+                  type="file"
+                  accept="video/*"
+                  className="hidden"
+                  onChange={(e) => {
+                    const file = e.target.files?.[0]
+                    if (!file) return
+                    setMotionVideoFile(file)
+                    setMotionVideoPreview(URL.createObjectURL(file))
+                  }}
+                />
+                {motionVideoPreview ? (
+                  <div className="flex items-center gap-3 px-4">
+                    <Video className="w-5 h-5 text-primary shrink-0" />
+                    <span className="text-sm text-white/70 truncate">{motionVideoFile?.name}</span>
+                    <button
+                      onClick={(e) => { e.stopPropagation(); setMotionVideoFile(null); setMotionVideoPreview(null) }}
+                      className="ml-auto p-1 bg-white/10 hover:bg-white/20 rounded-lg transition-all"
+                    >
+                      <X className="w-3.5 h-3.5 text-white/60" />
+                    </button>
+                  </div>
+                ) : (
+                  <>
+                    <Video className="w-5 h-5 text-white/20 mb-1" />
+                    <p className="text-[11px] text-white/30 text-center px-4">Нажмите, чтобы загрузить опорное видео</p>
+                  </>
+                )}
+              </div>
+            </div>
+
+            {/* Режим 720p / 1080p */}
+            <div className="space-y-1">
+              <label className="text-[13px] lg:text-sm font-medium text-white/90 ml-1">Качество</label>
+              <div className="flex gap-2">
+                {KLING_MOTION_MODES.map((m) => (
+                  <button
+                    key={m.id}
+                    onClick={() => setSelectedResolution(m.value)}
+                    className={cn(
+                      "flex-1 py-2.5 lg:py-3.5 px-3 lg:px-4 rounded-xl border text-xs lg:text-sm font-medium transition-all",
+                      selectedResolution === m.value
+                        ? "border-primary bg-primary/10 text-primary"
+                        : "border-white/10 bg-white/[0.03] text-white/60 hover:bg-white/[0.05]"
+                    )}
+                  >
+                    {m.label}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {/* Длительность 3–30 сек */}
+            <div className="space-y-1">
+              <label className="text-[13px] lg:text-sm font-medium text-white/90 ml-1">
+                Длительность: {motionDuration} сек
+              </label>
+              <input
+                type="range"
+                min={3}
+                max={30}
+                step={1}
+                value={motionDuration}
+                onChange={(e) => setMotionDuration(Number(e.target.value))}
+                className="w-full accent-primary"
+              />
+              <div className="flex justify-between text-[10px] text-white/30 px-0.5">
+                <span>3 сек</span>
+                <span>30 сек</span>
+              </div>
+            </div>
+          </>
+        )}
+
         {/* Режимы для Suno Music */}
         {selectedModel === 'music-suno' && (
           <>
@@ -1110,7 +1262,7 @@ export function GeneratePage() {
               <Button
                 className="w-full h-16 rounded-2xl text-lg font-black bg-gradient-to-r from-[#FFD700] via-[#FFB700] to-[#FF8C00] text-black hover:opacity-90 transition-all shadow-[0_8px_30px_rgba(255,183,0,0.3)] active:scale-[0.95] flex items-center justify-center gap-3"
                 onClick={handleGenerate}
-                disabled={generating || uploadingImage || ((selectedCategory === 'image' || selectedCategory === 'video') && imageFiles.length === 0 && libraryUrls.length === 0)}
+                disabled={generating || uploadingImage || ((selectedCategory === 'image' || selectedCategory === 'video') && imageFiles.length === 0 && libraryUrls.length === 0) || (selectedModel === 'kling-2.6/motion-control' && !motionVideoFile)}
               >
                 {uploadingImage ? (
                   <>

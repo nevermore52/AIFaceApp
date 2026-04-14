@@ -250,8 +250,8 @@ export function ProfilePage() {
             <div className="grid grid-cols-4 gap-2">
               {[
                 { label: 'Фото', icon: FileImage, val: quota.image_weekly + quota.image_extra, color: 'text-green-400' },
-                { label: 'Видео', icon: Video, val: quota.video_weekly + quota.video_extra, color: 'text-orange-400' },
-                { label: 'Музыка', icon: Music, val: quota.music_weekly + quota.music_extra, color: 'text-purple-400' },
+                { label: 'Вид. токены', icon: Video, val: quota.video_weekly + quota.video_extra, color: 'text-orange-400' },
+                { label: 'Муз. токены', icon: Music, val: quota.music_weekly + quota.music_extra, color: 'text-purple-400' },
                 { label: 'Текст', icon: MessageSquare, val: quota.text_daily + quota.text_extra, color: 'text-blue-400' },
               ].map((q) => (
                 <div key={q.label} className="flex flex-col items-center gap-1 py-2 rounded-xl bg-white/[0.02] border border-white/5">

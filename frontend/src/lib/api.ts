@@ -158,6 +158,7 @@ export interface GenerationCreateParams {
   model: string
   prompt: string
   image_urls?: string[]
+  video_urls?: string[] // Reference video URLs (motion-control)
   aspect_ratio?: string
   // Nano Banana 2 параметры
   resolution?: string
