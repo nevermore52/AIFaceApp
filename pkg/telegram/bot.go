@@ -742,7 +742,7 @@ func (b *Bot) sendBuyExtrasCategory(chatID int64, userID int64, category string,
 	if category == "music" {
 		packs = []int{1, 5, 10, 50, 100}
 	} else if category == "video" {
-		packs = []int{1, 5, 10, 25, 50, 100}
+		packs = []int{10, 50, 100, 250, 500, 1000}
 	}
 
 	var header, unit string
@@ -5635,11 +5635,25 @@ func (b *Bot) sendModelMenu(chatID int64, userID int64, category ModelCategory, 
 			newInlineKeyboardButtonData(soundLabel, "sound_toggle:"+nextSound),
 		))
 	}
-	// Показываем кнопку "Итого" только если текущая модель - видео модель
-	if currentOpt, ok := findModelOption(current); ok && currentOpt.Category == ModelCategoryVideo {
+	if category == ModelCategoryVideo && current == "kling-2.6/motion-control" {
+		resolution := b.getUserVideoResolution(userID)
+		if resolution != "720p" && resolution != "1080p" {
+			resolution = "720p"
+		}
+		nextResolution := "1080p"
+		if resolution == "1080p" {
+			nextResolution = "720p"
+		}
+		resLabel := fmt.Sprintf("📺 Качество: %s", resolution)
+		rows = append(rows, newInlineKeyboardRow(
+			newInlineKeyboardButtonData(resLabel, "resolution_toggle:"+nextResolution),
+		))
+	}
+	// Показываем кнопку "Итого" только если текущая модель - видео модель (кроме motion-control)
+	if currentOpt, ok := findModelOption(current); ok && currentOpt.Category == ModelCategoryVideo && current != "kling-2.6/motion-control" {
 		totalCost := b.getVideoTotalCost(userID, current)
 		if totalCost > 0 {
-			costLabel := fmt.Sprintf("💰 Итого: %d ген.", totalCost)
+			costLabel := fmt.Sprintf("💰 Итого: %d токенов", totalCost)
 			rows = append(rows, newInlineKeyboardRow(
 				newInlineKeyboardButtonData(costLabel, "video_total:"+current),
 			))
