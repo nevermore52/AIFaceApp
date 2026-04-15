@@ -1122,59 +1122,58 @@ export function GeneratePage() {
                 <label className="text-[13px] font-medium text-white/90">Опорное видео движения</label>
                 <span className="text-orange-400 font-bold">*</span>
               </div>
-              <div
-                onClick={() => motionVideoInputRef.current?.click()}
-                className="relative flex flex-col items-center justify-center w-full h-24 rounded-xl border border-white/10 bg-white/[0.03] hover:bg-white/[0.05] cursor-pointer transition-all"
-              >
-                <input
-                  ref={motionVideoInputRef}
-                  type="file"
-                  accept="video/*"
-                  className="hidden"
-                  onChange={(e) => {
-                    const file = e.target.files?.[0]
-                    if (!file) return
-                    const objectUrl = URL.createObjectURL(file)
-                    const vid = document.createElement('video')
-                    vid.preload = 'metadata'
-                    vid.onloadedmetadata = () => {
-                      const secs = Math.ceil(vid.duration)
-                      const w = vid.videoWidth
-                      const h = vid.videoHeight
-                      URL.revokeObjectURL(vid.src)
-                      if (w < 340 || h < 340) {
-                        setError(`Разрешение видео ${w}×${h} слишком маленькое. Минимум 340×340 пикселей.`)
-                        if (motionVideoInputRef.current) motionVideoInputRef.current.value = ''
-                        return
-                      }
-                      setMotionVideoFile(file)
-                      setMotionVideoPreview(objectUrl)
-                      setMotionDuration(secs > 0 ? secs : 0)
+              <input
+                id="motion-video-input"
+                ref={motionVideoInputRef}
+                type="file"
+                accept="video/*"
+                className="hidden"
+                onChange={(e) => {
+                  const file = e.target.files?.[0]
+                  if (!file) return
+                  const objectUrl = URL.createObjectURL(file)
+                  const vid = document.createElement('video')
+                  vid.preload = 'metadata'
+                  vid.onloadedmetadata = () => {
+                    const secs = Math.ceil(vid.duration)
+                    const w = vid.videoWidth
+                    const h = vid.videoHeight
+                    URL.revokeObjectURL(vid.src)
+                    if (w < 340 || h < 340) {
+                      setError(`Разрешение видео ${w}×${h} слишком маленькое. Минимум 340×340 пикселей.`)
+                      if (motionVideoInputRef.current) motionVideoInputRef.current.value = ''
+                      return
                     }
-                    vid.src = objectUrl
-                  }}
-                />
-                {motionVideoPreview ? (
-                  <div className="flex items-center gap-3 px-4">
-                    <Video className="w-5 h-5 text-primary shrink-0" />
-                    <span className="text-sm text-white/70 truncate">
-                      {motionVideoFile?.name ?? 'Видео из тренда'}
-                    </span>
-                    <button
-                      onClick={(e) => { e.stopPropagation(); setMotionVideoFile(null); setMotionVideoPreview(null); setMotionVideoUrl(null); setMotionDuration(0) }}
-                      className="ml-auto p-1 bg-white/10 hover:bg-white/20 rounded-lg transition-all"
-                    >
-                      <X className="w-3.5 h-3.5 text-white/60" />
-                    </button>
-                  </div>
-                ) : (
-                  <>
-                    <Video className="w-5 h-5 text-white/20 mb-1" />
-                    <p className="text-[11px] text-white/30 text-center px-4">Нажмите, чтобы загрузить опорное видео</p>
-                    <p className="text-[10px] text-white/20 text-center px-4">мин. разрешение 340×340</p>
-                  </>
-                )}
-              </div>
+                    setMotionVideoFile(file)
+                    setMotionVideoPreview(objectUrl)
+                    setMotionDuration(secs > 0 ? secs : 0)
+                  }
+                  vid.src = objectUrl
+                }}
+              />
+              {motionVideoPreview ? (
+                <div className="relative flex items-center gap-3 px-4 w-full h-24 rounded-xl border border-white/10 bg-white/[0.03]">
+                  <Video className="w-5 h-5 text-primary shrink-0" />
+                  <span className="text-sm text-white/70 truncate">
+                    {motionVideoFile?.name ?? 'Видео из тренда'}
+                  </span>
+                  <button
+                    onClick={(e) => { e.stopPropagation(); e.preventDefault(); setMotionVideoFile(null); setMotionVideoPreview(null); setMotionVideoUrl(null); setMotionDuration(0) }}
+                    className="ml-auto p-1 bg-white/10 hover:bg-white/20 rounded-lg transition-all"
+                  >
+                    <X className="w-3.5 h-3.5 text-white/60" />
+                  </button>
+                </div>
+              ) : (
+                <label
+                  htmlFor="motion-video-input"
+                  className="relative flex flex-col items-center justify-center w-full h-24 rounded-xl border border-white/10 bg-white/[0.03] hover:bg-white/[0.05] cursor-pointer transition-all"
+                >
+                  <Video className="w-5 h-5 text-white/20 mb-1" />
+                  <p className="text-[11px] text-white/30 text-center px-4">Нажмите, чтобы загрузить опорное видео</p>
+                  <p className="text-[10px] text-white/20 text-center px-4">мин. разрешение 340×340</p>
+                </label>
+              )}
             </div>
 
             {/* Режим 720p / 1080p */}
