@@ -337,7 +337,7 @@ export function DashboardPage() {
                       prompt: t.prompt,
                       model: t.model,
                       category: modelToCategory(t.model),
-                      ...(isVideoUrl(t.output) ? { motionVideoUrl: t.output } : {})
+                      imageUrl: t.output
                     } })
                   }}
                   className="w-full rounded-xl bg-gradient-to-r from-[#FFD700] via-[#FFB700] to-[#FF8C00] text-black font-bold hover:opacity-90 gap-2 h-11"
