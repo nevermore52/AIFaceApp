@@ -159,8 +159,18 @@ export function GeneratePage() {
   const navigate = useNavigate()
   const location = useLocation()
   const { isAuthenticated, user, accessToken } = useAuthStore()
+
+  // Parse navigation state once so useState initializers can use it.
+  // This avoids a race where the category-change reset effect fires between
+  // "initial render with category='image'" and "init effect sets category='video'",
+  // which would wipe motionVideoUrl before it can be displayed.
+  const _initState = location.state as { prompt?: string; model?: string; category?: string; imageUrl?: string; motionVideoUrl?: string } | null
+  const _initCategory: Category = (_initState?.category && ['image', 'video', 'music', 'text'].includes(_initState.category))
+    ? _initState.category as Category
+    : 'image'
+
   const [allModels, setAllModels] = useState<Model[]>([])
-  const [selectedCategory, setSelectedCategory] = useState<Category>('image')
+  const [selectedCategory, setSelectedCategory] = useState<Category>(_initCategory)
   const [selectedModel, setSelectedModel] = useState<string>('')
   const [selectedAspectRatio, setSelectedAspectRatio] = useState('1:1')
   // Новые параметры для разных моделей
@@ -171,10 +181,10 @@ export function GeneratePage() {
   const [sunoMode, setSunoMode] = useState('instrumental')
   const [sunoVoice, setSunoVoice] = useState('m')
   const [motionVideoFile, setMotionVideoFile] = useState<File | null>(null)
-  const [motionVideoPreview, setMotionVideoPreview] = useState<string | null>(null)
-  const [motionVideoUrl, setMotionVideoUrl] = useState<string | null>(null) // pre-filled URL from trend (no upload needed)
+  const [motionVideoPreview, setMotionVideoPreview] = useState<string | null>(_initState?.motionVideoUrl ?? null)
+  const [motionVideoUrl, setMotionVideoUrl] = useState<string | null>(_initState?.motionVideoUrl ?? null) // pre-filled URL from trend (no upload needed)
   const [motionDuration, setMotionDuration] = useState(5)
-  const [prompt, setPrompt] = useState('')
+  const [prompt, setPrompt] = useState(_initState?.prompt ?? '')
   const [chatHistory, setChatHistory] = useState<{ role: string; content: string }[]>([])
   const [imageFiles, setImageFiles] = useState<File[]>([])
   const [imagePreviews, setImagePreviews] = useState<string[]>([])
@@ -199,29 +209,20 @@ export function GeneratePage() {
       return
     }
 
-    const state = location.state as { prompt?: string; model?: string; category?: string; imageUrl?: string; motionVideoUrl?: string } | null
-    if (state?.prompt) setPrompt(state.prompt)
-    if (state?.category && ['image', 'video', 'music', 'text'].includes(state.category)) {
-      setSelectedCategory(state.category as Category)
-    }
-    // If imageUrl is provided, add it to libraryUrls for video models
-    if (state?.imageUrl) {
-      setLibraryUrls([state.imageUrl])
-    }
-    // If motionVideoUrl is provided (from trend), pre-fill the reference video
-    if (state?.motionVideoUrl) {
-      setMotionVideoPreview(state.motionVideoUrl)
-      setMotionVideoUrl(state.motionVideoUrl)
+    // category, prompt, motionVideoUrl are already seeded into state via useState initializers (_initState).
+    // Only handle imageUrl here (goes into libraryUrls, not a simple state initializer).
+    if (_initState?.imageUrl) {
+      setLibraryUrls([_initState.imageUrl])
     }
 
     setLoading(true)
     generationApi.getModels()
       .then((data) => {
         setAllModels(data)
-        if (state?.model) {
-          setSelectedModel(state.model)
+        if (_initState?.model) {
+          setSelectedModel(_initState.model)
         } else {
-          const cat = state?.category || 'image'
+          const cat = _initCategory
           const catModels = data.filter((m: Model) => m.type === cat)
           if (catModels.length > 0) setSelectedModel(catModels[0].id)
         }
