@@ -64,8 +64,29 @@ func NewWebGenerationService(db *sql.DB, kieClient *kieapi.Client, callbackURL s
 	}
 	if uploadDir != "" {
 		go s.runUploadCleanup(uploadDir, 30*24*time.Hour, time.Hour)
+		s.logUploadDirStats(uploadDir)
 	}
 	return s
+}
+
+// logUploadDirStats logs the number of files in the uploads directory on startup.
+// This helps diagnose cases where files disappear after a restart/deployment.
+func (s *WebGenerationService) logUploadDirStats(uploadDir string) {
+	entries, err := os.ReadDir(uploadDir)
+	if err != nil {
+		log.Printf("[uploads] WARNING: cannot read upload dir %q: %v", uploadDir, err)
+		return
+	}
+	count := 0
+	for _, e := range entries {
+		if !e.IsDir() {
+			count++
+		}
+	}
+	log.Printf("[uploads] startup: found %d file(s) in %q", count, uploadDir)
+	if count == 0 {
+		log.Printf("[uploads] WARNING: upload directory is empty — if this is unexpected, check that the Docker bind mount is correctly configured and the host directory has not been deleted (e.g. by 'git clean')")
+	}
 }
 
 type MediaOutput struct {

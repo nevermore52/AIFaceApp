@@ -43,6 +43,10 @@ Thumbs.db
 # Docker volumes
 docker/volumes/
 
+# Uploads directory — real files are excluded, only .gitkeep is tracked
+uploads/*
+!uploads/.gitkeep
+
 # Temporary files
 tmp/
 temp/
