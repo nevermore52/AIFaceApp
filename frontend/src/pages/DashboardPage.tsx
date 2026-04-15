@@ -26,6 +26,14 @@ interface CategoryItem {
 
 const isVideoUrl = (url: string) => /\.mp4(\?|$)/i.test(url)
 
+// Infer the generate-page category from a model ID so navigation always lands on the right tab.
+const modelToCategory = (model: string): 'image' | 'video' | 'music' | 'text' => {
+  if (/motion-control|image-to-video|veo3|wan\//i.test(model)) return 'video'
+  if (/suno/i.test(model)) return 'music'
+  if (/gemini|gpt/i.test(model)) return 'text'
+  return 'image'
+}
+
 const categories: CategoryItem[] = [
   { id: 'image', label: 'Картинка', icon: Image, action: { category: 'image' } },
   { id: 'video', label: 'Видео', icon: Film, action: { category: 'video' } },
@@ -328,6 +336,7 @@ export function DashboardPage() {
                     navigate('/generate', { state: {
                       prompt: t.prompt,
                       model: t.model,
+                      category: modelToCategory(t.model),
                       ...(isVideoUrl(t.output) ? { motionVideoUrl: t.output } : {})
                     } })
                   }}
