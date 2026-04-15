@@ -248,8 +248,9 @@ func (r *GenerationRepository) GetGalleryIdeas(limit, offset int) ([]*GalleryIde
 }
 
 // GetGalleryIdeasSorted returns ideas sorted by mode:
-//   "all"  — priority ASC NULLS LAST, then created_at DESC
-//   "new"  — created_at DESC (default)
+//
+//	"all"  — priority ASC NULLS LAST, then created_at DESC
+//	"new"  — created_at DESC (default)
 func (r *GenerationRepository) GetGalleryIdeasSorted(sort string, limit, offset int) ([]*GalleryIdea, int, error) {
 	var total int
 	err := r.db.QueryRow(`SELECT COUNT(*) FROM gallery_ideas`).Scan(&total)
@@ -324,25 +325,26 @@ func (r *GenerationRepository) DeleteGalleryIdea(id int64) error {
 // ─── Trends ──────────────────────────────────────────────────────────────────
 
 type Trend struct {
-	ID        int64     `json:"id"`
-	Title     string    `json:"title"`
-	Output    string    `json:"output"`
-	Prompt    string    `json:"prompt"`
-	Model     string    `json:"model"`
-	IsPopular bool      `json:"is_popular"`
-	Priority  *int      `json:"priority"`
-	CreatedAt time.Time `json:"created_at"`
-	UpdatedAt time.Time `json:"updated_at"`
+	ID         int64     `json:"id"`
+	Title      string    `json:"title"`
+	Output     string    `json:"output"`
+	InputVideo string    `json:"input_video"`
+	Prompt     string    `json:"prompt"`
+	Model      string    `json:"model"`
+	IsPopular  bool      `json:"is_popular"`
+	Priority   *int      `json:"priority"`
+	CreatedAt  time.Time `json:"created_at"`
+	UpdatedAt  time.Time `json:"updated_at"`
 }
 
-func (r *GenerationRepository) CreateTrend(title, output, prompt, model string, isPopular bool, priority *int) (*Trend, error) {
+func (r *GenerationRepository) CreateTrend(title, output, prompt, model string, isPopular bool, priority *int, inputVideo string) (*Trend, error) {
 	t := &Trend{}
 	err := r.db.QueryRow(`
-		INSERT INTO trends (title, output, prompt, model, is_popular, priority, created_at, updated_at)
-		VALUES ($1, $2, $3, $4, $5, $6, NOW(), NOW())
-		RETURNING id, title, output, prompt, model, is_popular, priority, created_at, updated_at
-	`, title, output, prompt, model, isPopular, priority).Scan(
-		&t.ID, &t.Title, &t.Output, &t.Prompt, &t.Model, &t.IsPopular, &t.Priority, &t.CreatedAt, &t.UpdatedAt,
+		INSERT INTO trends (title, output, prompt, model, is_popular, priority, input_video, created_at, updated_at)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, NOW(), NOW())
+		RETURNING id, title, output, prompt, model, is_popular, priority, input_video, created_at, updated_at
+	`, title, output, prompt, model, isPopular, priority, inputVideo).Scan(
+		&t.ID, &t.Title, &t.Output, &t.Prompt, &t.Model, &t.IsPopular, &t.Priority, &t.InputVideo, &t.CreatedAt, &t.UpdatedAt,
 	)
 	return t, err
 }
@@ -353,7 +355,7 @@ func (r *GenerationRepository) GetTrends(limit, offset int) ([]*Trend, int, erro
 		return nil, 0, err
 	}
 	rows, err := r.db.Query(`
-		SELECT id, title, output, prompt, model, is_popular, priority, created_at, updated_at
+		SELECT id, title, output, prompt, model, is_popular, priority, input_video, created_at, updated_at
 		FROM trends ORDER BY created_at DESC LIMIT $1 OFFSET $2
 	`, limit, offset)
 	if err != nil {
@@ -363,7 +365,7 @@ func (r *GenerationRepository) GetTrends(limit, offset int) ([]*Trend, int, erro
 	var list []*Trend
 	for rows.Next() {
 		t := &Trend{}
-		if err := rows.Scan(&t.ID, &t.Title, &t.Output, &t.Prompt, &t.Model, &t.IsPopular, &t.Priority, &t.CreatedAt, &t.UpdatedAt); err != nil {
+		if err := rows.Scan(&t.ID, &t.Title, &t.Output, &t.Prompt, &t.Model, &t.IsPopular, &t.Priority, &t.InputVideo, &t.CreatedAt, &t.UpdatedAt); err != nil {
 			continue
 		}
 		list = append(list, t)
@@ -378,7 +380,7 @@ func (r *GenerationRepository) GetPublicTrends(limit, offset int) ([]*Trend, int
 		return nil, 0, err
 	}
 	rows, err := r.db.Query(`
-		SELECT id, title, output, prompt, model, is_popular, priority, created_at, updated_at
+		SELECT id, title, output, prompt, model, is_popular, priority, input_video, created_at, updated_at
 		FROM trends
 		ORDER BY priority ASC NULLS LAST, MD5(id::text)
 		LIMIT $1 OFFSET $2
@@ -390,7 +392,7 @@ func (r *GenerationRepository) GetPublicTrends(limit, offset int) ([]*Trend, int
 	var list []*Trend
 	for rows.Next() {
 		t := &Trend{}
-		if err := rows.Scan(&t.ID, &t.Title, &t.Output, &t.Prompt, &t.Model, &t.IsPopular, &t.Priority, &t.CreatedAt, &t.UpdatedAt); err != nil {
+		if err := rows.Scan(&t.ID, &t.Title, &t.Output, &t.Prompt, &t.Model, &t.IsPopular, &t.Priority, &t.InputVideo, &t.CreatedAt, &t.UpdatedAt); err != nil {
 			continue
 		}
 		list = append(list, t)
@@ -398,11 +400,11 @@ func (r *GenerationRepository) GetPublicTrends(limit, offset int) ([]*Trend, int
 	return list, total, rows.Err()
 }
 
-func (r *GenerationRepository) UpdateTrend(id int64, title, output, prompt, model string, isPopular bool, priority *int) error {
+func (r *GenerationRepository) UpdateTrend(id int64, title, output, prompt, model string, isPopular bool, priority *int, inputVideo string) error {
 	_, err := r.db.Exec(`
-		UPDATE trends SET title=$1, output=$2, prompt=$3, model=$4, is_popular=$5, priority=$6, updated_at=NOW()
-		WHERE id=$7
-	`, title, output, prompt, model, isPopular, priority, id)
+		UPDATE trends SET title=$1, output=$2, prompt=$3, model=$4, is_popular=$5, priority=$6, input_video=$7, updated_at=NOW()
+		WHERE id=$8
+	`, title, output, prompt, model, isPopular, priority, inputVideo, id)
 	return err
 }
 

@@ -392,18 +392,19 @@ func (h *AdminHandler) GetTrends(c *gin.Context) {
 
 func (h *AdminHandler) CreateTrend(c *gin.Context) {
 	var req struct {
-		Title     string `json:"title"`
-		Output    string `json:"output" binding:"required"`
-		Prompt    string `json:"prompt"`
-		Model     string `json:"model"`
-		IsPopular bool   `json:"is_popular"`
-		Priority  *int   `json:"priority"`
+		Title      string `json:"title"`
+		Output     string `json:"output" binding:"required"`
+		InputVideo string `json:"input_video"`
+		Prompt     string `json:"prompt"`
+		Model      string `json:"model"`
+		IsPopular  bool   `json:"is_popular"`
+		Priority   *int   `json:"priority"`
 	}
 	if err := c.ShouldBindJSON(&req); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
-	t, err := h.generationService.CreateTrend(req.Title, req.Output, req.Prompt, req.Model, req.IsPopular, req.Priority)
+	t, err := h.generationService.CreateTrend(req.Title, req.Output, req.Prompt, req.Model, req.IsPopular, req.Priority, req.InputVideo)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to create trend"})
 		return
@@ -418,18 +419,19 @@ func (h *AdminHandler) UpdateTrend(c *gin.Context) {
 		return
 	}
 	var req struct {
-		Title     string `json:"title"`
-		Output    string `json:"output" binding:"required"`
-		Prompt    string `json:"prompt"`
-		Model     string `json:"model"`
-		IsPopular bool   `json:"is_popular"`
-		Priority  *int   `json:"priority"`
+		Title      string `json:"title"`
+		Output     string `json:"output" binding:"required"`
+		InputVideo string `json:"input_video"`
+		Prompt     string `json:"prompt"`
+		Model      string `json:"model"`
+		IsPopular  bool   `json:"is_popular"`
+		Priority   *int   `json:"priority"`
 	}
 	if err := c.ShouldBindJSON(&req); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
-	if err := h.generationService.UpdateTrend(id, req.Title, req.Output, req.Prompt, req.Model, req.IsPopular, req.Priority); err != nil {
+	if err := h.generationService.UpdateTrend(id, req.Title, req.Output, req.Prompt, req.Model, req.IsPopular, req.Priority, req.InputVideo); err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to update trend"})
 		return
 	}

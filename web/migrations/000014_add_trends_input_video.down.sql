@@ -1,0 +1,1 @@
+ALTER TABLE trends DROP COLUMN IF EXISTS input_video;

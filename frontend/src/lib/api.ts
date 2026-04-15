@@ -97,6 +97,7 @@ export interface TrendItem {
   id: number
   title: string
   output: string
+  input_video?: string
   prompt: string
   model: string
   is_popular: boolean
@@ -218,9 +219,9 @@ export const adminApi = {
     api.get<{ taken: number[] }>(`/admin/gallery-ideas/priorities?exclude_id=${excludeId}`),
   getTrends: (limit = 50, offset = 0) =>
     api.get<any>(`/admin/trends?limit=${limit}&offset=${offset}`),
-  createTrend: (data: { title: string; output: string; prompt: string; model: string; is_popular: boolean; priority?: number | null }) =>
+  createTrend: (data: { title: string; output: string; prompt: string; model: string; is_popular: boolean; priority?: number | null; input_video?: string }) =>
     api.post<any>('/admin/trends', data),
-  updateTrend: (id: number, data: { title: string; output: string; prompt: string; model: string; is_popular: boolean; priority?: number | null }) =>
+  updateTrend: (id: number, data: { title: string; output: string; prompt: string; model: string; is_popular: boolean; priority?: number | null; input_video?: string }) =>
     api.put<any>(`/admin/trends/${id}`, data),
   deleteTrend: (id: number) =>
     api.delete<any>(`/admin/trends/${id}`),

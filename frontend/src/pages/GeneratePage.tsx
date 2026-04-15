@@ -183,7 +183,7 @@ export function GeneratePage() {
   const [motionVideoFile, setMotionVideoFile] = useState<File | null>(null)
   const [motionVideoPreview, setMotionVideoPreview] = useState<string | null>(_initState?.motionVideoUrl ?? null)
   const [motionVideoUrl, setMotionVideoUrl] = useState<string | null>(_initState?.motionVideoUrl ?? null) // pre-filled URL from trend (no upload needed)
-  const [motionDuration, setMotionDuration] = useState(5)
+  const [motionDuration, setMotionDuration] = useState(_initState?.motionVideoUrl ? 12 : 5) // 12 sec for trends, 5 sec default
   const [prompt, setPrompt] = useState(_initState?.prompt ?? '')
   const [chatHistory, setChatHistory] = useState<{ role: string; content: string }[]>([])
   const [imageFiles, setImageFiles] = useState<File[]>([])

@@ -844,8 +844,8 @@ function GalleryIdeasTab() {
 
 // ─── Trends Tab ──────────────────────────────────────────────────────────────
 
-type TrendFormData = { title: string; output: string; prompt: string; model: string; isPopular: boolean; priority: number | null }
-const EMPTY_TREND_FORM: TrendFormData = { title: '', output: '', prompt: '', model: '', isPopular: false, priority: null }
+type TrendFormData = { title: string; output: string; inputVideo: string; prompt: string; model: string; isPopular: boolean; priority: number | null }
+const EMPTY_TREND_FORM: TrendFormData = { title: '', output: '', inputVideo: '', prompt: '', model: '', isPopular: false, priority: null }
 
 function TrendForm({
   data,
@@ -951,7 +951,7 @@ function TrendForm({
         </select>
       </div>
       <div>
-        <label className="text-xs text-white/50 mb-1 block">Изображение или видео</label>
+        <label className="text-xs text-white/50 mb-1 block">Результат (изображение или видео)</label>
         <input
           type="file"
           accept="image/*,video/*"
@@ -963,6 +963,16 @@ function TrendForm({
             ? <video src={mediaPreview} muted autoPlay loop playsInline className="mt-2 w-24 h-24 object-cover rounded-lg" />
             : <img src={mediaPreview} alt="Preview" className="mt-2 w-24 h-24 object-cover rounded-lg" />
         )}
+      </div>
+      <div>
+        <label className="text-xs text-white/50 mb-1 block">Опорное видео (для Motion Control)</label>
+        <input
+          type="text"
+          placeholder="URL опорного видео"
+          value={data.inputVideo}
+          onChange={(e) => onChange({ ...data, inputVideo: e.target.value })}
+          className="w-full px-3 py-2 rounded-lg bg-white/5 border border-white/10 text-white text-sm"
+        />
       </div>
       <textarea
         placeholder="Промпт"
@@ -1056,7 +1066,15 @@ function TrendsTab() {
   const handleCreate = async (resolvedOutput: string) => {
     setUploading(true)
     try {
-      await adminApi.createTrend({ title: createForm.title, output: resolvedOutput, prompt: createForm.prompt, model: createForm.model, is_popular: createForm.isPopular, priority: createForm.priority })
+      await adminApi.createTrend({ 
+        title: createForm.title, 
+        output: resolvedOutput, 
+        input_video: createForm.inputVideo,
+        prompt: createForm.prompt, 
+        model: createForm.model, 
+        is_popular: createForm.isPopular, 
+        priority: createForm.priority 
+      })
       setCreateForm(EMPTY_TREND_FORM)
       setShowCreate(false)
       load()
@@ -1071,7 +1089,15 @@ function TrendsTab() {
     if (!selected) return
     setUploading(true)
     try {
-      await adminApi.updateTrend(selected.id, { title: editForm.title, output: resolvedOutput, prompt: editForm.prompt, model: editForm.model, is_popular: editForm.isPopular, priority: editForm.priority })
+      await adminApi.updateTrend(selected.id, { 
+        title: editForm.title, 
+        output: resolvedOutput, 
+        input_video: editForm.inputVideo,
+        prompt: editForm.prompt, 
+        model: editForm.model, 
+        is_popular: editForm.isPopular, 
+        priority: editForm.priority 
+      })
       setEditing(false)
       setSelected(null)
       load()
@@ -1098,6 +1124,7 @@ function TrendsTab() {
     setEditForm({
       title: selected.title || '',
       output: selected.output,
+      inputVideo: selected.input_video || '',
       prompt: selected.prompt || '',
       model: selected.model || '',
       isPopular: selected.is_popular || false,
