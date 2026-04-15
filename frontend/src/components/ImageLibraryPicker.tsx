@@ -110,10 +110,13 @@ export function ImageLibraryPicker({ maxSelect, alreadySelected, onSelect, onUpl
                       alt=""
                       className="w-full h-full object-cover"
                       loading="lazy"
-                      onError={() => {
+                      onError={(e) => {
+                        // Only hide from UI — do NOT delete. A temporary 502/503 during
+                        // redeployment would otherwise permanently wipe the entire library.
+                        // The server-side GetUserUploads already prunes genuinely missing files.
+                        ;(e.target as HTMLImageElement).style.visibility = 'hidden'
                         setUploads(prev => prev.filter(u => u.url !== item.url))
                         setSelected(prev => { const s = new Set(prev); s.delete(item.url); return s })
-                        generationApi.deleteUserUpload(item.url).catch(() => {})
                       }}
                     />
                     {isSelected && (

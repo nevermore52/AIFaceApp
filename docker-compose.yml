@@ -85,7 +85,7 @@ services:
       YOOKASSA_SECRET_KEY: ${YOOKASSA_SECRET_KEY:-}
       YOOKASSA_RETURN_URL: ${YOOKASSA_RETURN_URL:-https://app.aifaceapp.ru/payments}
     volumes:
-      - uploads_data:/app/uploads
+      - ./uploads:/app/uploads
     depends_on:
       postgres:
         condition: service_healthy
@@ -114,7 +114,6 @@ services:
 volumes:
   postgres_data:
   redis_data:
-  uploads_data:
 
 networks:
   aifacebot_network:

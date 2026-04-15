@@ -6022,6 +6022,18 @@ func friendlyGenerationError(err error) string {
 	if strings.Contains(msg, "public figure") {
 		return "На фото обнаружена известная личность. К сожалению, генерация видео с публичными персонами недоступна. Попробуйте другое фото."
 	}
+	if strings.Contains(msg, "upper body not detected") {
+		return "Нейросеть не смогла найти верхнюю часть тела на фото. Используйте фото, где чётко видны голова, плечи и туловище — желательно портрет или фото по пояс. Попробуйте другое фото."
+	}
+	if strings.Contains(msg, "face not detected") || strings.Contains(msg, "no face") {
+		return "Нейросеть не смогла найти лицо на фото. Используйте чёткое фото, где лицо хорошо видно и не перекрыто."
+	}
+	if strings.Contains(msg, "multiple faces") || strings.Contains(msg, "more than one face") {
+		return "На фото обнаружено несколько лиц. Для генерации используйте фото с одним человеком."
+	}
+	if strings.Contains(msg, "credits refunded") || strings.Contains(msg, "refunded") {
+		return "Генерация не удалась, токены возвращены. Попробуйте другое фото — лицо и верхняя часть тела должны быть хорошо видны."
+	}
 	if strings.Contains(msg, "internal server error") ||
 		strings.Contains(msg, "status code: 500") ||
 		strings.Contains(msg, "status 500") ||

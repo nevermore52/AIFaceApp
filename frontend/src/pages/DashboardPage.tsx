@@ -24,6 +24,8 @@ interface CategoryItem {
   action?: { model?: string; prompt?: string; category?: string }
 }
 
+const isVideoUrl = (url: string) => /\.mp4(\?|$)/i.test(url)
+
 const categories: CategoryItem[] = [
   { id: 'image', label: 'Картинка', icon: Image, action: { category: 'image' } },
   { id: 'video', label: 'Видео', icon: Film, action: { category: 'video' } },
@@ -216,7 +218,10 @@ export function DashboardPage() {
                   <button onClick={() => setSelectedTrend(t)}
                     style={{ position: 'relative', width: '100%', aspectRatio: i % 3 === 0 ? '3/4' : '4/3', borderRadius: 16, overflow: 'hidden', cursor: 'pointer', border: 'none', padding: 0, display: 'block' }}
                   >
-                    <img src={t.output} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} loading="lazy" />
+                    {isVideoUrl(t.output)
+                      ? <video src={t.output} autoPlay muted loop playsInline style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                      : <img src={t.output} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} loading="lazy" />
+                    }
                     <div style={{ position: 'absolute', bottom: 0, left: 0, right: 0, height: '65%', background: 'linear-gradient(to top, rgba(0,0,0,0.85), transparent)', pointerEvents: 'none' }} />
                     {t.title && <div style={{ position: 'absolute', bottom: 8, left: 10, right: 10, color: 'white', fontSize: 13, fontWeight: 600, lineHeight: 1.3, pointerEvents: 'none', textAlign: 'left' }}>{t.title}</div>}
                     {t.is_popular && <div style={{ position: 'absolute', top: 8, left: 8, background: '#FFB700', color: '#000', fontSize: 10, fontWeight: 700, padding: '3px 8px', borderRadius: 20, pointerEvents: 'none' }}>Популярное</div>}
@@ -259,11 +264,22 @@ export function DashboardPage() {
           </button>
 
           <div style={{ position: 'relative', width: '100%', maxWidth: '640px' }} onClick={(e) => e.stopPropagation()}>
-            <img
-              src={selectedTrend.output}
-              alt=""
-              style={{ width: '100%', maxHeight: 'calc(100vh - 220px)', objectFit: 'contain', display: 'block', borderRadius: '16px 16px 0 0', background: '#000' }}
-            />
+            {isVideoUrl(selectedTrend.output)
+              ? <video
+                  src={selectedTrend.output}
+                  autoPlay
+                  muted
+                  loop
+                  playsInline
+                  controls
+                  style={{ width: '100%', maxHeight: 'calc(100vh - 220px)', objectFit: 'contain', display: 'block', borderRadius: '16px 16px 0 0', background: '#000' }}
+                />
+              : <img
+                  src={selectedTrend.output}
+                  alt=""
+                  style={{ width: '100%', maxHeight: 'calc(100vh - 220px)', objectFit: 'contain', display: 'block', borderRadius: '16px 16px 0 0', background: '#000' }}
+                />
+            }
             <div style={{ background: '#111', borderRadius: '0 0 16px 16px', borderTop: '1px solid rgba(255,255,255,0.05)', padding: '16px' }}>
               {selectedTrend.title && (
                 <p style={{ margin: '0 0 8px', fontSize: '16px', fontWeight: 700, color: 'white' }}>{selectedTrend.title}</p>
@@ -306,7 +322,15 @@ export function DashboardPage() {
               <div style={{ marginTop: '12px' }}>
                 <Button
                   size="sm"
-                  onClick={() => { setSelectedTrend(null); navigate('/generate', { state: { prompt: selectedTrend.prompt, model: selectedTrend.model } }) }}
+                  onClick={() => {
+                    const t = selectedTrend
+                    setSelectedTrend(null)
+                    navigate('/generate', { state: {
+                      prompt: t.prompt,
+                      model: t.model,
+                      ...(isVideoUrl(t.output) ? { motionVideoUrl: t.output } : {})
+                    } })
+                  }}
                   className="w-full rounded-xl bg-gradient-to-r from-[#FFD700] via-[#FFB700] to-[#FF8C00] text-black font-bold hover:opacity-90 gap-2 h-11"
                 >
                   <Sparkles className="h-4 w-4" />

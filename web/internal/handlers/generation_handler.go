@@ -573,7 +573,7 @@ func (h *GenerationHandler) GetUserUploads(c *gin.Context) {
 	}
 	u := user.(*models.User)
 
-	uploads, err := h.webGenerationService.GetUserUploads(u.ID, 50)
+	uploads, err := h.webGenerationService.GetUserUploads(u.ID, 20)
 	if err != nil {
 		log.Printf("Error getting uploads for user %d: %v", u.ID, err)
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to get uploads"})

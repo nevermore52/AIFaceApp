@@ -172,6 +172,7 @@ export function GeneratePage() {
   const [sunoVoice, setSunoVoice] = useState('m')
   const [motionVideoFile, setMotionVideoFile] = useState<File | null>(null)
   const [motionVideoPreview, setMotionVideoPreview] = useState<string | null>(null)
+  const [motionVideoUrl, setMotionVideoUrl] = useState<string | null>(null) // pre-filled URL from trend (no upload needed)
   const [motionDuration, setMotionDuration] = useState(5)
   const [prompt, setPrompt] = useState('')
   const [chatHistory, setChatHistory] = useState<{ role: string; content: string }[]>([])
@@ -198,7 +199,7 @@ export function GeneratePage() {
       return
     }
 
-    const state = location.state as { prompt?: string; model?: string; category?: string; imageUrl?: string } | null
+    const state = location.state as { prompt?: string; model?: string; category?: string; imageUrl?: string; motionVideoUrl?: string } | null
     if (state?.prompt) setPrompt(state.prompt)
     if (state?.category && ['image', 'video', 'music', 'text'].includes(state.category)) {
       setSelectedCategory(state.category as Category)
@@ -206,6 +207,11 @@ export function GeneratePage() {
     // If imageUrl is provided, add it to libraryUrls for video models
     if (state?.imageUrl) {
       setLibraryUrls([state.imageUrl])
+    }
+    // If motionVideoUrl is provided (from trend), pre-fill the reference video
+    if (state?.motionVideoUrl) {
+      setMotionVideoPreview(state.motionVideoUrl)
+      setMotionVideoUrl(state.motionVideoUrl)
     }
 
     setLoading(true)
@@ -247,10 +253,22 @@ export function GeneratePage() {
     return canAccessModel(m.id)
   })
 
-  // Сброс данных только при смене категории
+  // Сброс медиа и промта при смене категории
+  const prevCategoryRef = useRef<Category | null>(null)
   useEffect(() => {
-    setChatHistory([])
-    setLibraryUrls([])
+    if (prevCategoryRef.current !== null && prevCategoryRef.current !== selectedCategory) {
+      setPrompt('')
+      setImageFiles([])
+      setImagePreviews([])
+      setLibraryUrls([])
+      setChatHistory([])
+      setMotionVideoFile(null)
+      setMotionVideoPreview(null)
+      setMotionVideoUrl(null)
+      setMotionDuration(0)
+      setError(null)
+    }
+    prevCategoryRef.current = selectedCategory
   }, [selectedCategory])
 
   // Корректировка выбранной модели при смене категории или недоступности модели
@@ -450,6 +468,12 @@ export function GeneratePage() {
       return
     }
 
+    // Safety guard: never allow generation with 0 cost
+    if (totalCost === 0) {
+      setError('Не удалось определить стоимость генерации. Попробуйте выбрать модель заново.')
+      return
+    }
+
     if ((selectedCategory === 'image' || selectedCategory === 'video') && imageFiles.length === 0 && libraryUrls.length === 0) {
       setError('Для генерации необходимо загрузить входное фото')
       return
@@ -537,6 +561,8 @@ export function GeneratePage() {
             return
           }
           setUploadingImage(false)
+        } else if (motionVideoUrl) {
+          params.video_urls = [motionVideoUrl]
         }
       }
 
@@ -644,15 +670,13 @@ export function GeneratePage() {
     }
 
     // Kling 2.6 Motion Control: 720p=1 токен/сек, 1080p=ceil(1.5 токена/сек)
+    // Используем тот же fallback 5 сек что и в params.duration при отправке
     if (selectedModel === 'kling-2.6/motion-control') {
-      if (motionDuration > 0) {
-        if (selectedResolution === '1080p') {
-          baseCost = Math.ceil(motionDuration * 1.5)
-        } else {
-          baseCost = motionDuration
-        }
+      const dur = motionDuration > 0 ? motionDuration : 5
+      if (selectedResolution === '1080p') {
+        baseCost = Math.ceil(dur * 1.5)
       } else {
-        baseCost = 0
+        baseCost = dur
       }
     }
 
@@ -1133,9 +1157,11 @@ export function GeneratePage() {
                 {motionVideoPreview ? (
                   <div className="flex items-center gap-3 px-4">
                     <Video className="w-5 h-5 text-primary shrink-0" />
-                    <span className="text-sm text-white/70 truncate">{motionVideoFile?.name}</span>
+                    <span className="text-sm text-white/70 truncate">
+                      {motionVideoFile?.name ?? 'Видео из тренда'}
+                    </span>
                     <button
-                      onClick={(e) => { e.stopPropagation(); setMotionVideoFile(null); setMotionVideoPreview(null); setMotionDuration(0) }}
+                      onClick={(e) => { e.stopPropagation(); setMotionVideoFile(null); setMotionVideoPreview(null); setMotionVideoUrl(null); setMotionDuration(0) }}
                       className="ml-auto p-1 bg-white/10 hover:bg-white/20 rounded-lg transition-all"
                     >
                       <X className="w-3.5 h-3.5 text-white/60" />
@@ -1278,7 +1304,7 @@ export function GeneratePage() {
               <Button
                 className="w-full h-16 rounded-2xl text-lg font-black bg-gradient-to-r from-[#FFD700] via-[#FFB700] to-[#FF8C00] text-black hover:opacity-90 transition-all shadow-[0_8px_30px_rgba(255,183,0,0.3)] active:scale-[0.95] flex items-center justify-center gap-3"
                 onClick={handleGenerate}
-                disabled={generating || uploadingImage || ((selectedCategory === 'image' || selectedCategory === 'video') && imageFiles.length === 0 && libraryUrls.length === 0) || (selectedModel === 'kling-2.6/motion-control' && !motionVideoFile)}
+                disabled={generating || uploadingImage || totalCost === 0 || ((selectedCategory === 'image' || selectedCategory === 'video') && imageFiles.length === 0 && libraryUrls.length === 0) || (selectedModel === 'kling-2.6/motion-control' && !motionVideoFile && !motionVideoUrl)}
               >
                 {uploadingImage ? (
                   <>

@@ -42,6 +42,7 @@ type Config struct {
 	YooKassaShopID    string
 	YooKassaSecretKey string
 	YooKassaReturnURL string
+
 }
 
 func Load() (*Config, error) {
