@@ -209,9 +209,12 @@ export function GeneratePage() {
       return
     }
 
+    console.log('GeneratePage init state:', _initState)
+    
     // category, prompt, motionVideoUrl are already seeded into state via useState initializers (_initState).
     // Only handle imageUrl here (goes into libraryUrls, not a simple state initializer).
     if (_initState?.imageUrl) {
+      console.log('Setting libraryUrls from imageUrl:', _initState.imageUrl)
       setLibraryUrls([_initState.imageUrl])
     }
 
@@ -220,6 +223,7 @@ export function GeneratePage() {
       .then((data) => {
         setAllModels(data)
         if (_initState?.model) {
+          console.log('Setting model from state:', _initState.model)
           setSelectedModel(_initState.model)
         } else {
           const cat = _initCategory

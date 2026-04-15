@@ -333,11 +333,14 @@ export function DashboardPage() {
                   onClick={() => {
                     const t = selectedTrend
                     setSelectedTrend(null)
+                    const cat = modelToCategory(t.model)
+                    // For Kling Motion Control, pass motionVideoUrl
+                    // For other models, only pass prompt and model
                     navigate('/generate', { state: {
                       prompt: t.prompt,
                       model: t.model,
-                      category: modelToCategory(t.model),
-                      imageUrl: t.output
+                      category: cat,
+                      ...(t.model === 'kling-2.6/motion-control' ? { motionVideoUrl: t.output } : {})
                     } })
                   }}
                   className="w-full rounded-xl bg-gradient-to-r from-[#FFD700] via-[#FFB700] to-[#FF8C00] text-black font-bold hover:opacity-90 gap-2 h-11"
