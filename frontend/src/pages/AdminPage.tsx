@@ -866,19 +866,21 @@ function TrendForm({
   onCancel?: () => void
   submitLabel: string
 }) {
-  const [imageFile, setImageFile] = useState<File | null>(null)
-  const [imagePreview, setImagePreview] = useState<string>(data.output || '')
+  const [mediaFile, setMediaFile] = useState<File | null>(null)
+  const [mediaPreview, setMediaPreview] = useState<string>(data.output || '')
+  const [isVideoFile, setIsVideoFile] = useState<boolean>(() => /\.mp4(\?|$)/i.test(data.output || ''))
   const [localUploading, setLocalUploading] = useState(false)
 
-  const uploadImage = async (file: File): Promise<string> => {
+  const getToken = () => {
+    try { return JSON.parse(localStorage.getItem('auth-storage') || '{}').state?.accessToken ?? null } catch { return null }
+  }
+
+  const uploadMedia = async (file: File): Promise<string> => {
+    const isVideo = file.type.startsWith('video/')
     const fd = new FormData()
-    fd.append('image', file)
-    const storage = localStorage.getItem('auth-storage')
-    let token = null
-    if (storage) {
-      try { token = JSON.parse(storage).state?.accessToken } catch {}
-    }
-    const resp = await fetch('/api/admin/upload', {
+    fd.append(isVideo ? 'video' : 'image', file)
+    const token = getToken()
+    const resp = await fetch(isVideo ? '/api/admin/upload-video' : '/api/admin/upload', {
       method: 'POST',
       headers: token ? { Authorization: `Bearer ${token}` } : {},
       body: fd,
@@ -890,19 +892,25 @@ function TrendForm({
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]
     if (!file) return
-    setImageFile(file)
-    const reader = new FileReader()
-    reader.onloadend = () => setImagePreview(reader.result as string)
-    reader.readAsDataURL(file)
+    setMediaFile(file)
+    const isVid = file.type.startsWith('video/')
+    setIsVideoFile(isVid)
+    if (isVid) {
+      setMediaPreview(URL.createObjectURL(file))
+    } else {
+      const reader = new FileReader()
+      reader.onloadend = () => setMediaPreview(reader.result as string)
+      reader.readAsDataURL(file)
+    }
   }
 
   const handleSubmit = async () => {
-    if (!data.output && !imageFile) { alert('Загрузите изображение'); return }
+    if (!data.output && !mediaFile) { alert('Загрузите изображение или видео'); return }
     let resolvedOutput = data.output
-    if (imageFile) {
+    if (mediaFile) {
       setLocalUploading(true)
       try {
-        resolvedOutput = await uploadImage(imageFile)
+        resolvedOutput = await uploadMedia(mediaFile)
         onChange({ ...data, output: resolvedOutput })
       } catch (err) {
         alert('Ошибка загрузки: ' + (err instanceof Error ? err.message : String(err)))
@@ -943,15 +951,17 @@ function TrendForm({
         </select>
       </div>
       <div>
-        <label className="text-xs text-white/50 mb-1 block">Изображение</label>
+        <label className="text-xs text-white/50 mb-1 block">Изображение или видео</label>
         <input
           type="file"
-          accept="image/*"
+          accept="image/*,video/*"
           onChange={handleFileChange}
           className="w-full px-3 py-2 rounded-lg bg-white/5 border border-white/10 text-white text-sm file:mr-4 file:py-1 file:px-3 file:rounded file:border-0 file:text-sm file:bg-white/10 file:text-white hover:file:bg-white/20"
         />
-        {imagePreview && (
-          <img src={imagePreview} alt="Preview" className="mt-2 w-24 h-24 object-cover rounded-lg" />
+        {mediaPreview && (
+          isVideoFile
+            ? <video src={mediaPreview} muted autoPlay loop playsInline className="mt-2 w-24 h-24 object-cover rounded-lg" />
+            : <img src={mediaPreview} alt="Preview" className="mt-2 w-24 h-24 object-cover rounded-lg" />
         )}
       </div>
       <textarea

@@ -180,6 +180,7 @@ func New(cfg *config.Config, db *sql.DB) *Server {
 			admin.GET("/trends/priorities", adminHandler.GetTrendPriorities)
 			// Permanent upload for admin assets — no auto-cleanup
 			admin.POST("/upload", generationHandler.AdminUploadImage)
+			admin.POST("/upload-video", generationHandler.AdminUploadVideo)
 		}
 	}
 

@@ -543,6 +543,49 @@ func (h *GenerationHandler) AdminUploadImage(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"url": url, "size": header.Size})
 }
 
+// AdminUploadVideo is like AdminUploadImage but accepts video files and saves them permanently (userID=0).
+func (h *GenerationHandler) AdminUploadVideo(c *gin.Context) {
+	if h.webGenerationService == nil {
+		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "Service not available"})
+		return
+	}
+
+	file, header, err := c.Request.FormFile("video")
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "No file provided"})
+		return
+	}
+	defer file.Close()
+
+	if header.Size > 200*1024*1024 {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "File too large (max 200MB)"})
+		return
+	}
+
+	buffer := make([]byte, 512)
+	n, _ := file.Read(buffer)
+	file.Seek(0, 0)
+	contentType := http.DetectContentType(buffer[:n])
+	if !strings.HasPrefix(contentType, "video/") {
+		if ct := header.Header.Get("Content-Type"); strings.HasPrefix(ct, "video/") {
+			contentType = ct
+		} else {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid file type, expected video"})
+			return
+		}
+	}
+	_ = contentType
+
+	// userID=0 → permanent file, never auto-deleted
+	url, err := h.webGenerationService.SaveUploadedFile(file, header.Filename, h.uploadDir, h.webBaseURL, 0)
+	if err != nil {
+		log.Printf("AdminUploadVideo error: %v", err)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to upload video"})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"url": url, "size": header.Size})
+}
+
 // DeleteUserUpload removes a stale upload record (called when image fails to load in browser).
 func (h *GenerationHandler) DeleteUserUpload(c *gin.Context) {
 	user, exists := c.Get("user")

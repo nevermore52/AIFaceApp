@@ -5109,27 +5109,7 @@ func (b *Bot) sendMainMenu(chatID int64, userID int64) {
 	)
 
 	// reply-клавиатура
-	replyKB := newReplyKeyboard(
-		newKeyboardButtonRow(
-			newKeyboardButtonEmoji(loc.MenuGenPhotoBtn, "5235837920081887219"),
-			newKeyboardButtonEmoji(loc.MenuGenMusicBtn, "5463107823946717464"),
-		),
-		newKeyboardButtonRow(
-			newKeyboardButton(loc.MenuGenVideoBtn),
-			newKeyboardButtonEmoji(loc.MenuBuyBtn, "5224257782013769471"),
-		),
-		newKeyboardButtonRow(
-			newKeyboardButton(loc.MenuInviteFriendBtn),
-		),
-		newKeyboardButtonRow(
-			newKeyboardButtonEmoji(loc.MenuAccountBtn, "5231200819986047254"),
-			newKeyboardButtonEmoji(loc.MenuSettingsBtn, "5341715473882955310"),
-		),
-		newKeyboardButtonRow(
-			newKeyboardButton(loc.MenuHelpBtn),
-		),
-	)
-	replyKB.ResizeKeyboard = true
+	replyKB := b.buildReplyKeyboard(userID)
 
 	// инлайн-кнопки (без обычных эмодзи - используем только custom emoji)
 	inlineKB := newInlineKeyboardMarkup(
@@ -6610,12 +6590,14 @@ func (b *Bot) sendGenerationStatus(chatID int64, req *models.GenerationRequest) 
 			loc := b.getLocalization(req.UserID)
 			text := loc.PhotoReceived + "\n\n" + loc.PhotoAddCaption
 			b.sendText(chatID, text)
+			b.restoreMainKeyboard(chatID, req.UserID)
 			return
 		}
 		if strings.Contains(msg, "Request successful, but the official returned empty content") ||
 			strings.Contains(msg, "Произошла ошибка возможно вы нарушили правила бота.") {
 			loc := b.getLocalization(req.UserID)
 			b.sendText(chatID, loc.ErrDefAPIEmptyBilled)
+			b.restoreMainKeyboard(chatID, req.UserID)
 			return
 		}
 	}
@@ -6666,12 +6648,14 @@ func (b *Bot) sendGenerationStatus(chatID int64, req *models.GenerationRequest) 
 			if err != nil {
 				log.Printf("Failed to decode data URL: %v", err)
 				b.sendHTMLText(chatID, truncate(baseText+"\n\n🖼️ Результат недоступен", 3800))
+				b.restoreMainKeyboard(chatID, req.UserID)
 				return
 			}
 			if _, err := b.sendPhoto(chatID, &tgmodels.InputFileUpload{Filename: fileName, Data: bytes.NewReader(photoBytes)}, caption, "HTML", animateMarkup); err != nil {
 				log.Printf("Failed to send generation photo: %v", err)
 				b.sendHTMLText(chatID, truncate(baseText+"\n\n🖼️ Результат недоступен", 3800))
 			}
+			b.restoreMainKeyboard(chatID, req.UserID)
 			return
 		}
 
@@ -6696,6 +6680,7 @@ func (b *Bot) sendGenerationStatus(chatID int64, req *models.GenerationRequest) 
 						b.sendHTMLText(chatID, truncate(baseText+"\n\n🎬 <a href=\""+output+"\">Видео (открыть)</a>", 3800))
 					}
 				}
+				b.restoreMainKeyboard(chatID, req.UserID)
 				return
 			}
 
@@ -6711,15 +6696,18 @@ func (b *Bot) sendGenerationStatus(chatID int64, req *models.GenerationRequest) 
 					b.sendHTMLText(chatID, truncate(baseText+"\n\n🖼️ <a href=\""+output+"\">Результат (открыть)</a>", 3800))
 				}
 			}
+			b.restoreMainKeyboard(chatID, req.UserID)
 			return
 		}
 
 		// Иной формат — отправляем текстом без ссылки
 		b.sendHTMLText(chatID, truncate(baseText+"\n\n🖼️ Результат недоступен", 3800))
+		b.restoreMainKeyboard(chatID, req.UserID)
 		return
 	}
 
-	if req.Status == "failed" && req.ErrorMsg != nil && *req.ErrorMsg != "" {
+	isFailed := req.Status == "failed"
+	if isFailed && req.ErrorMsg != nil && *req.ErrorMsg != "" {
 		friendly := friendlyGenerationError(fmt.Errorf(*req.ErrorMsg))
 		// Возврат запросов в те же бакеты, откуда списали
 		skipRefund := strings.Contains(*req.ErrorMsg, "Request successful, but the official returned empty content") ||
@@ -6740,6 +6728,11 @@ func (b *Bot) sendGenerationStatus(chatID int64, req *models.GenerationRequest) 
 	if _, err := b.sendMsg(msg); err != nil {
 		log.Printf("Failed to send generation status: %v", err)
 	}
+
+	// Re-attach keyboard on final states (completed with no output, or failed)
+	if isFailed || req.Status == "completed" {
+		b.restoreMainKeyboard(chatID, req.UserID)
+	}
 }
 
 // sendText отправляет сообщение и логирует ошибку, если она случилась
@@ -6747,6 +6740,45 @@ func (b *Bot) sendText(chatID int64, text string) {
 	msg := newMessageConfig(chatID, text)
 	if _, err := b.sendMsg(msg); err != nil {
 		log.Printf("Failed to send message: %v", err)
+	}
+}
+
+// buildReplyKeyboard constructs the main persistent reply keyboard for a user.
+func (b *Bot) buildReplyKeyboard(userID int64) tgmodels.ReplyKeyboardMarkup {
+	loc := b.getLocalization(userID)
+	kb := newReplyKeyboard(
+		newKeyboardButtonRow(
+			newKeyboardButtonEmoji(loc.MenuGenPhotoBtn, "5235837920081887219"),
+			newKeyboardButtonEmoji(loc.MenuGenMusicBtn, "5463107823946717464"),
+		),
+		newKeyboardButtonRow(
+			newKeyboardButton(loc.MenuGenVideoBtn),
+			newKeyboardButtonEmoji(loc.MenuBuyBtn, "5224257782013769471"),
+		),
+		newKeyboardButtonRow(
+			newKeyboardButton(loc.MenuInviteFriendBtn),
+		),
+		newKeyboardButtonRow(
+			newKeyboardButtonEmoji(loc.MenuAccountBtn, "5231200819986047254"),
+			newKeyboardButtonEmoji(loc.MenuSettingsBtn, "5341715473882955310"),
+		),
+		newKeyboardButtonRow(
+			newKeyboardButton(loc.MenuHelpBtn),
+		),
+	)
+	kb.ResizeKeyboard = true
+	return kb
+}
+
+// restoreMainKeyboard silently re-attaches the persistent reply keyboard after a terminal result message.
+func (b *Bot) restoreMainKeyboard(chatID int64, userID int64) {
+	loc := b.getLocalization(userID)
+	kb := b.buildReplyKeyboard(userID)
+	msg := newMessageConfig(chatID, loc.MenuBtn)
+	msg.ReplyMarkup = kb
+	msg.DisableNotification = true
+	if _, err := b.sendMsg(msg); err != nil {
+		log.Printf("restoreMainKeyboard: %v", err)
 	}
 }
 
