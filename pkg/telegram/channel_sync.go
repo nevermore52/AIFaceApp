@@ -179,10 +179,10 @@ func (b *Bot) processChannelMessage(msg *tgmodels.Message, sourceID string) bool
 		return false
 	}
 
+	// Duplicate check already done above via SELECT EXISTS; plain INSERT is safe here.
 	_, err = b.db.Exec(`
 		INSERT INTO gallery_ideas (model, output, prompt, source_id, created_at, updated_at)
 		VALUES ($1, $2, $3, $4, NOW(), NOW())
-		ON CONFLICT (source_id) DO NOTHING
 	`, model, photoURL, prompt, sourceID)
 	if err != nil {
 		log.Printf("[channel_sync] %s: db insert error: %v", sourceID, err)
