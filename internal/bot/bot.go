@@ -53,7 +53,7 @@ func NewBot(cfg *config.Config, db *sql.DB) (*Bot, error) {
 	paymentProvider := payments.NewPaymentProvider(cfg.Payment)
 	paymentService := services.NewPaymentService(paymentProvider, userService, redisClient)
 
-	tgBot, err := telegram.NewBot(cfg.TelegramToken, userService, generationService, paymentService, redisClient, cfg)
+	tgBot, err := telegram.NewBot(cfg.TelegramToken, userService, generationService, paymentService, redisClient, cfg, db)
 	if err != nil {
 		return nil, err
 	}

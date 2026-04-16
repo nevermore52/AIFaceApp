@@ -17,9 +17,13 @@ type Config struct {
 	KieAPI        KieAPIConfig
 	Payment       PaymentConfig
 	Server        ServerConfig
-	DebugLogging  bool
+	DebugLogging   bool
 	WebBackendURL  string
 	WebFrontendURL string
+	// Channel → Gallery Ideas sync
+	ChannelSyncID int64
+	UploadDir     string
+	WebBaseURL    string
 }
 
 type RedisConfig struct {
@@ -108,6 +112,10 @@ func Load() (*Config, error) {
 	cfg.WebBackendURL = getEnv("WEB_BACKEND_URL", "http://web-backend:3000")
 	cfg.WebFrontendURL = getEnv("WEB_FRONTEND_URL", "https://app.aifaceapp.ru")
 
+	cfg.ChannelSyncID = getEnvInt64("CHANNEL_SYNC_ID", 0)
+	cfg.UploadDir = getEnv("UPLOAD_DIR", "")
+	cfg.WebBaseURL = getEnv("WEB_BASE_URL", cfg.WebFrontendURL)
+
 	cfg.DebugLogging = getEnvBool("DEBUG_LOGGING", true)
 	if cfg.TelegramToken == "" {
 		return nil, fmt.Errorf("TELEGRAM_BOT_TOKEN is required")
@@ -127,6 +135,15 @@ func getEnvInt(key string, defaultValue int) int {
 	if value := os.Getenv(key); value != "" {
 		if intValue, err := strconv.Atoi(value); err == nil {
 			return intValue
+		}
+	}
+	return defaultValue
+}
+
+func getEnvInt64(key string, defaultValue int64) int64 {
+	if value := os.Getenv(key); value != "" {
+		if v, err := strconv.ParseInt(value, 10, 64); err == nil {
+			return v
 		}
 	}
 	return defaultValue

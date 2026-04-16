@@ -45,6 +45,11 @@ services:
       SERVER_PORT: 8080
       WEB_BACKEND_URL: http://web-backend:3000
       WEB_FRONTEND_URL: https://app.aifaceapp.ru
+      WEB_BASE_URL: https://app.aifaceapp.ru
+      UPLOAD_DIR: /app/uploads
+      CHANNEL_SYNC_ID: ${CHANNEL_SYNC_ID:-0}
+    volumes:
+      - uploads_data:/app/uploads
     depends_on:
       postgres:
         condition: service_healthy

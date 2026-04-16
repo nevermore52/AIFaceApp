@@ -3,6 +3,7 @@ package telegram
 import (
 	"bytes"
 	"context"
+	"database/sql"
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
@@ -42,6 +43,9 @@ type Bot struct {
 	paymentService    *services.PaymentService
 	redisClient       *redis.Client
 	cfg               *config.Config
+	db                *sql.DB // for channel→gallery sync (shared DB with web-backend)
+	uploadDir         string  // shared upload directory path
+	webBaseURL        string  // public base URL for uploaded files
 	concurrencySem    chan struct{}
 	shutdownOnce      sync.Once
 	shuttingDown      atomic.Bool
@@ -1233,7 +1237,7 @@ var modelOptions = []ModelOption{
 var modelCategories = []ModelCategory{ModelCategoryPhoto, ModelCategoryVideo, ModelCategoryMusic, ModelCategoryChat}
 var adminModelCategories = []ModelCategory{ModelCategoryPhoto, ModelCategoryVideo, ModelCategoryMusic, ModelCategoryChat}
 
-func NewBot(token string, userService *services.UserService, generationService *services.GenerationService, paymentService *services.PaymentService, redisClient *redis.Client, cfg *config.Config) (*Bot, error) {
+func NewBot(token string, userService *services.UserService, generationService *services.GenerationService, paymentService *services.PaymentService, redisClient *redis.Client, cfg *config.Config, db *sql.DB) (*Bot, error) {
 	ctx, cancel := context.WithCancel(context.Background())
 
 	bot := &Bot{
@@ -1244,6 +1248,9 @@ func NewBot(token string, userService *services.UserService, generationService *
 		paymentService:    paymentService,
 		redisClient:       redisClient,
 		cfg:               cfg,
+		db:                db,
+		uploadDir:         cfg.UploadDir,
+		webBaseURL:        cfg.WebBaseURL,
 		concurrencySem:    make(chan struct{}, 10),
 		albumBuffers:      make(map[string]*albumBuffer),
 		recentPhotos:      make(map[int64][]photoRecord),
@@ -1372,6 +1379,10 @@ func (b *Bot) safeHandleUpdate(update *tgmodels.Update) {
 			return
 		}
 		b.handleCallback(update.CallbackQuery)
+		return
+	}
+	if update.ChannelPost != nil {
+		b.handleChannelPost(update.ChannelPost)
 		return
 	}
 }
