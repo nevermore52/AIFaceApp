@@ -1271,6 +1271,10 @@ func NewBot(token string, userService *services.UserService, generationService *
 
 	opts := []tgbot.Option{
 		tgbot.WithHTTPClient(60*time.Second, http1Client),
+		// Explicitly include channel_post so the bot receives channel updates when it is admin.
+		tgbot.WithAllowedUpdates(tgbot.AllowedUpdates{
+			"message", "edited_message", "callback_query", "channel_post",
+		}),
 		tgbot.WithDefaultHandler(func(ctx context.Context, _ *tgbot.Bot, update *tgmodels.Update) {
 			bot.goLimited(func() {
 				bot.safeHandleUpdate(update)
@@ -1301,6 +1305,17 @@ func NewBot(token string, userService *services.UserService, generationService *
 
 func (b *Bot) Start() error {
 	log.Printf("Authorized on account %s", b.botUser.Username)
+
+	// Channel sync diagnostic
+	if b.cfg.ChannelSyncID != 0 {
+		log.Printf("[channel_sync] enabled: monitoring channel_id=%d upload_dir=%q web_base_url=%q",
+			b.cfg.ChannelSyncID, b.uploadDir, b.webBaseURL)
+		if b.db == nil {
+			log.Printf("[channel_sync] WARNING: db is nil — channel posts will NOT be saved")
+		}
+	} else {
+		log.Printf("[channel_sync] disabled (CHANNEL_SYNC_ID not set)")
+	}
 
 	// Delete webhook if any
 	_, err := b.api.DeleteWebhook(b.ctx, &tgbot.DeleteWebhookParams{DropPendingUpdates: false})
@@ -1467,6 +1482,11 @@ func (b *Bot) setChatCommands(chatID int64, isAdmin bool) {
 func (b *Bot) handleMessage(msg *tgmodels.Message) {
 	user := msg.From
 	if user == nil {
+		return
+	}
+
+	// Channel sync: if admin forwarded a channel post — import it as a gallery idea.
+	if b.TryHandleForwardedChannelPost(msg) {
 		return
 	}
 

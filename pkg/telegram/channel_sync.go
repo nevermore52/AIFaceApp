@@ -43,7 +43,7 @@ var modelKeywords = []struct {
 	{"seed dream", "seedream/4.5-edit"},
 }
 
-// detectModel tries to infer a model ID from a channel post body (e.g. footer "__Сделано с помощью Nano Banana 2__").
+// detectModel infers a model ID from post text.
 // Falls back to "google/nano-banana" when nothing matches.
 func detectModel(text string) string {
 	lower := strings.ToLower(text)
@@ -55,60 +55,101 @@ func detectModel(text string) string {
 	return "google/nano-banana"
 }
 
-// handleChannelPost is called for every ChannelPost update.
-// It extracts the prompt (from a ``` ``` block) and the largest attached photo,
-// saves the photo to the shared uploads directory, then inserts a gallery_idea row.
+// handleChannelPost handles ChannelPost updates (requires bot to be admin of the channel).
 func (b *Bot) handleChannelPost(msg *tgmodels.Message) {
 	if b.cfg.ChannelSyncID == 0 {
 		return
 	}
 	if msg.Chat.ID != b.cfg.ChannelSyncID {
+		log.Printf("[channel_sync] ignored post from chat_id=%d (expected %d)", msg.Chat.ID, b.cfg.ChannelSyncID)
 		return
 	}
 
-	// Prefer caption (photo post), fall back to text (text post)
+	log.Printf("[channel_sync] received channel_post message_id=%d chat=%d", msg.ID, msg.Chat.ID)
+	b.processChannelMessage(msg, fmt.Sprintf("tg_channel_%d", msg.ID))
+}
+
+// TryHandleForwardedChannelPost processes a message forwarded from the channel by any user.
+// Used for testing WITHOUT the bot being a channel admin: admin just forwards a post.
+// Returns true if the message was handled (regardless of success).
+func (b *Bot) TryHandleForwardedChannelPost(msg *tgmodels.Message) bool {
+	if b.cfg.ChannelSyncID == 0 {
+		return false
+	}
+	if msg.ForwardOrigin == nil {
+		return false
+	}
+	if msg.ForwardOrigin.Type != tgmodels.MessageOriginTypeChannel {
+		return false
+	}
+	ch := msg.ForwardOrigin.MessageOriginChannel
+	if ch == nil || ch.Chat.ID != b.cfg.ChannelSyncID {
+		return false
+	}
+
+	// Only admins can trigger manual import via forwarding
+	if isAdmin, err := b.userService.IsUserAdmin(msg.From.ID); err != nil || !isAdmin {
+		b.sendText(msg.Chat.ID, "⛔ Только администраторы могут импортировать посты через пересылку.")
+		return true
+	}
+
+	log.Printf("[channel_sync] forwarded post from message_id=%d by admin=%d", ch.MessageID, msg.From.ID)
+	sourceID := fmt.Sprintf("tg_channel_%d", ch.MessageID)
+	ok := b.processChannelMessage(msg, sourceID)
+	if ok {
+		b.sendText(msg.Chat.ID, "✅ Пост добавлен в Идеи на сайте.")
+	} else {
+		b.sendText(msg.Chat.ID, "❌ Не удалось добавить пост. Проверь логи (нужен код-блок ``` и фото).")
+	}
+	return true
+}
+
+// processChannelMessage is the shared processing core.
+// msg may be a ChannelPost OR a forwarded message from the channel.
+// sourceID is the deduplication key.
+// Returns true on success.
+func (b *Bot) processChannelMessage(msg *tgmodels.Message, sourceID string) bool {
+	// Pick text: caption for media posts, text for text-only posts
 	text := msg.Caption
 	if text == "" {
 		text = msg.Text
 	}
 	if text == "" {
-		return
+		log.Printf("[channel_sync] %s: no text/caption", sourceID)
+		return false
 	}
 
 	prompt := extractCodeBlock(text)
 	if prompt == "" {
-		// No code block → not a template post, skip silently
-		return
+		log.Printf("[channel_sync] %s: no code block found", sourceID)
+		return false
 	}
 
 	model := detectModel(text)
-	sourceID := fmt.Sprintf("tg_channel_%d", msg.ID)
 
 	if b.db == nil {
-		log.Printf("[channel_sync] db not configured, skipping message_id=%d", msg.ID)
-		return
+		log.Printf("[channel_sync] %s: db is nil", sourceID)
+		return false
 	}
 
-	// Deduplication: skip if already imported
+	// Deduplication
 	var exists bool
 	_ = b.db.QueryRow(`SELECT EXISTS(SELECT 1 FROM gallery_ideas WHERE source_id = $1)`, sourceID).Scan(&exists)
 	if exists {
-		log.Printf("[channel_sync] duplicate, skipping message_id=%d", msg.ID)
-		return
+		log.Printf("[channel_sync] %s: duplicate, skipping", sourceID)
+		return false
 	}
 
-	// Require a photo
 	if len(msg.Photo) == 0 {
-		log.Printf("[channel_sync] message_id=%d has no photo, skipping", msg.ID)
-		return
+		log.Printf("[channel_sync] %s: no photo attached", sourceID)
+		return false
 	}
 
-	// Pick the largest resolution variant
 	largest := msg.Photo[len(msg.Photo)-1]
-	photoURL, err := b.downloadAndSaveTelegramFile(largest.FileID, msg.ID)
+	photoURL, err := b.downloadAndSaveTelegramFile(largest.FileID, sourceID)
 	if err != nil {
-		log.Printf("[channel_sync] photo download failed for message_id=%d: %v", msg.ID, err)
-		return
+		log.Printf("[channel_sync] %s: photo download error: %v", sourceID, err)
+		return false
 	}
 
 	_, err = b.db.Exec(`
@@ -117,16 +158,17 @@ func (b *Bot) handleChannelPost(msg *tgmodels.Message) {
 		ON CONFLICT (source_id) DO NOTHING
 	`, model, photoURL, prompt, sourceID)
 	if err != nil {
-		log.Printf("[channel_sync] insert error for message_id=%d: %v", msg.ID, err)
-		return
+		log.Printf("[channel_sync] %s: db insert error: %v", sourceID, err)
+		return false
 	}
 
-	log.Printf("[channel_sync] saved gallery idea from message_id=%d model=%s url=%s", msg.ID, model, photoURL)
+	log.Printf("[channel_sync] %s: saved model=%s url=%s", sourceID, model, photoURL)
+	return true
 }
 
 // downloadAndSaveTelegramFile downloads a Telegram file by fileID,
 // saves it to b.uploadDir, and returns the public URL.
-func (b *Bot) downloadAndSaveTelegramFile(fileID string, msgID int) (string, error) {
+func (b *Bot) downloadAndSaveTelegramFile(fileID, sourceID string) (string, error) {
 	if b.uploadDir == "" {
 		return "", fmt.Errorf("UPLOAD_DIR not configured")
 	}
@@ -140,26 +182,25 @@ func (b *Bot) downloadAndSaveTelegramFile(fileID string, msgID int) (string, err
 	}
 
 	downloadURL := fmt.Sprintf("https://api.telegram.org/file/bot%s/%s", b.cfg.TelegramToken, tgFile.FilePath)
-
-	resp, err := http.Get(downloadURL)
+	resp, err := http.Get(downloadURL) //nolint:noctx
 	if err != nil {
 		return "", fmt.Errorf("http.Get: %w", err)
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusOK {
-		return "", fmt.Errorf("telegram file server returned %d", resp.StatusCode)
+		return "", fmt.Errorf("telegram returned %d", resp.StatusCode)
 	}
 
 	ext := filepath.Ext(tgFile.FilePath)
 	if ext == "" {
 		ext = ".jpg"
 	}
-	filename := fmt.Sprintf("channel_%d_%d%s", msgID, time.Now().UnixNano(), ext)
+	filename := fmt.Sprintf("channel_%s_%d%s", sourceID, time.Now().UnixNano(), ext)
 	dst := filepath.Join(b.uploadDir, filename)
 
 	f, err := os.Create(dst)
 	if err != nil {
-		return "", fmt.Errorf("os.Create: %w", err)
+		return "", fmt.Errorf("os.Create %s: %w", dst, err)
 	}
 	defer f.Close()
 
