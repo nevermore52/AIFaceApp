@@ -3827,10 +3827,10 @@ func (b *Bot) processMotionControlGeneration(chatID int64, userID int64, photoUR
 	durationInt := videoDuration
 	duration := fmt.Sprintf("%d", durationInt)
 
-	// Cost: 720p=10 tokens/sec, 1080p=15 tokens/sec
-	requestCost := durationInt * 10
+	// Cost: 720p=1 token/sec, 1080p=ceil(1.5 tokens/sec)
+	requestCost := durationInt
 	if mode == "1080p" {
-		requestCost = durationInt * 15
+		requestCost = (durationInt*3 + 1) / 2 // ceil(durationInt * 1.5)
 	}
 
 	userRec, err := b.userService.GetUserByTelegramID(userID)
@@ -5569,11 +5569,11 @@ func (b *Bot) sendModelMenu(chatID int64, userID int64, category ModelCategory, 
 		minCost := 2
 		text += "\n<b>" + fmt.Sprintf(loc.ModelsCostFrom, minCost) + "</b>"
 	} else if current == "wan/2-6-image-to-video" {
-		minCost := 2
+		minCost := 20
 		text += "\n<b>" + fmt.Sprintf(loc.ModelsCostFrom, minCost) + "</b>"
 	} else if current == "kling-2.6/image-to-video" {
-		minCost := 1
-		text += "\n<b>" + fmt.Sprintf(loc.ModelsCostFromSingular, minCost) + "</b>"
+		minCost := 10
+		text += "\n<b>" + fmt.Sprintf(loc.ModelsCostFrom, minCost) + "</b>"
 	} else if current == "kling-2.6/motion-control" {
 		minCost := 3
 		text += "\n<b>" + fmt.Sprintf(loc.ModelsCostFromSingular, minCost) + "</b>"

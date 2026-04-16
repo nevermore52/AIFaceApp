@@ -677,14 +677,14 @@ export function GeneratePage() {
       if (withSound) baseCost *= 2 // Со звуком цена x2
     }
 
-    // Kling 2.6 Motion Control: 720p=10 токенов/сек, 1080p=15 токенов/сек
+    // Kling 2.6 Motion Control: 720p=1 токен/сек, 1080p=ceil(1.5 токена/сек)
     // Используем тот же fallback 5 сек что и в params.duration при отправке
     if (selectedModel === 'kling-2.6/motion-control') {
       const dur = motionDuration > 0 ? motionDuration : 5
       if (selectedResolution === '1080p') {
-        baseCost = dur * 15
+        baseCost = Math.ceil(dur * 1.5)
       } else {
-        baseCost = dur * 10
+        baseCost = dur
       }
     }
 
@@ -1160,16 +1160,18 @@ export function GeneratePage() {
                 }}
               />
               {motionVideoPreview ? (
-                <div className="relative flex items-center gap-3 px-4 w-full h-24 rounded-xl border border-white/10 bg-white/[0.03]">
-                  <Video className="w-5 h-5 text-primary shrink-0" />
-                  <span className="text-sm text-white/70 truncate">
-                    {motionVideoFile?.name ?? 'Видео из тренда'}
-                  </span>
+                <div className="relative w-full rounded-xl border border-white/10 bg-black overflow-hidden">
+                  <video
+                    src={motionVideoPreview}
+                    controls
+                    playsInline
+                    className="w-full max-h-56 object-contain"
+                  />
                   <button
                     onClick={(e) => { e.stopPropagation(); e.preventDefault(); setMotionVideoFile(null); setMotionVideoPreview(null); setMotionVideoUrl(null); setMotionDuration(0) }}
-                    className="ml-auto p-1 bg-white/10 hover:bg-white/20 rounded-lg transition-all"
+                    className="absolute top-2 right-2 p-1 bg-black/60 hover:bg-black/80 rounded-lg transition-all"
                   >
-                    <X className="w-3.5 h-3.5 text-white/60" />
+                    <X className="w-3.5 h-3.5 text-white/80" />
                   </button>
                 </div>
               ) : (
