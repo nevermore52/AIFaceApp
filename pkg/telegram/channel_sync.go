@@ -110,10 +110,9 @@ func (b *Bot) TryHandleForwardedChannelPost(msg *tgmodels.Message) bool {
 		return false
 	}
 
-	// Only admins can trigger manual import via forwarding
+	// Only admins can trigger manual import via forwarding; non-admins: silently ignore
 	if isAdmin, err := b.userService.IsUserAdmin(msg.From.ID); err != nil || !isAdmin {
-		b.sendText(msg.Chat.ID, "⛔ Только администраторы могут импортировать посты через пересылку.")
-		return true
+		return false
 	}
 
 	log.Printf("[channel_sync] forwarded post from message_id=%d by admin=%d", ch.MessageID, msg.From.ID)
