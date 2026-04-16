@@ -58,6 +58,7 @@ func New(cfg *config.Config, db *sql.DB) *Server {
 	generationRepo := repository.NewGenerationRepository(db)
 	paymentRepo := repository.NewPaymentRepository(db)
 	sessionRepo := repository.NewSessionRepository(db)
+	promoRepo := repository.NewPromoRepository(db)
 
 	authService := services.NewAuthService(cfg, userRepo, sessionRepo)
 	userService := services.NewUserService(userRepo, quotaRepo)
@@ -87,6 +88,7 @@ func New(cfg *config.Config, db *sql.DB) *Server {
 	generationHandler := handlers.NewGenerationHandler(generationService, webGenerationService, cfg.UploadDir, cfg.WebBaseURL)
 	paymentHandler := handlers.NewPaymentHandler(paymentService, webPaymentService)
 	adminHandler := handlers.NewAdminHandler(userService, generationService, paymentService, webPaymentService)
+	promoHandler := handlers.NewPromoHandler(promoRepo, userService)
 
 	// Используем middleware с userService для обновления информации о подписке при каждом запросе
 	authMiddleware := middleware.NewAuthMiddlewareWithUserService(authService, userService, cfg.TelegramBotToken)
@@ -151,6 +153,8 @@ func New(cfg *config.Config, db *sql.DB) *Server {
 			protected.POST("/payments/create", paymentHandler.CreatePayment)
 			protected.POST("/payments/subscription", paymentHandler.CreateSubscriptionPayment)
 			protected.GET("/payments/history", paymentHandler.GetPaymentHistory)
+
+			protected.POST("/promo/activate", promoHandler.Activate)
 		}
 
 		admin := api.Group("/admin")
@@ -181,6 +185,11 @@ func New(cfg *config.Config, db *sql.DB) *Server {
 			// Permanent upload for admin assets — no auto-cleanup
 			admin.POST("/upload", generationHandler.AdminUploadImage)
 			admin.POST("/upload-video", generationHandler.AdminUploadVideo)
+
+			admin.GET("/promo-codes", promoHandler.AdminList)
+			admin.POST("/promo-codes", promoHandler.AdminCreate)
+			admin.PUT("/promo-codes/:id", promoHandler.AdminUpdate)
+			admin.DELETE("/promo-codes/:id", promoHandler.AdminDelete)
 		}
 	}
 

@@ -6,7 +6,7 @@ import { adminApi, generationApi } from '../lib/api'
 import { Card, CardContent, CardHeader, CardTitle } from '../components/ui/card'
 import { Button } from '../components/ui/button'
 
-type Tab = 'stats' | 'users' | 'top_users' | 'generations' | 'payments' | 'gallery_ideas' | 'trends'
+type Tab = 'stats' | 'users' | 'top_users' | 'generations' | 'payments' | 'gallery_ideas' | 'trends' | 'promo_codes'
 
 const TABS: { id: Tab; label: string }[] = [
   { id: 'stats', label: '📊 Статистика' },
@@ -16,6 +16,7 @@ const TABS: { id: Tab; label: string }[] = [
   { id: 'payments', label: '💳 Платежи' },
   { id: 'gallery_ideas', label: '💡 Идеи' },
   { id: 'trends', label: '🔥 Тренды' },
+  { id: 'promo_codes', label: '🎁 Промокоды' },
 ]
 
 function StatCard({ label, value }: { label: string; value: string | number }) {
@@ -1252,6 +1253,157 @@ function TrendsTab() {
   )
 }
 
+// ─── Promo Codes Tab ──────────────────────────────────────────────────────────
+
+interface PromoCode {
+  id: number; code: string; description: string
+  image_tokens: number; video_tokens: number; text_tokens: number; music_tokens: number
+  max_activations: number | null; activations_count: number
+  expires_at: string | null; is_active: boolean
+}
+
+const EMPTY_PROMO = (): Omit<PromoCode, 'id' | 'activations_count'> => ({
+  code: '', description: '', image_tokens: 0, video_tokens: 0, text_tokens: 0, music_tokens: 0,
+  max_activations: null, expires_at: null, is_active: true,
+})
+
+function PromoCodesTab() {
+  const [list, setList] = useState<PromoCode[]>([])
+  const [loading, setLoading] = useState(true)
+  const [showCreate, setShowCreate] = useState(false)
+  const [editItem, setEditItem] = useState<PromoCode | null>(null)
+  const [form, setForm] = useState(EMPTY_PROMO())
+  const [saving, setSaving] = useState(false)
+
+  const load = () => {
+    setLoading(true)
+    adminApi.getPromoCodes().then((r: any) => setList(r.data || [])).catch(() => {}).finally(() => setLoading(false))
+  }
+
+  useEffect(() => { load() }, [])
+
+  const openCreate = () => { setForm(EMPTY_PROMO()); setEditItem(null); setShowCreate(true) }
+  const openEdit = (p: PromoCode) => {
+    setForm({ code: p.code, description: p.description, image_tokens: p.image_tokens, video_tokens: p.video_tokens, text_tokens: p.text_tokens, music_tokens: p.music_tokens, max_activations: p.max_activations, expires_at: p.expires_at ? p.expires_at.slice(0, 10) : null, is_active: p.is_active })
+    setEditItem(p); setShowCreate(true)
+  }
+
+  const handleSave = async () => {
+    setSaving(true)
+    try {
+      const payload = { ...form, expires_at: form.expires_at || null }
+      if (editItem) {
+        await adminApi.updatePromoCode(editItem.id, payload)
+      } else {
+        await adminApi.createPromoCode(payload as any)
+      }
+      setShowCreate(false); load()
+    } catch (e: any) { alert(e?.message || 'Ошибка') } finally { setSaving(false) }
+  }
+
+  const handleDelete = async (id: number) => {
+    if (!confirm('Удалить промокод?')) return
+    await adminApi.deletePromoCode(id).catch(() => {})
+    load()
+  }
+
+  const tokenField = (label: string, key: 'image_tokens' | 'video_tokens' | 'text_tokens' | 'music_tokens') => (
+    <div>
+      <label className="text-xs text-white/50 mb-1 block">{label}</label>
+      <input type="number" min={0} value={form[key]} onChange={(e) => setForm({ ...form, [key]: Number(e.target.value) })}
+        className="w-full px-3 py-2 rounded-lg bg-white/5 border border-white/10 text-white text-sm" />
+    </div>
+  )
+
+  return (
+    <div className="space-y-4">
+      <div className="flex justify-between items-center">
+        <span className="text-sm text-white/50">Всего: {list.length}</span>
+        <Button size="sm" onClick={openCreate} className="rounded-xl bg-primary text-black font-bold">+ Создать</Button>
+      </div>
+
+      {loading ? <p className="text-white/30 text-sm">Загрузка...</p> : list.length === 0 ? (
+        <p className="text-white/30 text-sm text-center py-8">Промокодов нет</p>
+      ) : (
+        <div className="space-y-2">
+          {list.map((p) => (
+            <div key={p.id} className="flex items-center gap-3 px-4 py-3 rounded-xl bg-white/[0.03] border border-white/5">
+              <div className="flex-1 min-w-0">
+                <div className="flex items-center gap-2 flex-wrap">
+                  <span className="font-mono font-bold text-sm text-white">{p.code}</span>
+                  <span className={`text-[10px] px-2 py-0.5 rounded-full font-bold ${p.is_active ? 'bg-green-500/20 text-green-400' : 'bg-red-500/20 text-red-400'}`}>
+                    {p.is_active ? 'Активен' : 'Отключён'}
+                  </span>
+                  {p.expires_at && <span className="text-[10px] text-white/30">до {new Date(p.expires_at).toLocaleDateString('ru-RU')}</span>}
+                </div>
+                {p.description && <p className="text-xs text-white/40 mt-0.5 truncate">{p.description}</p>}
+                <div className="flex gap-3 mt-1 flex-wrap">
+                  {p.image_tokens > 0 && <span className="text-[11px] text-green-400">📷 +{p.image_tokens}</span>}
+                  {p.video_tokens > 0 && <span className="text-[11px] text-orange-400">🎬 +{p.video_tokens}</span>}
+                  {p.text_tokens > 0 && <span className="text-[11px] text-blue-400">💬 +{p.text_tokens}</span>}
+                  {p.music_tokens > 0 && <span className="text-[11px] text-purple-400">🎵 +{p.music_tokens}</span>}
+                  <span className="text-[11px] text-white/30">
+                    {p.activations_count}{p.max_activations !== null ? `/${p.max_activations}` : ''} активаций
+                  </span>
+                </div>
+              </div>
+              <button onClick={() => openEdit(p)} className="text-xs text-white/40 hover:text-white px-2 py-1 rounded-lg hover:bg-white/5">✏️</button>
+              <button onClick={() => handleDelete(p.id)} className="text-xs text-red-400/60 hover:text-red-400 px-2 py-1 rounded-lg hover:bg-red-500/10">🗑</button>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {showCreate && createPortal(
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 backdrop-blur-sm">
+          <div className="w-full max-w-md bg-[#111] border border-white/10 rounded-2xl p-6 space-y-4 max-h-[90vh] overflow-y-auto">
+            <h3 className="text-lg font-bold text-white">{editItem ? 'Редактировать промокод' : 'Новый промокод'}</h3>
+            <div>
+              <label className="text-xs text-white/50 mb-1 block">Код *</label>
+              <input value={form.code} onChange={(e) => setForm({ ...form, code: e.target.value.toUpperCase() })} disabled={!!editItem}
+                placeholder="SUMMER2025" className="w-full px-3 py-2 rounded-lg bg-white/5 border border-white/10 text-white text-sm font-mono tracking-widest uppercase" />
+            </div>
+            <div>
+              <label className="text-xs text-white/50 mb-1 block">Описание</label>
+              <input value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })}
+                placeholder="Летняя акция" className="w-full px-3 py-2 rounded-lg bg-white/5 border border-white/10 text-white text-sm" />
+            </div>
+            <div className="grid grid-cols-2 gap-3">
+              {tokenField('Фото токены', 'image_tokens')}
+              {tokenField('Видео токены', 'video_tokens')}
+              {tokenField('Текст токены', 'text_tokens')}
+              {tokenField('Муз. токены', 'music_tokens')}
+            </div>
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className="text-xs text-white/50 mb-1 block">Макс. активаций (пусто = ∞)</label>
+                <input type="number" min={1} value={form.max_activations ?? ''} onChange={(e) => setForm({ ...form, max_activations: e.target.value ? Number(e.target.value) : null })}
+                  placeholder="∞" className="w-full px-3 py-2 rounded-lg bg-white/5 border border-white/10 text-white text-sm" />
+              </div>
+              <div>
+                <label className="text-xs text-white/50 mb-1 block">Действует до (пусто = бессрочно)</label>
+                <input type="date" value={form.expires_at ?? ''} onChange={(e) => setForm({ ...form, expires_at: e.target.value || null })}
+                  className="w-full px-3 py-2 rounded-lg bg-white/5 border border-white/10 text-white text-sm" />
+              </div>
+            </div>
+            <label className="flex items-center gap-2 cursor-pointer">
+              <input type="checkbox" checked={form.is_active} onChange={(e) => setForm({ ...form, is_active: e.target.checked })} className="w-4 h-4 accent-primary" />
+              <span className="text-sm text-white/70">Активен</span>
+            </label>
+            <div className="flex gap-2 pt-2">
+              <Button onClick={handleSave} disabled={saving || !form.code.trim()} className="flex-1 rounded-xl font-bold bg-gradient-to-r from-[#FFD700] via-[#FFB700] to-[#FF8C00] text-black">
+                {saving ? 'Сохранение...' : 'Сохранить'}
+              </Button>
+              <Button variant="outline" onClick={() => setShowCreate(false)} className="rounded-xl border-white/10">Отмена</Button>
+            </div>
+          </div>
+        </div>,
+        document.body
+      )}
+    </div>
+  )
+}
+
 // ─── Main Page ────────────────────────────────────────────────────────────────
 export function AdminPage() {
   const { user } = useAuthStore()
@@ -1302,6 +1454,7 @@ export function AdminPage() {
           {tab === 'payments' && <PaymentsTab />}
           {tab === 'gallery_ideas' && <GalleryIdeasTab />}
           {tab === 'trends' && <TrendsTab />}
+          {tab === 'promo_codes' && <PromoCodesTab />}
         </CardContent>
       </Card>
     </div>

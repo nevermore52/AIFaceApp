@@ -227,6 +227,19 @@ export const adminApi = {
     api.delete<any>(`/admin/trends/${id}`),
   getTrendPriorities: (excludeId = 0) =>
     api.get<{ taken: number[] }>(`/admin/trends/priorities?exclude_id=${excludeId}`),
+  getPromoCodes: (limit = 50, offset = 0) =>
+    api.get<any>(`/admin/promo-codes?limit=${limit}&offset=${offset}`),
+  createPromoCode: (data: { code: string; description: string; image_tokens: number; video_tokens: number; text_tokens: number; music_tokens: number; max_activations: number | null; expires_at: string | null; is_active: boolean }) =>
+    api.post<any>('/admin/promo-codes', data),
+  updatePromoCode: (id: number, data: { description: string; image_tokens: number; video_tokens: number; text_tokens: number; music_tokens: number; max_activations: number | null; expires_at: string | null; is_active: boolean }) =>
+    api.put<any>(`/admin/promo-codes/${id}`, data),
+  deletePromoCode: (id: number) =>
+    api.delete<any>(`/admin/promo-codes/${id}`),
+}
+
+export const promoApi = {
+  activate: (code: string) =>
+    api.post<{ message: string; image_tokens: number; video_tokens: number; text_tokens: number; music_tokens: number }>('/promo/activate', { code }),
 }
 
 export const paymentApi = {

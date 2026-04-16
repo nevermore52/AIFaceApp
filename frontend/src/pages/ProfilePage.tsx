@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
 import { useAuthStore } from '../store/auth'
-import { userApi, authApi, API_BASE_URL } from '../lib/api'
+import { userApi, authApi, promoApi, API_BASE_URL } from '../lib/api'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../components/ui/card'
 import { Button } from '../components/ui/button'
 import { Copy, Check, Users, Shield, FileImage, Music, Video, MessageSquare, ChevronRight, ChevronLeft, History } from 'lucide-react'
@@ -25,7 +25,7 @@ interface Generation {
   completed_at?: string
 }
 
-type Tab = 'profile' | 'history' | 'partnership'
+type Tab = 'profile' | 'history' | 'partnership' | 'promo'
 
 export function ProfilePage() {
   const { user, updateUser, accessToken } = useAuthStore()
@@ -188,9 +188,36 @@ export function ProfilePage() {
 
   const totalPages = Math.ceil(total / limit)
 
+  const [promoCode, setPromoCode] = useState('')
+  const [promoLoading, setPromoLoading] = useState(false)
+  const [promoResult, setPromoResult] = useState<{ ok: boolean; msg: string; rewards?: Record<string, number> } | null>(null)
+
+  const handleActivatePromo = async () => {
+    if (!promoCode.trim()) return
+    setPromoLoading(true)
+    setPromoResult(null)
+    try {
+      const res = await promoApi.activate(promoCode.trim())
+      const rewards: Record<string, number> = {}
+      if (res.image_tokens) rewards['Фото токены'] = res.image_tokens
+      if (res.video_tokens) rewards['Видео токены'] = res.video_tokens
+      if (res.text_tokens) rewards['Текст токены'] = res.text_tokens
+      if (res.music_tokens) rewards['Муз. токены'] = res.music_tokens
+      setPromoResult({ ok: true, msg: res.message, rewards })
+      setPromoCode('')
+      userApi.getQuota().then((data) => setQuota(data as Quota)).catch(() => {})
+    } catch (e: any) {
+      const msg = e?.message || 'Ошибка активации промокода'
+      setPromoResult({ ok: false, msg })
+    } finally {
+      setPromoLoading(false)
+    }
+  }
+
   const tabs = [
     { id: 'profile' as Tab, label: 'Профиль' },
     { id: 'history' as Tab, label: 'История' },
+    { id: 'promo' as Tab, label: '🎁 Промокод' },
     { id: 'partnership' as Tab, label: 'Партнерство' },
   ]
 
@@ -489,6 +516,60 @@ export function ProfilePage() {
               )}
             </>
           )}
+        </div>
+      )}
+
+      {/* ── Промокод ── */}
+      {activeTab === 'promo' && (
+        <div className="space-y-4 max-w-md">
+          <Card className="border-white/5 bg-white/[0.02] backdrop-blur-sm">
+            <CardHeader className="pb-4">
+              <CardTitle className="text-lg flex items-center gap-2 text-white/90">
+                <div className="h-6 w-1 bg-primary rounded-full" />
+                Активировать промокод
+              </CardTitle>
+              <CardDescription className="text-white/40 font-medium">Введите промокод чтобы получить бонусные токены</CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="flex gap-2">
+                <input
+                  type="text"
+                  placeholder="PROMO2025"
+                  value={promoCode}
+                  onChange={(e) => setPromoCode(e.target.value.toUpperCase())}
+                  onKeyDown={(e) => e.key === 'Enter' && handleActivatePromo()}
+                  className="flex-1 px-4 py-3 rounded-xl border border-white/5 bg-white/[0.03] text-sm text-white/80 font-mono tracking-widest uppercase placeholder:normal-case placeholder:tracking-normal focus:border-primary/50 focus:outline-none transition-all"
+                />
+                <Button
+                  onClick={handleActivatePromo}
+                  disabled={promoLoading || !promoCode.trim()}
+                  className="rounded-xl px-5 font-bold bg-gradient-to-r from-[#FFD700] via-[#FFB700] to-[#FF8C00] text-black hover:opacity-90"
+                >
+                  {promoLoading ? <span className="h-4 w-4 animate-spin rounded-full border-2 border-black/20 border-t-black inline-block" /> : 'Применить'}
+                </Button>
+              </div>
+
+              {promoResult && (
+                <div className={cn(
+                  'rounded-xl border px-4 py-3 text-sm',
+                  promoResult.ok
+                    ? 'border-green-500/30 bg-green-500/10 text-green-300'
+                    : 'border-red-500/30 bg-red-500/10 text-red-300'
+                )}>
+                  <p className="font-semibold">{promoResult.msg}</p>
+                  {promoResult.ok && promoResult.rewards && Object.keys(promoResult.rewards).length > 0 && (
+                    <div className="mt-2 flex flex-wrap gap-2">
+                      {Object.entries(promoResult.rewards).map(([label, val]) => (
+                        <span key={label} className="px-2 py-0.5 rounded-full bg-green-500/20 text-green-200 text-xs font-bold">
+                          +{val} {label}
+                        </span>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )}
+            </CardContent>
+          </Card>
         </div>
       )}
 
