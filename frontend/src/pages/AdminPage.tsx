@@ -1164,26 +1164,42 @@ function TrendsTab() {
         </div>
       ) : (
         <div className="grid grid-cols-3 gap-2">
-          {trends.map((t) => (
-            <button
-              key={t.id}
-              onClick={() => { setSelected(t); setEditing(false) }}
-              className="relative aspect-square rounded-xl overflow-hidden bg-white/[0.03] group"
-            >
-              <img src={t.output} alt="" className="w-full h-full object-cover" loading="lazy" />
-              {t.is_popular && (
-                <span className="absolute top-1 left-1 text-[10px] font-bold bg-[#FFB700] text-black rounded px-1.5 py-0.5">★</span>
-              )}
-              {t.priority != null && (
-                <span className="absolute top-1 right-1 text-[10px] font-bold bg-white/20 text-white rounded px-1.5 py-0.5">#{t.priority}</span>
-              )}
-              {t.title && (
-                <div className="absolute bottom-0 left-0 right-0 px-1.5 pb-1.5 pt-4" style={{ background: 'linear-gradient(to top, rgba(0,0,0,0.8), transparent)' }}>
-                  <p className="text-[10px] text-white font-medium leading-tight line-clamp-2">{t.title}</p>
-                </div>
-              )}
-            </button>
-          ))}
+          {trends.map((t) => {
+            const isVideo = /\.mp4(\?|$)/i.test(t.output || '')
+            return (
+              <button
+                key={t.id}
+                onClick={() => { setSelected(t); setEditing(false) }}
+                className="relative aspect-square rounded-xl overflow-hidden bg-white/10 group"
+              >
+                {isVideo ? (
+                  <video src={t.output} muted loop autoPlay playsInline className="w-full h-full object-cover" />
+                ) : (
+                  <img
+                    src={t.output} alt=""
+                    className="w-full h-full object-cover"
+                    loading="lazy"
+                    onError={(e) => { (e.currentTarget as HTMLImageElement).style.display = 'none' }}
+                  />
+                )}
+                {/* fallback label when media fails */}
+                <span className="absolute inset-0 flex items-center justify-center text-[10px] text-white/30 pointer-events-none">
+                  {t.title || t.model || '—'}
+                </span>
+                {t.is_popular && (
+                  <span className="absolute top-1 left-1 text-[10px] font-bold bg-[#FFB700] text-black rounded px-1.5 py-0.5">★</span>
+                )}
+                {t.priority != null && (
+                  <span className="absolute top-1 right-1 text-[10px] font-bold bg-white/20 text-white rounded px-1.5 py-0.5">#{t.priority}</span>
+                )}
+                {t.title && (
+                  <div className="absolute bottom-0 left-0 right-0 px-1.5 pb-1.5 pt-4" style={{ background: 'linear-gradient(to top, rgba(0,0,0,0.8), transparent)' }}>
+                    <p className="text-[10px] text-white font-medium leading-tight line-clamp-2">{t.title}</p>
+                  </div>
+                )}
+              </button>
+            )
+          })}
         </div>
       )}
 
@@ -1218,7 +1234,11 @@ function TrendsTab() {
               </>
             ) : (
               <>
-                <img src={selected.output} alt="" style={{ width: '100%', maxHeight: 320, objectFit: 'contain', borderRadius: 12, background: '#000', display: 'block' }} />
+                {/\.mp4(\?|$)/i.test(selected.output || '') ? (
+                  <video src={selected.output} controls autoPlay muted loop style={{ width: '100%', maxHeight: 320, objectFit: 'contain', borderRadius: 12, background: '#000', display: 'block' }} />
+                ) : (
+                  <img src={selected.output} alt="" style={{ width: '100%', maxHeight: 320, objectFit: 'contain', borderRadius: 12, background: '#000', display: 'block' }} />
+                )}
                 <div style={{ marginTop: 12 }}>
                   {selected.title && <p style={{ margin: '0 0 8px', fontSize: '16px', fontWeight: 700, color: 'white' }}>{selected.title}</p>}
                   <div className="flex items-center gap-2 mb-2 flex-wrap">
