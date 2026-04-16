@@ -10,21 +10,44 @@ import (
 	"regexp"
 	"strings"
 	"time"
+	"unicode/utf16"
 
 	tgbot "github.com/go-telegram/bot"
 	tgmodels "github.com/go-telegram/bot/models"
 )
 
-// codeBlockRe matches fenced code blocks: ```...``` with optional language tag.
+// codeBlockRe is a fallback for when no "pre" entity is present.
 var codeBlockRe = regexp.MustCompile("(?s)```[^\n`]*\n?(.*?)```")
 
-// extractCodeBlock returns the trimmed content of the first ``` ``` block in text.
-func extractCodeBlock(text string) string {
-	m := codeBlockRe.FindStringSubmatch(text)
-	if len(m) < 2 {
-		return ""
+// extractCodeBlockFromMessage extracts the first "pre" (code block) entity from a Telegram
+// message, using CaptionEntities (photo) or Entities (text). Offset/Length are UTF-16
+// code units per the Telegram API spec.
+// Falls back to regex on the raw text if no entity is found.
+func extractCodeBlockFromMessage(text string, entities []tgmodels.MessageEntity) string {
+	// Primary: use the "pre" entity to locate exact byte range
+	for _, e := range entities {
+		if e.Type != tgmodels.MessageEntityTypePre {
+			continue
+		}
+		// Convert string → UTF-16 to work with Telegram's offset/length
+		utf16Text := utf16.Encode([]rune(text))
+		start := e.Offset
+		end := e.Offset + e.Length
+		if start < 0 || end > len(utf16Text) || start >= end {
+			continue
+		}
+		extracted := string(utf16.Decode(utf16Text[start:end]))
+		extracted = strings.TrimSpace(extracted)
+		if extracted != "" {
+			return extracted
+		}
 	}
-	return strings.TrimSpace(m[1])
+	// Fallback: raw backtick regex (handles case where entities are absent)
+	m := codeBlockRe.FindStringSubmatch(text)
+	if len(m) >= 2 {
+		return strings.TrimSpace(m[1])
+	}
+	return ""
 }
 
 // modelKeywords maps lowercase substrings found in channel post text to model IDs.
@@ -109,17 +132,21 @@ func (b *Bot) TryHandleForwardedChannelPost(msg *tgmodels.Message) bool {
 // sourceID is the deduplication key.
 // Returns true on success.
 func (b *Bot) processChannelMessage(msg *tgmodels.Message, sourceID string) bool {
-	// Pick text: caption for media posts, text for text-only posts
+	// Pick text + entities: caption for media posts, text for text-only posts
 	text := msg.Caption
+	entities := msg.CaptionEntities
 	if text == "" {
 		text = msg.Text
+		entities = msg.Entities
 	}
 	if text == "" {
 		log.Printf("[channel_sync] %s: no text/caption", sourceID)
 		return false
 	}
 
-	prompt := extractCodeBlock(text)
+	log.Printf("[channel_sync] %s: text_len=%d entities=%d photo=%d", sourceID, len(text), len(entities), len(msg.Photo))
+
+	prompt := extractCodeBlockFromMessage(text, entities)
 	if prompt == "" {
 		log.Printf("[channel_sync] %s: no code block found", sourceID)
 		return false
