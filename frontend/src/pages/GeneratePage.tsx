@@ -1160,19 +1160,22 @@ export function GeneratePage() {
                 }}
               />
               {motionVideoPreview ? (
-                <div className="relative w-full rounded-xl border border-white/10 bg-black overflow-hidden">
+                <div className="w-full rounded-xl border border-white/10 bg-black overflow-hidden">
                   <video
                     src={motionVideoPreview}
                     controls
                     playsInline
                     className="w-full max-h-56 object-contain"
                   />
-                  <button
-                    onClick={(e) => { e.stopPropagation(); e.preventDefault(); setMotionVideoFile(null); setMotionVideoPreview(null); setMotionVideoUrl(null); setMotionDuration(0) }}
-                    className="absolute top-2 right-2 p-1 bg-black/60 hover:bg-black/80 rounded-lg transition-all"
-                  >
-                    <X className="w-3.5 h-3.5 text-white/80" />
-                  </button>
+                  <div className="flex items-center justify-between px-3 py-2 bg-white/[0.03]">
+                    <span className="text-xs text-white/40 truncate">{motionVideoFile?.name ?? 'Опорное видео'}</span>
+                    <button
+                      onClick={(e) => { e.stopPropagation(); e.preventDefault(); setMotionVideoFile(null); setMotionVideoPreview(null); setMotionVideoUrl(null); setMotionDuration(0) }}
+                      className="ml-2 shrink-0 p-1 bg-white/10 hover:bg-white/20 rounded-lg transition-all"
+                    >
+                      <X className="w-3.5 h-3.5 text-white/60" />
+                    </button>
+                  </div>
                 </div>
               ) : (
                 <label
