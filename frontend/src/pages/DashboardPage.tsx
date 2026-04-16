@@ -112,7 +112,7 @@ export function DashboardPage() {
 
   useEffect(() => {
     publicApi.getTrends(20, 0)
-      .then(res => setTrends(res.data || []))
+      .then(res => setTrends((res.data || []).filter((t: TrendItem) => !isVideoUrl(t.output))))
       .catch(console.error)
       .finally(() => setLoadingTrends(false))
   }, [])
