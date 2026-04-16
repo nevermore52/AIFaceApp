@@ -534,7 +534,7 @@ export function ProfilePage() {
               <div className="flex gap-2">
                 <input
                   type="text"
-                  placeholder="PROMO2025"
+                  placeholder=""
                   value={promoCode}
                   onChange={(e) => setPromoCode(e.target.value.toUpperCase())}
                   onKeyDown={(e) => e.key === 'Enter' && handleActivatePromo()}

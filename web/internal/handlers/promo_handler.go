@@ -42,15 +42,15 @@ func (h *PromoHandler) AdminList(c *gin.Context) {
 
 func (h *PromoHandler) AdminCreate(c *gin.Context) {
 	var req struct {
-		Code           string     `json:"code" binding:"required"`
-		Description    string     `json:"description"`
-		ImageTokens    int        `json:"image_tokens"`
-		VideoTokens    int        `json:"video_tokens"`
-		TextTokens     int        `json:"text_tokens"`
-		MusicTokens    int        `json:"music_tokens"`
-		MaxActivations *int       `json:"max_activations"`
-		ExpiresAt      *time.Time `json:"expires_at"`
-		IsActive       *bool      `json:"is_active"`
+		Code           string  `json:"code" binding:"required"`
+		Description    string  `json:"description"`
+		ImageTokens    int     `json:"image_tokens"`
+		VideoTokens    int     `json:"video_tokens"`
+		TextTokens     int     `json:"text_tokens"`
+		MusicTokens    int     `json:"music_tokens"`
+		MaxActivations *int    `json:"max_activations"`
+		ExpiresAt      *string `json:"expires_at"`
+		IsActive       *bool   `json:"is_active"`
 	}
 	if err := c.ShouldBindJSON(&req); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
@@ -60,6 +60,15 @@ func (h *PromoHandler) AdminCreate(c *gin.Context) {
 	if req.IsActive != nil {
 		isActive = *req.IsActive
 	}
+	var expiresAt *time.Time
+	if req.ExpiresAt != nil && *req.ExpiresAt != "" {
+		t, err := time.Parse("2006-01-02", *req.ExpiresAt)
+		if err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid expires_at format, use YYYY-MM-DD"})
+			return
+		}
+		expiresAt = &t
+	}
 	p := &repository.PromoCode{
 		Code:           req.Code,
 		Description:    req.Description,
@@ -68,7 +77,7 @@ func (h *PromoHandler) AdminCreate(c *gin.Context) {
 		TextTokens:     req.TextTokens,
 		MusicTokens:    req.MusicTokens,
 		MaxActivations: req.MaxActivations,
-		ExpiresAt:      req.ExpiresAt,
+		ExpiresAt:      expiresAt,
 		IsActive:       isActive,
 	}
 	out, err := h.promoRepo.Create(p)
@@ -86,18 +95,27 @@ func (h *PromoHandler) AdminUpdate(c *gin.Context) {
 		return
 	}
 	var req struct {
-		Description    string     `json:"description"`
-		ImageTokens    int        `json:"image_tokens"`
-		VideoTokens    int        `json:"video_tokens"`
-		TextTokens     int        `json:"text_tokens"`
-		MusicTokens    int        `json:"music_tokens"`
-		MaxActivations *int       `json:"max_activations"`
-		ExpiresAt      *time.Time `json:"expires_at"`
-		IsActive       bool       `json:"is_active"`
+		Description    string  `json:"description"`
+		ImageTokens    int     `json:"image_tokens"`
+		VideoTokens    int     `json:"video_tokens"`
+		TextTokens     int     `json:"text_tokens"`
+		MusicTokens    int     `json:"music_tokens"`
+		MaxActivations *int    `json:"max_activations"`
+		ExpiresAt      *string `json:"expires_at"`
+		IsActive       bool    `json:"is_active"`
 	}
 	if err := c.ShouldBindJSON(&req); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
+	}
+	var expiresAt *time.Time
+	if req.ExpiresAt != nil && *req.ExpiresAt != "" {
+		t, err := time.Parse("2006-01-02", *req.ExpiresAt)
+		if err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid expires_at format, use YYYY-MM-DD"})
+			return
+		}
+		expiresAt = &t
 	}
 	p := &repository.PromoCode{
 		ID:             id,
@@ -107,7 +125,7 @@ func (h *PromoHandler) AdminUpdate(c *gin.Context) {
 		TextTokens:     req.TextTokens,
 		MusicTokens:    req.MusicTokens,
 		MaxActivations: req.MaxActivations,
-		ExpiresAt:      req.ExpiresAt,
+		ExpiresAt:      expiresAt,
 		IsActive:       req.IsActive,
 	}
 	if err := h.promoRepo.Update(p); err != nil {
