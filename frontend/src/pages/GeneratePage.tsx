@@ -302,7 +302,10 @@ export function GeneratePage() {
     // Kling 2.6 Motion Control: дефолт 720p
     else if (selectedModel === 'kling-2.6/motion-control') {
       setSelectedResolution('720p')
-      setMotionDuration(0)
+      // Don't reset duration if pre-filled from a trend (init state already set it)
+      if (!_initState?.motionVideoUrl) {
+        setMotionDuration(0)
+      }
     }
     // Wan 2.6: дефолт 5 сек
     else if (selectedModel === 'wan/2-6-image-to-video') {
@@ -674,14 +677,14 @@ export function GeneratePage() {
       if (withSound) baseCost *= 2 // Со звуком цена x2
     }
 
-    // Kling 2.6 Motion Control: 720p=1 токен/сек, 1080p=ceil(1.5 токена/сек)
+    // Kling 2.6 Motion Control: 720p=10 токенов/сек, 1080p=15 токенов/сек
     // Используем тот же fallback 5 сек что и в params.duration при отправке
     if (selectedModel === 'kling-2.6/motion-control') {
       const dur = motionDuration > 0 ? motionDuration : 5
       if (selectedResolution === '1080p') {
-        baseCost = Math.ceil(dur * 1.5)
+        baseCost = dur * 15
       } else {
-        baseCost = dur
+        baseCost = dur * 10
       }
     }
 

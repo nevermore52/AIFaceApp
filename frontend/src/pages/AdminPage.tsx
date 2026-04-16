@@ -964,16 +964,6 @@ function TrendForm({
             : <img src={mediaPreview} alt="Preview" className="mt-2 w-24 h-24 object-cover rounded-lg" />
         )}
       </div>
-      <div>
-        <label className="text-xs text-white/50 mb-1 block">Опорное видео (для Motion Control)</label>
-        <input
-          type="text"
-          placeholder="URL опорного видео"
-          value={data.inputVideo}
-          onChange={(e) => onChange({ ...data, inputVideo: e.target.value })}
-          className="w-full px-3 py-2 rounded-lg bg-white/5 border border-white/10 text-white text-sm"
-        />
-      </div>
       <textarea
         placeholder="Промпт"
         value={data.prompt}

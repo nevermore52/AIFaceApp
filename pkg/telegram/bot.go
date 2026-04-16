@@ -3827,10 +3827,10 @@ func (b *Bot) processMotionControlGeneration(chatID int64, userID int64, photoUR
 	durationInt := videoDuration
 	duration := fmt.Sprintf("%d", durationInt)
 
-	// Cost: 720p=1 token/sec, 1080p=ceil(1.5 tokens/sec)
-	requestCost := durationInt
+	// Cost: 720p=10 tokens/sec, 1080p=15 tokens/sec
+	requestCost := durationInt * 10
 	if mode == "1080p" {
-		requestCost = (durationInt*3 + 1) / 2 // ceil(durationInt * 1.5)
+		requestCost = durationInt * 15
 	}
 
 	userRec, err := b.userService.GetUserByTelegramID(userID)
