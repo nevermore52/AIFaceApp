@@ -328,7 +328,7 @@ type Trend struct {
 	ID         int64     `json:"id"`
 	Title      string    `json:"title"`
 	Output     string    `json:"output"`
-	InputVideo string    `json:"input_video"`
+	InputVideo *string   `json:"input_video"`
 	Prompt     string    `json:"prompt"`
 	Model      string    `json:"model"`
 	IsPopular  bool      `json:"is_popular"`
