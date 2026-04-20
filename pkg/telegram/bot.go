@@ -1329,6 +1329,9 @@ func (b *Bot) Start() error {
 	// Запускаем планировщик напоминаний о пробной генерации
 	go b.startTrialReminderScheduler()
 
+	// Запускаем планировщик очистки истёкших подписок
+	go b.startExpiredSubscriptionsCleanup()
+
 	// Start polling via the new library
 	b.api.Start(b.ctx)
 
@@ -4500,6 +4503,34 @@ func (b *Bot) startTrialReminderScheduler() {
 			return
 		}
 		b.sendTrialReminders()
+	}
+}
+
+// startExpiredSubscriptionsCleanup периодически сбрасывает истёкшие подписки
+// и обнуляет недельные квоты у пользователей, которые давно не заходили в бот.
+func (b *Bot) startExpiredSubscriptionsCleanup() {
+	// Первый прогон сразу после старта
+	if n, err := b.userService.CleanupExpiredSubscriptions(); err != nil {
+		log.Printf("CleanupExpiredSubscriptions initial error: %v", err)
+	} else if n > 0 {
+		log.Printf("CleanupExpiredSubscriptions initial: reset %d expired subscriptions", n)
+	}
+
+	ticker := time.NewTicker(10 * time.Minute)
+	defer ticker.Stop()
+
+	for range ticker.C {
+		if b.shuttingDown.Load() {
+			return
+		}
+		n, err := b.userService.CleanupExpiredSubscriptions()
+		if err != nil {
+			log.Printf("CleanupExpiredSubscriptions error: %v", err)
+			continue
+		}
+		if n > 0 {
+			log.Printf("CleanupExpiredSubscriptions: reset %d expired subscriptions", n)
+		}
 	}
 }
 

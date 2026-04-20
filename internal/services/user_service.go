@@ -1018,6 +1018,50 @@ func (s *UserService) ResetSubscription(telegramID int64) error {
 	return tx.Commit()
 }
 
+// CleanupExpiredSubscriptions массово сбрасывает подписки, у которых истёк срок,
+// и обнуляет недельные квоты. Возвращает количество обработанных пользователей.
+func (s *UserService) CleanupExpiredSubscriptions() (int, error) {
+	tx, err := s.db.Begin()
+	if err != nil {
+		return 0, err
+	}
+	defer tx.Rollback()
+
+	rows, err := tx.Query(`
+		SELECT telegram_id FROM users
+		WHERE subscription_type <> ''
+		  AND subscription_end IS NOT NULL
+		  AND subscription_end < NOW()
+	`)
+	if err != nil {
+		return 0, err
+	}
+	var ids []int64
+	for rows.Next() {
+		var id int64
+		if err := rows.Scan(&id); err != nil {
+			rows.Close()
+			return 0, err
+		}
+		ids = append(ids, id)
+	}
+	rows.Close()
+
+	if len(ids) == 0 {
+		return 0, tx.Commit()
+	}
+
+	for _, id := range ids {
+		if err := s.resetSubscriptionTx(tx, id); err != nil {
+			return 0, err
+		}
+	}
+	if err := tx.Commit(); err != nil {
+		return 0, err
+	}
+	return len(ids), nil
+}
+
 func (s *UserService) setSubscriptionQuotas(telegramID int64, subType string) error {
 	subType = strings.ToLower(strings.TrimSpace(subType))
 	image, music, video := 0, 0, 0
