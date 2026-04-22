@@ -685,6 +685,9 @@ func kieModelName(model string) string {
 
 func isTextModel(model string) bool {
 	model = strings.ToLower(strings.TrimSpace(model))
+	if model == "gpt-image-2" {
+		return false
+	}
 	return strings.Contains(model, "gpt") ||
 		strings.Contains(model, "gemini") ||
 		model == "google/gemini-3-flash" ||

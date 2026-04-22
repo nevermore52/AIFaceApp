@@ -762,12 +762,6 @@ export function GeneratePage() {
                   )}
                   style={{ animation: `fadeSlideIn ${220 + idx * 60}ms cubic-bezier(0.16,1,0.3,1) both` }}
                 >
-                  <div className={cn(
-                    "w-8 h-8 rounded-xl flex items-center justify-center shrink-0 transition-colors",
-                    isSelected ? "bg-yellow-500/20" : "bg-white/5"
-                  )}>
-                    <Sparkles className={cn("w-4 h-4", isSelected ? "text-yellow-400" : "text-white/30")} />
-                  </div>
                   <div className="flex-1 text-left min-w-0">
                     <p className={cn("text-sm font-medium", isSelected ? "text-white" : "text-white/70")}>{model.name}</p>
                     <p className="text-[11px] text-white/30 truncate">{model.description}</p>
@@ -876,7 +870,6 @@ export function GeneratePage() {
             <div className="w-6 h-6 lg:w-7 lg:h-7 rounded-lg bg-white/10 flex items-center justify-center mr-2.5">
               <span className="text-[10px] lg:text-xs font-bold text-white/40">G</span>
             </div>
-            <Sparkles className="w-3.5 h-3.5 lg:w-4 lg:h-4 text-orange-400 mr-2 shrink-0" />
             <span className="text-[13px] lg:text-base text-white/80 truncate flex-1 text-left">{selectedModelInfo?.name || 'Выберите модель'}</span>
             <ChevronRight className="w-4 h-4 lg:w-5 lg:h-5 text-white/20 ml-2 shrink-0 group-hover:text-white/40 transition-colors" />
           </button>
