@@ -169,6 +169,7 @@ func min(a, b int) int {
 func (s *WebGenerationService) GetAvailableModels() []ModelInfo {
 	return []ModelInfo{
 		{ID: "nano-banana-2", Name: "Nano Banana 2", Type: "image", Description: "Генерация и редактирование изображений", TokenCost: 2, Placeholder: "Опишите, что вы хотите получить в изображении"},
+		{ID: "gpt-image-2", Name: "GPT Image 2", Type: "image", Description: "Генерация и редактирование изображений", TokenCost: 3, Placeholder: "Опишите, что вы хотите получить в изображении"},
 		{ID: "google/nano-banana", Name: "Nano Banana", Type: "image", Description: "Генерация изображений", TokenCost: 1, Placeholder: "Опишите, что вы хотите получить в изображении"},
 		{ID: "google/nano-banana-pro", Name: "Nano Banana Pro", Type: "image", Description: "Продвинутая генерация изображений", TokenCost: 4, Placeholder: "Опишите, что вы хотите получить в изображении"},
 		{ID: "seedream/4.5-edit", Name: "Seedream 4.5", Type: "image", Description: "Редактирование изображений", TokenCost: 3, Placeholder: "Опишите, что вы хотите получить в изображении"},
@@ -252,6 +253,7 @@ func (s *WebGenerationService) getTokenCost(model string, req CreateGenerationRe
 		"google/nano-banana":       1,
 		"google/nano-banana-pro":   4,
 		"nano-banana-2":            2,
+		"gpt-image-2":              3,
 		"seedream/4.5-edit":        3,
 		"veo3_fast":                10,
 		"wan/2-6-image-to-video":   20,
@@ -311,7 +313,7 @@ func (s *WebGenerationService) getTokenCost(model string, req CreateGenerationRe
 	}
 
 	if model == "kling-2.6/motion-control" {
-		// 720p: 1 токен/сек, 1080p: ceil(1.5 токена/сек)
+		// 720p: ceil(1.5 токена/сек), 1080p: ceil(1.75 токена/сек)
 		dur, err := strconv.Atoi(req.Duration)
 		if err != nil || dur < 3 {
 			dur = 3
@@ -321,9 +323,9 @@ func (s *WebGenerationService) getTokenCost(model string, req CreateGenerationRe
 		}
 		mode := req.Resolution
 		if mode == "1080p" {
-			return (dur*3 + 1) / 2 // ceil(dur * 1.5)
+			return (dur*7 + 3) / 4 // ceil(dur * 1.75)
 		}
-		return dur // 720p: 1 токен/сек
+		return (dur*3 + 1) / 2 // ceil(dur * 1.5)
 	}
 
 	return baseCost
@@ -490,8 +492,24 @@ func (s *WebGenerationService) processGeneration(genReq *GenerationRequest, req 
 		input["aspect_ratio"] = req.AspectRatio
 	}
 
-	// Nano Banana 2: разрешение и Google поиск
-	if model == "nano-banana-2" {
+	// GPT Image 2: формат (aspect_ratio) + опциональное фото
+	if model == "gpt-image-2" {
+		aspect := req.AspectRatio
+		switch aspect {
+		case "1:1", "16:9", "9:16":
+		default:
+			aspect = "1:1"
+		}
+		input["aspect_ratio"] = aspect
+		input["nsfw_checker"] = false
+		if len(req.ImageURLs) > 0 {
+			urls := req.ImageURLs
+			if len(urls) > 1 {
+				urls = urls[:1]
+			}
+			input["image_input"] = s.reuploadImagesToKie(urls)
+		}
+	} else if model == "nano-banana-2" {
 		if len(req.ImageURLs) > 0 {
 			input["image_input"] = s.reuploadImagesToKie(req.ImageURLs)
 		} else {
@@ -610,8 +628,17 @@ func (s *WebGenerationService) processGeneration(genReq *GenerationRequest, req 
 		input["quality"] = "basic"
 	}
 
+	apiModel := kieModelName(req.Model)
+	if model == "gpt-image-2" {
+		if len(req.ImageURLs) > 0 {
+			apiModel = "gpt-image-2-image-to-image"
+		} else {
+			apiModel = "gpt-image-2-text-to-image"
+		}
+	}
+
 	taskReq := kieapi.CreateTaskRequest{
-		Model:       kieModelName(req.Model),
+		Model:       apiModel,
 		CallBackURL: s.callbackURL,
 		Input:       input,
 	}
@@ -642,6 +669,8 @@ func (s *WebGenerationService) processGeneration(genReq *GenerationRequest, req 
 }
 
 // kieModelName maps internal model IDs to the names KieAPI expects.
+// NOTE: gpt-image-2 is resolved per-request inside the caller (based on whether
+// a photo is attached) and must not be mapped here.
 func kieModelName(model string) string {
 	switch strings.ToLower(strings.TrimSpace(model)) {
 	case "google/nano-banana":

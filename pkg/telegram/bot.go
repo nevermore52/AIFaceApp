@@ -1223,6 +1223,7 @@ var modelOptions = []ModelOption{
 	{ID: "google/nano-banana", Label: "Nano Banana", Desc: locRU.ModelNanoBanana, Category: ModelCategoryPhoto, RequestCost: 1, EmojiID: "5188481279963715781"},
 	{ID: "google/nano-banana-pro", Label: "Nano Banana Pro", Desc: locRU.ModelNanoBananaPro, Category: ModelCategoryPhoto, RequestCost: 4, EmojiID: "5463289097336405244"},
 	{ID: "nano-banana-2", Label: "Nano Banana 2", Desc: locRU.ModelNanoBanana2, Category: ModelCategoryPhoto, RequestCost: 2, EmojiID: "5258203794772085854"},
+	{ID: "gpt-image-2", Label: "🖼️ GPT Image 2", Desc: locRU.ModelGPTImage2, Category: ModelCategoryPhoto, RequestCost: 3},
 	{ID: "seedream/4.5-edit", Label: "👙 Seedream 4.5", Desc: locRU.ModelSeedream, Category: ModelCategoryPhoto, RequestCost: 3},
 	{ID: "veo3_fast", ApiModel: "veo3_fast", Label: "🎬 Veo 3.1 Fast", Desc: locRU.ModelVeo3Fast, Category: ModelCategoryVideo, RequestCost: 10},
 	{ID: "wan/2-6-image-to-video", ApiModel: "wan/2-6-image-to-video", Label: "🎥 Wan 2.6", Desc: locRU.ModelWan26, Category: ModelCategoryVideo, RequestCost: 20},
@@ -1959,6 +1960,8 @@ func (b *Bot) flushAlbum(mediaGroupID string) {
 	maxPhotos := 1
 	if modelOpt.ID == "google/nano-banana-pro" || modelOpt.ID == "nano-banana-2" || modelOpt.ID == "seedream/4.5-edit" {
 		maxPhotos = 4
+	} else if modelOpt.ID == "gpt-image-2" {
+		maxPhotos = 1
 	} else if modelOpt.ID == "wan/2-6-image-to-video" {
 		maxPhotos = 4 // wan 2.6 supports up to 4 photos
 	}
@@ -3442,6 +3445,8 @@ func (b *Bot) modelDescriptionLoc(id string, loc *Localization) string {
 		return loc.ModelNanoBananaPro
 	case "nano-banana-2":
 		return loc.ModelNanoBanana2
+	case "gpt-image-2":
+		return loc.ModelGPTImage2
 	case "seedream/4.5-edit":
 		return loc.ModelSeedream
 	case "veo3_fast":
@@ -3468,7 +3473,7 @@ func (b *Bot) modelDescriptionLoc(id string, loc *Localization) string {
 func (b *Bot) modelInstructionLoc(id string, loc *Localization) string {
 	if opt, ok := findModelOption(id); ok {
 		switch opt.ID {
-		case "google/nano-banana", "google/nano-banana-pro", "nano-banana-2", "seedream/4.5-edit":
+		case "google/nano-banana", "google/nano-banana-pro", "nano-banana-2", "gpt-image-2", "seedream/4.5-edit":
 			return loc.InstrNanoBanana
 		case "veo3_fast":
 			return loc.InstrVeo3Video
@@ -3830,10 +3835,10 @@ func (b *Bot) processMotionControlGeneration(chatID int64, userID int64, photoUR
 	durationInt := videoDuration
 	duration := fmt.Sprintf("%d", durationInt)
 
-	// Cost: 720p=1 token/sec, 1080p=ceil(1.5 tokens/sec)
-	requestCost := durationInt
+	// Cost: 720p=ceil(1.5 tokens/sec), 1080p=ceil(1.75 tokens/sec)
+	requestCost := (durationInt*3 + 1) / 2 // ceil(durationInt * 1.5)
 	if mode == "1080p" {
-		requestCost = (durationInt*3 + 1) / 2 // ceil(durationInt * 1.5)
+		requestCost = (durationInt*7 + 3) / 4 // ceil(durationInt * 1.75)
 	}
 
 	userRec, err := b.userService.GetUserByTelegramID(userID)
@@ -4596,9 +4601,9 @@ func (b *Bot) processGeneration(chatID int64, userID int64, photoURLs []string, 
 	}
 
 	if len(photoURLs) == 0 {
-		// nano-banana-2 supports text-only generation
+		// nano-banana-2 and gpt-image-2 support text-only generation
 		modelIDCheck := b.getUserModel(userID)
-		if modelIDCheck != "nano-banana-2" {
+		if modelIDCheck != "nano-banana-2" && modelIDCheck != "gpt-image-2" {
 			b.sendErrorMessage(chatID, "Не получено ни одного изображения")
 			return
 		}
@@ -4699,7 +4704,7 @@ func (b *Bot) processGeneration(chatID int64, userID int64, photoURLs []string, 
 		ModelType:         string(modelOpt.Category),
 		Username:          userRec.Username,
 	}
-	if modelOpt.ID == "google/nano-banana" || modelOpt.ID == "google/nano-banana-pro" || modelOpt.ID == "nano-banana-2" || modelOpt.ID == "seedream/4.5-edit" {
+	if modelOpt.ID == "google/nano-banana" || modelOpt.ID == "google/nano-banana-pro" || modelOpt.ID == "nano-banana-2" || modelOpt.ID == "gpt-image-2" || modelOpt.ID == "seedream/4.5-edit" {
 		opts.AspectRatio = b.getAspectRatioForModel(userID, modelOpt.ID)
 	}
 	if modelOpt.ID == "google/nano-banana" || modelOpt.ID == "google/nano-banana-pro" || modelOpt.ID == "nano-banana-2" || modelOpt.ID == "seedream/4.5-edit" {
@@ -4812,8 +4817,8 @@ func (b *Bot) handleTextMessage(msg *tgmodels.Message) {
 		return
 	}
 
-	// nano-banana-2: поддержка генерации только по тексту (без фото)
-	if ok && modelOpt.ID == "nano-banana-2" {
+	// nano-banana-2 и gpt-image-2: поддержка генерации только по тексту (без фото)
+	if ok && (modelOpt.ID == "nano-banana-2" || modelOpt.ID == "gpt-image-2") {
 		b.processGeneration(msg.Chat.ID, msg.From.ID, []string{}, "text_only", userText)
 		return
 	}
@@ -5615,6 +5620,8 @@ func (b *Bot) sendModelMenu(chatID int64, userID int64, category ModelCategory, 
 		text += "\nМаксимум фото: 1\n"
 	} else if current == "google/nano-banana-pro" || current == "seedream/4.5-edit" || current == "nano-banana-2" {
 		text += "\nМаксимум фото: 4\n"
+	} else if current == "gpt-image-2" {
+		text += "\nМаксимум фото: 1 (необязательно)\n"
 	}
 	if instr := b.modelInstructionLoc(current, loc); instr != "" {
 		text += "\n" + instr
@@ -5641,7 +5648,7 @@ func (b *Bot) sendModelMenu(chatID int64, userID int64, category ModelCategory, 
 			}
 		}
 	}
-	if (category == ModelCategoryPhoto && (current == "google/nano-banana" || current == "google/nano-banana-pro" || current == "nano-banana-2" || current == "kie/nano-banana-edit" || current == "kie/nano-banana-pro" || current == "seedream/4.5-edit")) || (category == ModelCategoryVideo && current == "veo3_fast") {
+	if (category == ModelCategoryPhoto && (current == "google/nano-banana" || current == "google/nano-banana-pro" || current == "nano-banana-2" || current == "gpt-image-2" || current == "kie/nano-banana-edit" || current == "kie/nano-banana-pro" || current == "seedream/4.5-edit")) || (category == ModelCategoryVideo && current == "veo3_fast") {
 		ratio := b.getAspectRatioForModel(userID, current)
 		label := loc.AspectTitle + ": " + ratio
 		rows = append(rows, newInlineKeyboardRow(
@@ -6691,11 +6698,11 @@ func (b *Bot) sendGenerationStatus(chatID int64, req *models.GenerationRequest) 
 		output := strings.TrimSpace(*req.Output)
 		caption := truncate(baseText, 900) // подпись к фото
 
-		// Кнопка "Оживить фото" для nano-banana, nano-banana-pro и nano-banana-2
+		// Кнопка "Оживить фото" для nano-banana, nano-banana-pro, nano-banana-2 и gpt-image-2
 		var animateMarkup *tgmodels.InlineKeyboardMarkup
 		if req.Model == "google/nano-banana" || req.Model == "google/nano-banana-pro" ||
 			req.Model == "nano-banana" || req.Model == "kie/nano-banana-edit" || req.Model == "kie/nano-banana-pro" ||
-			req.Model == "nano-banana-2" {
+			req.Model == "nano-banana-2" || req.Model == "gpt-image-2" {
 			kb := newInlineKeyboardMarkup(
 				newInlineKeyboardRow(
 					newInlineKeyboardButtonData("🎬 Оживить фото", "animate_photo"),

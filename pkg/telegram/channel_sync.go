@@ -58,6 +58,8 @@ var modelKeywords = []struct {
 	{"nano banana pro", "google/nano-banana-pro"},
 	{"nano banana 2", "nano-banana-2"},
 	{"nano banana", "google/nano-banana"},
+	{"gpt image 2", "gpt-image-2"},
+	{"gpt-image-2", "gpt-image-2"},
 	{"kling motion", "kling-2.6/motion-control"},
 	{"motion control", "kling-2.6/motion-control"},
 	{"veo3", "veo3_fast"},

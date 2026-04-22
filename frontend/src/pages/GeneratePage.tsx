@@ -144,6 +144,7 @@ const MAX_IMAGES_PER_MODEL: Record<string, number> = {
   'google/nano-banana': 1,
   'google/nano-banana-pro': 4,
   'nano-banana-2': 4,
+  'gpt-image-2': 1,
   'seedream/4.5-edit': 4,
   'veo3_fast': 2,
   'kling-2.6/motion-control': 1,
@@ -294,6 +295,10 @@ export function GeneratePage() {
     // Nano Banana 2: дефолт 1K
     else if (selectedModel === 'nano-banana-2') {
       setSelectedResolution('1K')
+    }
+    // GPT Image 2: дефолт 1:1
+    else if (selectedModel === 'gpt-image-2') {
+      setSelectedAspectRatio('1:1')
     }
     // Kling 2.6: дефолт 5 сек
     else if (selectedModel === 'kling-2.6/image-to-video') {
@@ -482,7 +487,8 @@ export function GeneratePage() {
       return
     }
 
-    if ((selectedCategory === 'image' || selectedCategory === 'video') && imageFiles.length === 0 && libraryUrls.length === 0) {
+    const photoOptional = selectedModel === 'gpt-image-2' || selectedModel === 'nano-banana-2'
+    if (!photoOptional && (selectedCategory === 'image' || selectedCategory === 'video') && imageFiles.length === 0 && libraryUrls.length === 0) {
       setError('Для генерации необходимо загрузить входное фото')
       return
     }
@@ -677,14 +683,14 @@ export function GeneratePage() {
       if (withSound) baseCost *= 2 // Со звуком цена x2
     }
 
-    // Kling 2.6 Motion Control: 720p=1 токен/сек, 1080p=ceil(1.5 токена/сек)
+    // Kling 2.6 Motion Control: 720p=ceil(1.5 токена/сек), 1080p=ceil(1.75 токена/сек)
     // Используем тот же fallback 5 сек что и в params.duration при отправке
     if (selectedModel === 'kling-2.6/motion-control') {
       const dur = motionDuration > 0 ? motionDuration : 5
       if (selectedResolution === '1080p') {
-        baseCost = Math.ceil(dur * 1.5)
+        baseCost = Math.ceil(dur * 1.75)
       } else {
-        baseCost = dur
+        baseCost = Math.ceil(dur * 1.5)
       }
     }
 
@@ -1316,7 +1322,7 @@ export function GeneratePage() {
               <Button
                 className="w-full h-16 rounded-2xl text-lg font-black bg-gradient-to-r from-[#FFD700] via-[#FFB700] to-[#FF8C00] text-black hover:opacity-90 transition-all shadow-[0_8px_30px_rgba(255,183,0,0.3)] active:scale-[0.95] flex items-center justify-center gap-3"
                 onClick={handleGenerate}
-                disabled={generating || uploadingImage || totalCost === 0 || ((selectedCategory === 'image' || selectedCategory === 'video') && imageFiles.length === 0 && libraryUrls.length === 0) || (selectedModel === 'kling-2.6/motion-control' && !motionVideoFile && !motionVideoUrl)}
+                disabled={generating || uploadingImage || totalCost === 0 || ((selectedCategory === 'image' || selectedCategory === 'video') && imageFiles.length === 0 && libraryUrls.length === 0 && selectedModel !== 'gpt-image-2' && selectedModel !== 'nano-banana-2') || (selectedModel === 'kling-2.6/motion-control' && !motionVideoFile && !motionVideoUrl)}
               >
                 {uploadingImage ? (
                   <>

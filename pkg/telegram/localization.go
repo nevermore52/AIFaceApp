@@ -160,6 +160,7 @@ type Localization struct {
 	ModelNanoBanana    string
 	ModelNanoBananaPro string
 	ModelNanoBanana2   string
+	ModelGPTImage2     string
 	ModelSeedream      string
 	ModelVeo3Fast      string
 	ModelWan26         string
@@ -513,11 +514,12 @@ var locRU = Localization{
 	ModelNanoBanana:    "Устаревшая нейросеть. \n<tg-emoji emoji-id=\"5382194935057372936\">⏱</tg-emoji> Среднее время: 20 сек. \n<tg-emoji emoji-id=\"5274099962655816924\">❗️</tg-emoji> Данная нейросеть устарела, лучше использовать Nano Banana 2",
 	ModelNanoBananaPro: "Отличное качество. \n<tg-emoji emoji-id=\"5382194935057372936\">⏱</tg-emoji> Среднее время: 1-2 мин.",
 	ModelNanoBanana2:   "Новейшая модель. Поддержка текста без фото. \n<tg-emoji emoji-id=\"5382194935057372936\">⏱</tg-emoji> Среднее время: 30сек-2 мин.",
+	ModelGPTImage2:     "Генерация и редактирование изображений. Фото необязательно. \n<tg-emoji emoji-id=\"5382194935057372936\">⏱</tg-emoji> Среднее время: 30сек-2 мин.",
 	ModelSeedream:      "Хорошо работает с купальниками и другими фото. \n<tg-emoji emoji-id=\"5382194935057372936\">⏱</tg-emoji> Среднее время: 1-2 мин.",
 	ModelVeo3Fast:      "Видео из фото. \n<tg-emoji emoji-id=\"5382194935057372936\">⏱</tg-emoji> Среднее время: 2-5 мин.",
 	ModelWan26:         "Видео из фото. Выбор длительности (5/10/15 сек) и разрешения. \n<tg-emoji emoji-id=\"5382194935057372936\">⏱</tg-emoji> Среднее время: 2-5 мин.",
 	ModelKling26:       "Видео из фото. Выбор длительности (5/10 сек) и звука. \n<tg-emoji emoji-id=\"5382194935057372936\">⏱</tg-emoji> Среднее время: 2-5 мин.",
-	ModelKlingMotion:   "Перенос движения на персонажа. Отправьте фото персонажа + опорное видео движения.\n💰 Цена: 720p — 1 токен/сек, 1080p — 1.5 токена/сек\n📺 Качество выбирается в настройках модели\n<tg-emoji emoji-id=\"5382194935057372936\">⏱</tg-emoji> Среднее время: 2-5 мин.",
+	ModelKlingMotion:   "Перенос движения на персонажа. Отправьте фото персонажа + опорное видео движения.\n💰 Цена: 720p — 1.5 токена/сек, 1080p — 1.75 токена/сек\n📺 Качество выбирается в настройках модели\n<tg-emoji emoji-id=\"5382194935057372936\">⏱</tg-emoji> Среднее время: 2-5 мин.",
 	ModelSunoMusic:     "Генерация музыки. Выбор голоса и режима. \n<tg-emoji emoji-id=\"5382194935057372936\">⏱</tg-emoji> Среднее время: 2-5 мин.",
 	ModelGeminiFlash:   "Быстрые текстовые ответы. Доступно с подпиской Start+.",
 	ModelGPT5Mini:      "Быстрые текстовые ответы. Доступно всем пользователям.",
@@ -830,11 +832,12 @@ var locEN = Localization{
 	ModelNanoBanana:             "Medium quality. Works poorly with two photos. Average wait time ~1 minute.",
 	ModelNanoBananaPro:          "Newest model, best quality. Average wait time 1–2 minutes.",
 	ModelNanoBanana2:            "Latest model. Text-only support, albums up to 4 photos, 1K/2K/4K resolution, Google Search. Cost: 1K=2, 2K=3, 4K=4 gen. Average wait time 1–2 min.",
+	ModelGPTImage2:              "Image generation and editing. Photo is optional. Cost: 3 gen. Average wait time 30 sec – 2 min.",
 	ModelSeedream:               "High quality photo editing. Average wait time 1–2 minutes.",
 	ModelVeo3Fast:               "Video from photo. Send 1 photo with a caption. Average wait time 2–5 minutes.",
 	ModelWan26:                  "Video from photo with duration (5/10/15 sec) and resolution (720p/1080p) selection. Supports up to 4 photos. Cost: 20 per 5 seconds. Average wait time 3–7 minutes.",
 	ModelKling26:                "Video from photo with duration (5/10 sec) and sound selection. Cost: 5s=10 gen, 10s=20 gen, with sound x2. Average wait time 2–5 minutes.",
-	ModelKlingMotion:            "Motion transfer to a character. Send a character photo + reference motion video. Cost: 720p=1 token/sec, 1080p=1.5 tokens/sec. Average wait time 2–5 minutes.",
+	ModelKlingMotion:            "Motion transfer to a character. Send a character photo + reference motion video. Cost: 720p=1.5 tokens/sec, 1080p=1.75 tokens/sec. Average wait time 2–5 minutes.",
 	ModelSunoMusic:              "Music generation. Wait time 5–10 minutes.",
 	ModelGeminiFlash:            "Text: fast replies. Available with Start+ subscription.",
 	ModelGPT5Mini:               "Text: fast replies. Available to all users.",

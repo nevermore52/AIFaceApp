@@ -186,8 +186,9 @@ func (s *GenerationService) processGeneration(req *models.GenerationRequest, opt
 	if len(images) == 0 && opts.InputImage != "" {
 		images = []string{opts.InputImage}
 	}
-	// nano-banana-2 supports text-only generation (empty images allowed)
-	if len(images) == 0 && !strings.EqualFold(strings.TrimSpace(opts.Model), "nano-banana-2") {
+	// nano-banana-2 and gpt-image-2 support text-only generation (empty images allowed)
+	modelLower := strings.ToLower(strings.TrimSpace(opts.Model))
+	if len(images) == 0 && modelLower != "nano-banana-2" && modelLower != "gpt-image-2" {
 		debugLog("processGeneration ERROR: no input images provided")
 		_ = s.updateRequestStatus(req.ID, "failed", "no input images provided")
 		if s.notify != nil {
@@ -250,6 +251,26 @@ func (s *GenerationService) processGeneration(req *models.GenerationRequest, opt
 		}
 		debugLog("processGeneration NanoBanana2 task created: requestID=%d taskID=%s", req.ID, taskID)
 		// Start timeout checker: 3 minutes for photo models
+		s.startKieAPITimeoutChecker(req.ID, taskID, 3*time.Minute, opts.ChatID)
+		return
+	}
+
+	// gpt-image-2 — KieAPI task; photo optional (text-to-image or image-to-image variant)
+	if strings.EqualFold(strings.TrimSpace(opts.Model), "gpt-image-2") {
+		taskID, err := s.createGPTImage2Task(req.ID, opts, images)
+		if err != nil {
+			debugLog("processGeneration GPTImage2 FAILED: requestID=%d, error=%v", req.ID, err)
+			_ = s.updateRequestStatus(req.ID, "failed", err.Error())
+			req.Status = "failed"
+			errMsg := err.Error()
+			req.ErrorMsg = &errMsg
+			if s.notify != nil {
+				s.notify(opts.ChatID, req)
+			}
+			s.markDone(req.ID)
+			return
+		}
+		debugLog("processGeneration GPTImage2 task created: requestID=%d taskID=%s", req.ID, taskID)
 		s.startKieAPITimeoutChecker(req.ID, taskID, 3*time.Minute, opts.ChatID)
 		return
 	}
@@ -615,6 +636,53 @@ func (s *GenerationService) createNanoBanana2Task(requestID int64, opts Generati
 
 	payload := kieapi.CreateTaskRequest{
 		Model:       "nano-banana-2",
+		CallBackURL: callbackURL,
+		Input:       input,
+	}
+
+	taskID, err := s.kieAPI.CreateTask(payload)
+	if err != nil {
+		return "", err
+	}
+	if err := s.updateExternalTaskID(requestID, taskID); err != nil {
+		return "", err
+	}
+	return taskID, nil
+}
+
+func (s *GenerationService) createGPTImage2Task(requestID int64, opts GenerationOptions, images []string) (string, error) {
+	if s.kieAPI == nil {
+		return "", fmt.Errorf("kieapi client is not configured")
+	}
+	callbackURL := strings.TrimSpace(os.Getenv("KIEAPI_CALLBACK_URL"))
+	if callbackURL == "" {
+		callbackURL = strings.TrimSpace(os.Getenv("KIE_CALLBACK_URL"))
+	}
+	if callbackURL == "" {
+		return "", fmt.Errorf("KIEAPI_CALLBACK_URL is not set")
+	}
+
+	input := map[string]any{
+		"prompt":       opts.Prompt,
+		"nsfw_checker": false,
+	}
+
+	aspect := strings.TrimSpace(opts.AspectRatio)
+	switch aspect {
+	case "1:1", "16:9", "9:16":
+		input["aspect_ratio"] = aspect
+	default:
+		input["aspect_ratio"] = "1:1"
+	}
+
+	apiModel := "gpt-image-2-text-to-image"
+	if len(images) > 0 {
+		apiModel = "gpt-image-2-image-to-image"
+		input["image_input"] = images
+	}
+
+	payload := kieapi.CreateTaskRequest{
+		Model:       apiModel,
 		CallBackURL: callbackURL,
 		Input:       input,
 	}
