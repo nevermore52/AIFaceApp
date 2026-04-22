@@ -1142,7 +1142,7 @@ func (s *UserService) SetUserAdmin(telegramID int64, isAdmin bool) error {
 
 func (s *UserService) GetAllUsers(limit, offset int) ([]*models.User, error) {
 	query := `
-		SELECT id, telegram_id, username, first_name, last_name, COALESCE(language_code, ''),
+		SELECT id, COALESCE(telegram_id, 0), username, first_name, last_name, COALESCE(language_code, ''),
 			   is_premium, is_admin, COALESCE(referrer_id, 0), COALESCE(referral_code, ''),
 			   COALESCE(referrals_count, 0), created_at, updated_at, is_blocked
 		FROM users
