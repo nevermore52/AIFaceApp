@@ -3,11 +3,13 @@ package telegram
 import (
 	"fmt"
 	"log"
+	"strings"
 	"sync"
 	"time"
 
 	tgbot "github.com/go-telegram/bot"
 	tgmodels "github.com/go-telegram/bot/models"
+	tgbotapi "github.com/go-telegram-bot-api/telegram-bot-api/v5"
 )
 
 type broadcastAlbumBuffer struct {
@@ -129,6 +131,129 @@ func (b *Bot) BroadcastText(text string) (sent, failed int) {
 		}
 	}
 	return
+}
+
+const broadcastTestTargetID int64 = 812157835
+
+// handleAdminBroadcastTest — тестовая рассылка текста только на broadcastTestTargetID.
+func (b *Bot) handleAdminBroadcastTest(chatID int64, text string) {
+	b.sendText(chatID, fmt.Sprintf("🧪 Тест: отправляю только пользователю %d...", broadcastTestTargetID))
+	if err := b.sendMarkdownLong(broadcastTestTargetID, text); err != nil {
+		b.sendText(chatID, fmt.Sprintf("❌ Ошибка: %v", err))
+	} else {
+		b.sendText(chatID, "✅ Тест завершён: сообщение доставлено")
+	}
+}
+
+// handleAdminBroadcastPhotoTest — тестовая рассылка фото только на broadcastTestTargetID.
+func (b *Bot) handleAdminBroadcastPhotoTest(chatID int64, fileID tgbotapi.FileID, text string) {
+	const captionLimit = 900
+	caption := strings.TrimSpace(text)
+	remaining := ""
+	if len(caption) > captionLimit {
+		caption = strings.TrimSpace(caption[:captionLimit])
+		remaining = strings.TrimSpace(text[len(caption):])
+	}
+
+	b.sendText(chatID, fmt.Sprintf("🧪 Тест: отправляю фото пользователю %d...", broadcastTestTargetID))
+	captionHTML := ""
+	parseMode := ""
+	if caption != "" {
+		captionHTML = convertBroadcastMarkupToHTML(caption)
+		parseMode = "HTML"
+	}
+	if _, err := b.sendPhoto(broadcastTestTargetID, &tgmodels.InputFileString{Data: string(fileID)}, captionHTML, parseMode, nil); err != nil {
+		b.sendText(chatID, fmt.Sprintf("❌ Ошибка отправки фото: %v", err))
+		return
+	}
+	if remaining != "" {
+		_ = b.sendMarkdownLong(broadcastTestTargetID, remaining)
+	}
+	b.sendText(chatID, "✅ Тест завершён: фото доставлено")
+}
+
+// handleAdminBroadcastAlbumTest — тестовая рассылка альбома только на broadcastTestTargetID.
+func (b *Bot) handleAdminBroadcastAlbumTest(msg *tgmodels.Message) {
+	mediaID := msg.MediaGroupID
+	if mediaID == "" {
+		return
+	}
+
+	broadcastAlbumMu.Lock()
+	buf := broadcastAlbumBuffers[mediaID]
+	if buf == nil {
+		buf = &broadcastAlbumBuffer{
+			chatID:  msg.Chat.ID,
+			photos:  []string{},
+			caption: "",
+		}
+		broadcastAlbumBuffers[mediaID] = buf
+	}
+	broadcastAlbumMu.Unlock()
+
+	buf.mu.Lock()
+	defer buf.mu.Unlock()
+
+	if msg.Photo != nil && len(msg.Photo) > 0 {
+		photo := msg.Photo[len(msg.Photo)-1]
+		buf.photos = append(buf.photos, photo.FileID)
+	}
+	if msg.Caption != "" {
+		buf.caption = msg.Caption
+	}
+	if buf.timer != nil {
+		buf.timer.Stop()
+	}
+	buf.timer = time.AfterFunc(1*time.Second, func() {
+		b.processBroadcastAlbumTest(mediaID)
+	})
+}
+
+func (b *Bot) processBroadcastAlbumTest(mediaID string) {
+	broadcastAlbumMu.Lock()
+	buf := broadcastAlbumBuffers[mediaID]
+	delete(broadcastAlbumBuffers, mediaID)
+	broadcastAlbumMu.Unlock()
+
+	if buf == nil {
+		return
+	}
+
+	buf.mu.Lock()
+	photos := buf.photos
+	caption := buf.caption
+	chatID := buf.chatID
+	buf.mu.Unlock()
+
+	if len(photos) == 0 {
+		b.sendErrorMessage(chatID, "Альбом пуст, тест отменён")
+		return
+	}
+	if len(photos) > 10 {
+		photos = photos[:10]
+	}
+
+	b.sendText(chatID, fmt.Sprintf("🧪 Тест: отправляю альбом (%d фото) пользователю %d...", len(photos), broadcastTestTargetID))
+
+	var mediaGroup []tgmodels.InputMedia
+	for i, photoID := range photos {
+		media := &tgmodels.InputMediaPhoto{Media: photoID}
+		if i == 0 && caption != "" {
+			media.Caption = convertBroadcastMarkupToHTML(caption)
+			media.ParseMode = tgmodels.ParseModeHTML
+		}
+		mediaGroup = append(mediaGroup, media)
+	}
+
+	_, err := b.api.SendMediaGroup(b.ctx, &tgbot.SendMediaGroupParams{
+		ChatID: broadcastTestTargetID,
+		Media:  mediaGroup,
+	})
+	if err != nil {
+		b.sendText(chatID, fmt.Sprintf("❌ Ошибка: %v", err))
+	} else {
+		b.sendText(chatID, "✅ Тест завершён: альбом доставлен")
+	}
 }
 
 func (b *Bot) processBroadcastAlbum(mediaID string) {

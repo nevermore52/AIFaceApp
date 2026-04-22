@@ -6180,6 +6180,26 @@ func (b *Bot) handleAdminCommand(msg *tgmodels.Message) {
 			return
 		}
 		b.handleAdminBroadcast(msg.Chat.ID, messageText)
+	case "broadcasttest":
+		messageText := strings.TrimSpace(strings.TrimPrefix(cmdText, command))
+		if messageText == "" && msg.Photo == nil && msg.MediaGroupID == "" {
+			b.sendErrorMessage(msg.Chat.ID, "Использование: /admin broadcasttest <текст> или отправьте с фото/альбомом")
+			return
+		}
+		if msg.MediaGroupID != "" {
+			b.handleAdminBroadcastAlbumTest(msg)
+			return
+		}
+		if msg.Photo != nil {
+			photo := msg.Photo[len(msg.Photo)-1]
+			b.handleAdminBroadcastPhotoTest(msg.Chat.ID, tgbotapi.FileID(photo.FileID), messageText)
+			return
+		}
+		if msg.Document != nil && strings.HasPrefix(strings.ToLower(msg.Document.MimeType), "image/") {
+			b.handleAdminBroadcastPhotoTest(msg.Chat.ID, tgbotapi.FileID(msg.Document.FileID), messageText)
+			return
+		}
+		b.handleAdminBroadcastTest(msg.Chat.ID, messageText)
 	case "sub_set":
 		if len(parts) < 4 {
 			b.sendErrorMessage(msg.Chat.ID, "Использование: /admin sub_set <user_id> <mini|start|pro> <days>")
