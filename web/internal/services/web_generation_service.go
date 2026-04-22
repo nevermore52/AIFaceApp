@@ -507,7 +507,7 @@ func (s *WebGenerationService) processGeneration(genReq *GenerationRequest, req 
 			if len(urls) > 1 {
 				urls = urls[:1]
 			}
-			input["image_input"] = s.reuploadImagesToKie(urls)
+			input["input_urls"] = s.reuploadImagesToKie(urls)
 		}
 	} else if model == "nano-banana-2" {
 		if len(req.ImageURLs) > 0 {

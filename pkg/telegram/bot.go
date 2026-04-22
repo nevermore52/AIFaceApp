@@ -6839,17 +6839,9 @@ func (b *Bot) buildReplyKeyboard(userID int64) tgmodels.ReplyKeyboardMarkup {
 	return kb
 }
 
-// restoreMainKeyboard silently re-attaches the persistent reply keyboard after a terminal result message.
-func (b *Bot) restoreMainKeyboard(chatID int64, userID int64) {
-	loc := b.getLocalization(userID)
-	kb := b.buildReplyKeyboard(userID)
-	msg := newMessageConfig(chatID, loc.MenuBtn)
-	msg.ReplyMarkup = kb
-	msg.DisableNotification = true
-	if _, err := b.sendMsg(msg); err != nil {
-		log.Printf("restoreMainKeyboard: %v", err)
-	}
-}
+// restoreMainKeyboard is intentionally a no-op: the reply keyboard is persistent
+// and does not need to be re-sent after each generation result.
+func (b *Bot) restoreMainKeyboard(chatID int64, userID int64) {}
 
 // sendHTMLText отправляет HTML-сообщение (с поддержкой tg-emoji и других тегов)
 func (b *Bot) sendHTMLText(chatID int64, text string) {

@@ -678,7 +678,7 @@ func (s *GenerationService) createGPTImage2Task(requestID int64, opts Generation
 	apiModel := "gpt-image-2-text-to-image"
 	if len(images) > 0 {
 		apiModel = "gpt-image-2-image-to-image"
-		input["image_input"] = images
+		input["input_urls"] = images
 	}
 
 	payload := kieapi.CreateTaskRequest{
