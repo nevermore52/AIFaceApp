@@ -926,13 +926,13 @@ func (s *GenerationService) HandleKieAPICallback(payload kieapi.CallbackPayload)
 		_ = s.updateRequestStatus(req.ID, "failed", reason)
 
 		// Возврат токенов пользователю при ошибке
-		if req.TokensUsed > 0 && req.UserID != 0 && s.userService != nil {
+		if req.TokensUsed > 0 && telegramID != 0 && s.userService != nil {
 			category := models.QuotaCategoryImage
 			if req.ModelType == "video" {
 				category = models.QuotaCategoryVideo
 			}
-			if err := s.userService.RefundQuota(req.UserID, category, req.TokensPrimaryUsed, req.TokensExtraUsed); err != nil {
-				debugLog("HandleKieAPICallback: refund quota error for user_id=%d: %v", req.UserID, err)
+			if err := s.userService.RefundQuota(telegramID, category, req.TokensPrimaryUsed, req.TokensExtraUsed); err != nil {
+				debugLog("HandleKieAPICallback: refund quota error for telegram_id=%d: %v", telegramID, err)
 			}
 			if err := s.ResetRequestTokensUsed(req.ID); err != nil {
 				debugLog("HandleKieAPICallback: reset tokens error for request_id=%d: %v", req.ID, err)
@@ -959,13 +959,13 @@ func (s *GenerationService) HandleKieAPICallback(payload kieapi.CallbackPayload)
 		_ = s.updateRequestStatus(req.ID, "failed", reason)
 
 		// Возврат токенов пользователю при ошибке
-		if req.TokensUsed > 0 && req.UserID != 0 && s.userService != nil {
+		if req.TokensUsed > 0 && telegramID != 0 && s.userService != nil {
 			category := models.QuotaCategoryImage
 			if req.ModelType == "video" {
 				category = models.QuotaCategoryVideo
 			}
-			if err := s.userService.RefundQuota(req.UserID, category, req.TokensPrimaryUsed, req.TokensExtraUsed); err != nil {
-				debugLog("HandleKieAPICallback: refund quota error for user_id=%d: %v", req.UserID, err)
+			if err := s.userService.RefundQuota(telegramID, category, req.TokensPrimaryUsed, req.TokensExtraUsed); err != nil {
+				debugLog("HandleKieAPICallback: refund quota error for telegram_id=%d: %v", telegramID, err)
 			}
 			if err := s.ResetRequestTokensUsed(req.ID); err != nil {
 				debugLog("HandleKieAPICallback: reset tokens error for request_id=%d: %v", req.ID, err)
