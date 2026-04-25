@@ -28,12 +28,13 @@ func debugLog(format string, v ...any) {
 }
 
 type GenerationService struct {
-	db     *sql.DB
-	client *openrouter.Client
-	defAPI *defapi.Client
-	kieAPI *kieapi.Client
-	http   *http.Client
-	notify func(chatID int64, req *models.GenerationRequest)
+	db          *sql.DB
+	client      *openrouter.Client
+	defAPI      *defapi.Client
+	kieAPI      *kieapi.Client
+	http        *http.Client
+	notify      func(chatID int64, req *models.GenerationRequest)
+	userService *UserService
 
 	inFlightMu      sync.Mutex
 	inFlightByReqID map[int64]struct{}
@@ -452,6 +453,10 @@ func (s *GenerationService) processGeneration(req *models.GenerationRequest, opt
 
 func (s *GenerationService) SetNotifier(fn func(chatID int64, req *models.GenerationRequest)) {
 	s.notify = fn
+}
+
+func (s *GenerationService) SetUserService(us *UserService) {
+	s.userService = us
 }
 func (s *GenerationService) HandleDefAPICallback(payload defapi.CallbackPayload) error {
 	if payload.TaskID == "" {
@@ -919,6 +924,21 @@ func (s *GenerationService) HandleKieAPICallback(payload kieapi.CallbackPayload)
 			reason = fmt.Sprintf("kieapi status=%s", payload.StatusValue())
 		}
 		_ = s.updateRequestStatus(req.ID, "failed", reason)
+
+		// Возврат токенов пользователю при ошибке
+		if req.TokensUsed > 0 && req.UserID != 0 && s.userService != nil {
+			category := models.QuotaCategoryImage
+			if req.ModelType == "video" {
+				category = models.QuotaCategoryVideo
+			}
+			if err := s.userService.RefundQuota(req.UserID, category, req.TokensPrimaryUsed, req.TokensExtraUsed); err != nil {
+				debugLog("HandleKieAPICallback: refund quota error for user_id=%d: %v", req.UserID, err)
+			}
+			if err := s.ResetRequestTokensUsed(req.ID); err != nil {
+				debugLog("HandleKieAPICallback: reset tokens error for request_id=%d: %v", req.ID, err)
+			}
+		}
+
 		req.Status = "failed"
 		req.ErrorMsg = &reason
 		req.Output = nil
@@ -937,6 +957,21 @@ func (s *GenerationService) HandleKieAPICallback(payload kieapi.CallbackPayload)
 			reason = "kieapi callback missing result url"
 		}
 		_ = s.updateRequestStatus(req.ID, "failed", reason)
+
+		// Возврат токенов пользователю при ошибке
+		if req.TokensUsed > 0 && req.UserID != 0 && s.userService != nil {
+			category := models.QuotaCategoryImage
+			if req.ModelType == "video" {
+				category = models.QuotaCategoryVideo
+			}
+			if err := s.userService.RefundQuota(req.UserID, category, req.TokensPrimaryUsed, req.TokensExtraUsed); err != nil {
+				debugLog("HandleKieAPICallback: refund quota error for user_id=%d: %v", req.UserID, err)
+			}
+			if err := s.ResetRequestTokensUsed(req.ID); err != nil {
+				debugLog("HandleKieAPICallback: reset tokens error for request_id=%d: %v", req.ID, err)
+			}
+		}
+
 		req.Status = "failed"
 		req.ErrorMsg = &reason
 		req.Output = nil

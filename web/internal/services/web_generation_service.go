@@ -102,23 +102,25 @@ type MediaOutput struct {
 }
 
 type GenerationRequest struct {
-	ID             int64        `json:"id"`
-	UserID         int64        `json:"user_id"`
-	Username       string       `json:"username"`
-	Model          string       `json:"model"`
-	ModelType      string       `json:"model_type"`
-	Prompt         string       `json:"prompt"`
-	InputImage     string       `json:"input_image,omitempty"`
-	Status         string       `json:"status"`
-	StatusMessage  string       `json:"status_message"`
-	Output         *string      `json:"output,omitempty"`
-	MediaOutput    *MediaOutput `json:"media_output,omitempty"`
-	ErrorMsg       *string      `json:"error_msg,omitempty"`
-	ExternalTaskID string       `json:"external_task_id,omitempty"`
-	TokensUsed     int          `json:"tokens_used"`
-	Source         string       `json:"source"`
-	CreatedAt      time.Time    `json:"created_at"`
-	CompletedAt    *time.Time   `json:"completed_at,omitempty"`
+	ID                int64        `json:"id"`
+	UserID            int64        `json:"user_id"`
+	Username          string       `json:"username"`
+	Model             string       `json:"model"`
+	ModelType         string       `json:"model_type"`
+	Prompt            string       `json:"prompt"`
+	InputImage        string       `json:"input_image,omitempty"`
+	Status            string       `json:"status"`
+	StatusMessage     string       `json:"status_message"`
+	Output            *string      `json:"output,omitempty"`
+	MediaOutput       *MediaOutput `json:"media_output,omitempty"`
+	ErrorMsg          *string      `json:"error_msg,omitempty"`
+	ExternalTaskID    string       `json:"external_task_id,omitempty"`
+	TokensUsed        int          `json:"tokens_used"`
+	TokensPrimaryUsed int          `json:"tokens_primary_used"`
+	TokensExtraUsed   int          `json:"tokens_extra_used"`
+	Source            string       `json:"source"`
+	CreatedAt         time.Time    `json:"created_at"`
+	CompletedAt       *time.Time   `json:"completed_at,omitempty"`
 }
 
 type CreateGenerationRequest struct {
@@ -1117,7 +1119,7 @@ func (s *WebGenerationService) completeSunoGeneration(id int64, prompt string, u
 
 func (s *WebGenerationService) GetByID(id int64) (*GenerationRequest, error) {
 	query := `
-		SELECT id, user_id, model_type, model, status, input_image, output, media_output, prompt, error_msg, tokens_used, source, created_at, completed_at
+		SELECT id, user_id, model_type, model, status, input_image, output, media_output, prompt, error_msg, tokens_used, COALESCE(tokens_primary_used, 0), COALESCE(tokens_extra_used, 0), source, created_at, completed_at
 		FROM generation_requests WHERE id = $1`
 
 	genReq := &GenerationRequest{}
@@ -1125,7 +1127,7 @@ func (s *WebGenerationService) GetByID(id int64) (*GenerationRequest, error) {
 	err := s.db.QueryRow(query, id).Scan(
 		&genReq.ID, &genReq.UserID, &genReq.ModelType, &genReq.Model, &genReq.Status,
 		&genReq.InputImage, &genReq.Output, &mediaOutputJSON, &genReq.Prompt, &genReq.ErrorMsg,
-		&genReq.TokensUsed, &genReq.Source, &genReq.CreatedAt, &genReq.CompletedAt,
+		&genReq.TokensUsed, &genReq.TokensPrimaryUsed, &genReq.TokensExtraUsed, &genReq.Source, &genReq.CreatedAt, &genReq.CompletedAt,
 	)
 	if err != nil {
 		return nil, err
@@ -1283,6 +1285,40 @@ func humanizeGenerationError(raw string) string {
 }
 
 func (s *WebGenerationService) updateStatus(id int64, status, errorMsg string) error {
+	// Если это ошибка, возвращаем токены пользователю
+	if status == "failed" && errorMsg != "" {
+		genReq, err := s.GetByID(id)
+		if err == nil && genReq.TokensUsed > 0 && genReq.UserID != 0 {
+			// Определяем категорию квоты
+			category := models.QuotaCategoryImage
+			if genReq.ModelType == "video" {
+				category = models.QuotaCategoryVideo
+			} else if genReq.ModelType == "audio" || genReq.ModelType == "music" {
+				category = models.QuotaCategoryMusic
+			} else if genReq.ModelType == "text" {
+				category = models.QuotaCategoryText
+			}
+
+			// Возвращаем токены
+			if s.quotaService != nil {
+				user, userErr := s.quotaService.GetByID(genReq.UserID)
+				if userErr == nil && user != nil && user.TelegramID != nil {
+					if refundErr := s.quotaService.AddPrimaryQuota(*user.TelegramID, category, genReq.TokensPrimaryUsed); refundErr != nil {
+						log.Printf("updateStatus: failed to refund primary quota for user_id=%d: %v", genReq.UserID, refundErr)
+					}
+					if genReq.TokensExtraUsed > 0 {
+						if refundErr := s.quotaService.AddExtraQuota(*user.TelegramID, category, genReq.TokensExtraUsed); refundErr != nil {
+							log.Printf("updateStatus: failed to refund extra quota for user_id=%d: %v", genReq.UserID, refundErr)
+						}
+					}
+					// Обнуляем токены в запросе
+					_, _ = s.db.Exec(`UPDATE generation_requests SET tokens_used = 0, tokens_primary_used = 0, tokens_extra_used = 0 WHERE id = $1`, id)
+					log.Printf("updateStatus: refunded %d primary + %d extra tokens to user_id=%d", genReq.TokensPrimaryUsed, genReq.TokensExtraUsed, genReq.UserID)
+				}
+			}
+		}
+	}
+
 	var query string
 	if errorMsg != "" {
 		query = `UPDATE generation_requests SET status = $2, error_msg = $3, completed_at = NOW() WHERE id = $1`

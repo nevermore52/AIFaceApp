@@ -44,6 +44,7 @@ func NewBot(cfg *config.Config, db *sql.DB) (*Bot, error) {
 	userService := services.NewUserService(db)
 	openRouterClient := openrouter.NewClient(cfg.OpenRouter)
 	generationService := services.NewGenerationService(db, openRouterClient)
+	generationService.SetUserService(userService)
 	if cfg.DefAPI.APIKey != "" && cfg.DefAPI.BaseURL != "" {
 		generationService.SetDefAPIClient(defapi.NewClient(cfg.DefAPI.APIKey, cfg.DefAPI.BaseURL))
 	}
