@@ -6798,17 +6798,6 @@ func (b *Bot) sendGenerationStatus(chatID int64, req *models.GenerationRequest) 
 	isFailed := req.Status == "failed"
 	if isFailed && req.ErrorMsg != nil && *req.ErrorMsg != "" {
 		friendly := friendlyGenerationError(fmt.Errorf(*req.ErrorMsg))
-		// Возврат запросов в те же бакеты, откуда списали
-		skipRefund := strings.Contains(*req.ErrorMsg, "Request successful, but the official returned empty content") ||
-			strings.Contains(*req.ErrorMsg, "Произошла ошибка возможно вы нарушили правила бота.")
-		if !skipRefund && req.TokensUsed > 0 && chatID != 0 {
-			if err := b.userService.RefundQuota(chatID, models.QuotaCategoryImage, req.TokensPrimaryUsed, req.TokensExtraUsed); err != nil {
-				log.Printf("refund on failed generation error: %v", err)
-			}
-			if resetErr := b.generationService.ResetRequestTokensUsed(req.ID); resetErr != nil {
-				log.Printf("ResetRequestTokensUsed(image failed) error: %v", resetErr)
-			}
-		}
 		baseText += fmt.Sprintf("\n\n❌ Ошибка: %s", friendly)
 	}
 
