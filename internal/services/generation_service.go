@@ -191,13 +191,7 @@ func (s *GenerationService) processGeneration(req *models.GenerationRequest, opt
 	modelLower := strings.ToLower(strings.TrimSpace(opts.Model))
 	if len(images) == 0 && modelLower != "nano-banana-2" && modelLower != "gpt-image-2" {
 		debugLog("processGeneration ERROR: no input images provided")
-		_ = s.updateRequestStatus(req.ID, "failed", "no input images provided")
-		if s.notify != nil {
-			req.Status = "failed"
-			msg := "no input images provided"
-			req.ErrorMsg = &msg
-			s.notify(opts.ChatID, req)
-		}
+		s.failAndRefund(req, opts.ChatID, "no input images provided")
 		return
 	}
 	if len(images) > 4 {
@@ -221,14 +215,7 @@ func (s *GenerationService) processGeneration(req *models.GenerationRequest, opt
 		taskID, err := s.createDefAPITask(req.ID, opts, images)
 		if err != nil {
 			debugLog("processGeneration DefAPI FAILED: requestID=%d, error=%v", req.ID, err)
-			_ = s.updateRequestStatus(req.ID, "failed", err.Error())
-			req.Status = "failed"
-			errMsg := err.Error()
-			req.ErrorMsg = &errMsg
-			if s.notify != nil {
-				s.notify(opts.ChatID, req)
-			}
-			s.markDone(req.ID)
+			s.failAndRefund(req, opts.ChatID, err.Error())
 			return
 		}
 		debugLog("processGeneration DefAPI task created: requestID=%d taskID=%s", req.ID, taskID)
@@ -240,14 +227,7 @@ func (s *GenerationService) processGeneration(req *models.GenerationRequest, opt
 		taskID, err := s.createNanoBanana2Task(req.ID, opts, images)
 		if err != nil {
 			debugLog("processGeneration NanoBanana2 FAILED: requestID=%d, error=%v", req.ID, err)
-			_ = s.updateRequestStatus(req.ID, "failed", err.Error())
-			req.Status = "failed"
-			errMsg := err.Error()
-			req.ErrorMsg = &errMsg
-			if s.notify != nil {
-				s.notify(opts.ChatID, req)
-			}
-			s.markDone(req.ID)
+			s.failAndRefund(req, opts.ChatID, err.Error())
 			return
 		}
 		debugLog("processGeneration NanoBanana2 task created: requestID=%d taskID=%s", req.ID, taskID)
@@ -261,14 +241,7 @@ func (s *GenerationService) processGeneration(req *models.GenerationRequest, opt
 		taskID, err := s.createGPTImage2Task(req.ID, opts, images)
 		if err != nil {
 			debugLog("processGeneration GPTImage2 FAILED: requestID=%d, error=%v", req.ID, err)
-			_ = s.updateRequestStatus(req.ID, "failed", err.Error())
-			req.Status = "failed"
-			errMsg := err.Error()
-			req.ErrorMsg = &errMsg
-			if s.notify != nil {
-				s.notify(opts.ChatID, req)
-			}
-			s.markDone(req.ID)
+			s.failAndRefund(req, opts.ChatID, err.Error())
 			return
 		}
 		debugLog("processGeneration GPTImage2 task created: requestID=%d taskID=%s", req.ID, taskID)
@@ -283,14 +256,7 @@ func (s *GenerationService) processGeneration(req *models.GenerationRequest, opt
 			taskID, err := s.createDefAPITask(req.ID, opts, images)
 			if err != nil {
 				debugLog("processGeneration DefAPI FAILED: requestID=%d, error=%v", req.ID, err)
-				_ = s.updateRequestStatus(req.ID, "failed", err.Error())
-				req.Status = "failed"
-				errMsg := err.Error()
-				req.ErrorMsg = &errMsg
-				if s.notify != nil {
-					s.notify(opts.ChatID, req)
-				}
-				s.markDone(req.ID)
+				s.failAndRefund(req, opts.ChatID, err.Error())
 				return
 			}
 			debugLog("processGeneration DefAPI task created: requestID=%d taskID=%s", req.ID, taskID)
@@ -301,14 +267,7 @@ func (s *GenerationService) processGeneration(req *models.GenerationRequest, opt
 		taskID, err := s.createKieAPITask(req.ID, opts, images)
 		if err != nil {
 			debugLog("processGeneration KieAPI FAILED: requestID=%d, error=%v", req.ID, err)
-			_ = s.updateRequestStatus(req.ID, "failed", err.Error())
-			req.Status = "failed"
-			errMsg := err.Error()
-			req.ErrorMsg = &errMsg
-			if s.notify != nil {
-				s.notify(opts.ChatID, req)
-			}
-			s.markDone(req.ID)
+			s.failAndRefund(req, opts.ChatID, err.Error())
 			return
 		}
 		debugLog("processGeneration KieAPI task created: requestID=%d taskID=%s", req.ID, taskID)
@@ -322,14 +281,7 @@ func (s *GenerationService) processGeneration(req *models.GenerationRequest, opt
 		taskID, err := s.createKieAPIVideoTask(req.ID, opts, images)
 		if err != nil {
 			debugLog("processGeneration KieAPI Video FAILED: requestID=%d, error=%v", req.ID, err)
-			_ = s.updateRequestStatus(req.ID, "failed", err.Error())
-			req.Status = "failed"
-			errMsg := err.Error()
-			req.ErrorMsg = &errMsg
-			if s.notify != nil {
-				s.notify(opts.ChatID, req)
-			}
-			s.markDone(req.ID)
+			s.failAndRefund(req, opts.ChatID, err.Error())
 			return
 		}
 		debugLog("processGeneration KieAPI Video task created: requestID=%d taskID=%s", req.ID, taskID)
@@ -341,14 +293,7 @@ func (s *GenerationService) processGeneration(req *models.GenerationRequest, opt
 		taskID, err := s.createWanVideoTask(req.ID, opts, images)
 		if err != nil {
 			debugLog("processGeneration Wan Video FAILED: requestID=%d, error=%v", req.ID, err)
-			_ = s.updateRequestStatus(req.ID, "failed", err.Error())
-			req.Status = "failed"
-			errMsg := err.Error()
-			req.ErrorMsg = &errMsg
-			if s.notify != nil {
-				s.notify(opts.ChatID, req)
-			}
-			s.markDone(req.ID)
+			s.failAndRefund(req, opts.ChatID, err.Error())
 			return
 		}
 		debugLog("processGeneration Wan Video task created: requestID=%d taskID=%s", req.ID, taskID)
@@ -362,14 +307,7 @@ func (s *GenerationService) processGeneration(req *models.GenerationRequest, opt
 		taskID, err := s.createKlingVideoTask(req.ID, opts, images)
 		if err != nil {
 			debugLog("processGeneration Kling Video FAILED: requestID=%d, error=%v", req.ID, err)
-			_ = s.updateRequestStatus(req.ID, "failed", err.Error())
-			req.Status = "failed"
-			errMsg := err.Error()
-			req.ErrorMsg = &errMsg
-			if s.notify != nil {
-				s.notify(opts.ChatID, req)
-			}
-			s.markDone(req.ID)
+			s.failAndRefund(req, opts.ChatID, err.Error())
 			return
 		}
 		debugLog("processGeneration Kling Video task created: requestID=%d taskID=%s", req.ID, taskID)
@@ -383,14 +321,7 @@ func (s *GenerationService) processGeneration(req *models.GenerationRequest, opt
 		taskID, err := s.createKlingMotionTask(req.ID, opts, images)
 		if err != nil {
 			debugLog("processGeneration Kling Motion FAILED: requestID=%d, error=%v", req.ID, err)
-			_ = s.updateRequestStatus(req.ID, "failed", err.Error())
-			req.Status = "failed"
-			errMsg := err.Error()
-			req.ErrorMsg = &errMsg
-			if s.notify != nil {
-				s.notify(opts.ChatID, req)
-			}
-			s.markDone(req.ID)
+			s.failAndRefund(req, opts.ChatID, err.Error())
 			return
 		}
 		debugLog("processGeneration Kling Motion task created: requestID=%d taskID=%s", req.ID, taskID)
@@ -402,14 +333,7 @@ func (s *GenerationService) processGeneration(req *models.GenerationRequest, opt
 		taskID, err := s.createKieAPITask(req.ID, opts, images)
 		if err != nil {
 			debugLog("processGeneration KieAPI FAILED: requestID=%d, error=%v", req.ID, err)
-			_ = s.updateRequestStatus(req.ID, "failed", err.Error())
-			req.Status = "failed"
-			errMsg := err.Error()
-			req.ErrorMsg = &errMsg
-			if s.notify != nil {
-				s.notify(opts.ChatID, req)
-			}
-			s.markDone(req.ID)
+			s.failAndRefund(req, opts.ChatID, err.Error())
 			return
 		}
 		debugLog("processGeneration KieAPI task created: requestID=%d taskID=%s", req.ID, taskID)
@@ -423,13 +347,7 @@ func (s *GenerationService) processGeneration(req *models.GenerationRequest, opt
 
 	if err != nil {
 		debugLog("processGeneration FAILED: requestID=%d, error=%v, duration=%v", req.ID, err, time.Since(startTime))
-		_ = s.updateRequestStatus(req.ID, "failed", err.Error())
-		req.Status = "failed"
-		errMsg := err.Error()
-		req.ErrorMsg = &errMsg
-		if s.notify != nil {
-			s.notify(opts.ChatID, req)
-		}
+		s.failAndRefund(req, opts.ChatID, err.Error())
 		return
 	}
 
@@ -468,20 +386,16 @@ func (s *GenerationService) HandleDefAPICallback(payload defapi.CallbackPayload)
 		return err
 	}
 
+	// Получаем telegram_id из таблицы users по user_id для уведомления
+	var telegramID int64
+	_ = s.db.QueryRow(`SELECT COALESCE(telegram_id, 0) FROM users WHERE id = $1`, req.UserID).Scan(&telegramID)
+
 	if payload.Status != "success" {
 		reason := fmt.Sprintf("defapi status=%s", payload.Status)
 		if msg, ok := payload.StatusReason["message"].(string); ok && strings.TrimSpace(msg) != "" {
 			reason = msg
 		}
-		_ = s.updateRequestStatus(req.ID, "failed", reason)
-		req.Status = "failed"
-		req.ErrorMsg = &reason
-		req.Output = nil
-		req.CompletedAt = nil
-		if s.notify != nil {
-			s.notify(req.UserID, req)
-		}
-		s.markDone(req.ID)
+		s.failAndRefund(req, telegramID, reason)
 		return nil
 	}
 
@@ -497,16 +411,7 @@ func (s *GenerationService) HandleDefAPICallback(payload defapi.CallbackPayload)
 				reason = "Произошла ошибка возможно вы нарушили правила бота."
 			}
 		}
-
-		_ = s.updateRequestStatus(req.ID, "failed", reason)
-		req.Status = "failed"
-		req.ErrorMsg = &reason
-		req.Output = nil
-		req.CompletedAt = nil
-		if s.notify != nil {
-			s.notify(req.UserID, req)
-		}
-		s.markDone(req.ID)
+		s.failAndRefund(req, telegramID, reason)
 		return nil
 	}
 
@@ -523,8 +428,8 @@ func (s *GenerationService) HandleDefAPICallback(payload defapi.CallbackPayload)
 	req.Output = &url
 	now := time.Now()
 	req.CompletedAt = &now
-	if s.notify != nil {
-		s.notify(req.UserID, req)
+	if s.notify != nil && telegramID != 0 {
+		s.notify(telegramID, req)
 	}
 	s.markDone(req.ID)
 	return nil
@@ -923,30 +828,7 @@ func (s *GenerationService) HandleKieAPICallback(payload kieapi.CallbackPayload)
 		if reason == "" {
 			reason = fmt.Sprintf("kieapi status=%s", payload.StatusValue())
 		}
-		_ = s.updateRequestStatus(req.ID, "failed", reason)
-
-		// Возврат токенов пользователю при ошибке
-		if req.TokensUsed > 0 && telegramID != 0 && s.userService != nil {
-			category := models.QuotaCategoryImage
-			if req.ModelType == "video" {
-				category = models.QuotaCategoryVideo
-			}
-			if err := s.userService.RefundQuota(telegramID, category, req.TokensPrimaryUsed, req.TokensExtraUsed); err != nil {
-				debugLog("HandleKieAPICallback: refund quota error for telegram_id=%d: %v", telegramID, err)
-			}
-			if err := s.ResetRequestTokensUsed(req.ID); err != nil {
-				debugLog("HandleKieAPICallback: reset tokens error for request_id=%d: %v", req.ID, err)
-			}
-		}
-
-		req.Status = "failed"
-		req.ErrorMsg = &reason
-		req.Output = nil
-		req.CompletedAt = nil
-		if s.notify != nil && telegramID != 0 {
-			s.notify(telegramID, req)
-		}
-		s.markDone(req.ID)
+		s.failAndRefund(req, telegramID, reason)
 		return nil
 	}
 
@@ -956,30 +838,7 @@ func (s *GenerationService) HandleKieAPICallback(payload kieapi.CallbackPayload)
 		if reason == "" {
 			reason = "kieapi callback missing result url"
 		}
-		_ = s.updateRequestStatus(req.ID, "failed", reason)
-
-		// Возврат токенов пользователю при ошибке
-		if req.TokensUsed > 0 && telegramID != 0 && s.userService != nil {
-			category := models.QuotaCategoryImage
-			if req.ModelType == "video" {
-				category = models.QuotaCategoryVideo
-			}
-			if err := s.userService.RefundQuota(telegramID, category, req.TokensPrimaryUsed, req.TokensExtraUsed); err != nil {
-				debugLog("HandleKieAPICallback: refund quota error for telegram_id=%d: %v", telegramID, err)
-			}
-			if err := s.ResetRequestTokensUsed(req.ID); err != nil {
-				debugLog("HandleKieAPICallback: reset tokens error for request_id=%d: %v", req.ID, err)
-			}
-		}
-
-		req.Status = "failed"
-		req.ErrorMsg = &reason
-		req.Output = nil
-		req.CompletedAt = nil
-		if s.notify != nil && telegramID != 0 {
-			s.notify(telegramID, req)
-		}
-		s.markDone(req.ID)
+		s.failAndRefund(req, telegramID, reason)
 		return nil
 	}
 
@@ -1283,6 +1142,44 @@ func (s *GenerationService) updateRequestStatus(requestID int64, status, errorMs
 	query := `UPDATE generation_requests SET status = $2, error_msg = $3 WHERE id = $1`
 	_, err := s.db.Exec(query, requestID, status, errorMsg)
 	return err
+}
+
+// failAndRefund marks the generation as failed, refunds the user's quota,
+// resets tokens_used in DB, notifies the user, and marks the request as done.
+// Use this for any sync failure path inside processGeneration.
+func (s *GenerationService) failAndRefund(req *models.GenerationRequest, chatID int64, errMsg string) {
+	_ = s.updateRequestStatus(req.ID, "failed", errMsg)
+
+	if s.userService != nil && req.TokensUsed > 0 {
+		var telegramID int64
+		_ = s.db.QueryRow(`SELECT COALESCE(telegram_id, 0) FROM users WHERE id = $1`, req.UserID).Scan(&telegramID)
+		if telegramID != 0 {
+			category := models.QuotaCategoryImage
+			switch req.ModelType {
+			case "video":
+				category = models.QuotaCategoryVideo
+			case "music", "audio":
+				category = models.QuotaCategoryMusic
+			case "text":
+				category = models.QuotaCategoryText
+			}
+			if err := s.userService.RefundQuota(telegramID, category, req.TokensPrimaryUsed, req.TokensExtraUsed); err != nil {
+				debugLog("failAndRefund: refund quota error for telegram_id=%d: %v", telegramID, err)
+			}
+			if err := s.ResetRequestTokensUsed(req.ID); err != nil {
+				debugLog("failAndRefund: reset tokens error for request_id=%d: %v", req.ID, err)
+			}
+		}
+	}
+
+	req.Status = "failed"
+	req.ErrorMsg = &errMsg
+	req.Output = nil
+	req.CompletedAt = nil
+	if s.notify != nil {
+		s.notify(chatID, req)
+	}
+	s.markDone(req.ID)
 }
 
 func (s *GenerationService) completeRequest(requestID int64, outputImage string) error {

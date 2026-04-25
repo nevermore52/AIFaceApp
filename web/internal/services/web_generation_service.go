@@ -411,15 +411,15 @@ func (s *WebGenerationService) CreateGeneration(userID int64, username string, r
 	}
 
 	query := `
-		INSERT INTO generation_requests (user_id, username, model_type, model, status, input_image, prompt, tokens_used, source)
-		VALUES ($1, $2, $3, $4, 'pending', $5, $6, $7, 'web')
-		RETURNING id, user_id, username, model_type, model, status, input_image, output, prompt, error_msg, tokens_used, source, created_at, completed_at`
+		INSERT INTO generation_requests (user_id, username, model_type, model, status, input_image, prompt, tokens_used, tokens_primary_used, tokens_extra_used, source)
+		VALUES ($1, $2, $3, $4, 'pending', $5, $6, $7, $8, $9, 'web')
+		RETURNING id, user_id, username, model_type, model, status, input_image, output, prompt, error_msg, tokens_used, COALESCE(tokens_primary_used, 0), COALESCE(tokens_extra_used, 0), source, created_at, completed_at`
 
 	genReq := &GenerationRequest{}
-	err := s.db.QueryRow(query, userID, username, modelType, req.Model, inputImage, req.Prompt, tokenCost).Scan(
+	err := s.db.QueryRow(query, userID, username, modelType, req.Model, inputImage, req.Prompt, tokenCost, req.PrimaryUsed, req.ExtraUsed).Scan(
 		&genReq.ID, &genReq.UserID, &genReq.Username, &genReq.ModelType, &genReq.Model, &genReq.Status,
 		&genReq.InputImage, &genReq.Output, &genReq.Prompt, &genReq.ErrorMsg,
-		&genReq.TokensUsed, &genReq.Source, &genReq.CreatedAt, &genReq.CompletedAt,
+		&genReq.TokensUsed, &genReq.TokensPrimaryUsed, &genReq.TokensExtraUsed, &genReq.Source, &genReq.CreatedAt, &genReq.CompletedAt,
 	)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create generation request: %w", err)
@@ -437,41 +437,7 @@ func (s *WebGenerationService) processGeneration(genReq *GenerationRequest, req 
 
 	model := strings.ToLower(strings.TrimSpace(req.Model))
 
-	// Вспомогательная функция для возврата квот при ошибке
-	refundQuota := func(primaryUsed, extraUsed int) {
-		if s.quotaService != nil && (primaryUsed > 0 || extraUsed > 0) {
-			// Получаем пользователя для получения telegram_id
-			user, err := s.quotaService.GetByID(genReq.UserID)
-			if err == nil {
-				refundID := user.ID
-				if user.TelegramID != nil {
-					refundID = *user.TelegramID
-				}
-				// Определяем категорию квоты
-				var category models.QuotaCategory
-				switch genReq.ModelType {
-				case "text":
-					category = models.QuotaCategoryText
-				case "image":
-					category = models.QuotaCategoryImage
-				case "music":
-					category = models.QuotaCategoryMusic
-				case "video":
-					category = models.QuotaCategoryVideo
-				}
-
-				// Возвращаем квоты в те же типы, откуда были потрачены
-				if primaryUsed > 0 {
-					_ = s.quotaService.AddPrimaryQuota(refundID, category, primaryUsed)
-					log.Printf("Refunded primary quota: userID=%d category=%s amount=%d", refundID, category, primaryUsed)
-				}
-				if extraUsed > 0 {
-					_ = s.quotaService.AddExtraQuota(refundID, category, extraUsed)
-					log.Printf("Refunded extra quota: userID=%d category=%s amount=%d", refundID, category, extraUsed)
-				}
-			}
-		}
-	}
+	// Refund-логика для failed-статусов централизована в updateStatus().
 
 	// Музыка через Suno API (не KieAPI)
 	if model == "music-suno" || strings.Contains(model, "suno") {
@@ -662,7 +628,6 @@ func (s *WebGenerationService) processGeneration(genReq *GenerationRequest, req 
 	if err != nil {
 		log.Printf("KieAPI task creation failed for request %d: %v", genReq.ID, err)
 		_ = s.updateStatus(genReq.ID, "failed", err.Error())
-		refundQuota(req.PrimaryUsed, req.ExtraUsed)
 		return
 	}
 
@@ -704,22 +669,6 @@ func (s *WebGenerationService) processMusicGeneration(genReq *GenerationRequest,
 	if err != nil {
 		log.Printf("Suno generation failed: %v", err)
 		_ = s.updateStatus(genReq.ID, "failed", fmt.Sprintf("Music generation failed: %v", err))
-		// Возвращаем квоту
-		if s.quotaService != nil {
-			user, err := s.quotaService.GetByID(genReq.UserID)
-			if err == nil {
-				refundID := user.ID
-				if user.TelegramID != nil {
-					refundID = *user.TelegramID
-				}
-				if req.PrimaryUsed > 0 {
-					_ = s.quotaService.AddPrimaryQuota(refundID, models.QuotaCategoryMusic, req.PrimaryUsed)
-				}
-				if req.ExtraUsed > 0 {
-					_ = s.quotaService.AddExtraQuota(refundID, models.QuotaCategoryMusic, req.ExtraUsed)
-				}
-			}
-		}
 		return
 	}
 
@@ -755,22 +704,6 @@ func (s *WebGenerationService) processMusicGeneration(genReq *GenerationRequest,
 	}
 
 	_ = s.updateStatus(genReq.ID, "failed", "No audio URL or task ID returned from Suno API")
-	// Возвращаем квоту
-	if s.quotaService != nil {
-		user, err := s.quotaService.GetByID(genReq.UserID)
-		if err == nil {
-			refundID := user.ID
-			if user.TelegramID != nil {
-				refundID = *user.TelegramID
-			}
-			if req.PrimaryUsed > 0 {
-				_ = s.quotaService.AddPrimaryQuota(refundID, models.QuotaCategoryMusic, req.PrimaryUsed)
-			}
-			if req.ExtraUsed > 0 {
-				_ = s.quotaService.AddExtraQuota(refundID, models.QuotaCategoryMusic, req.ExtraUsed)
-			}
-		}
-	}
 }
 
 func (s *WebGenerationService) processTextGeneration(genReq *GenerationRequest, req CreateGenerationRequest) {
@@ -807,22 +740,6 @@ func (s *WebGenerationService) processTextGeneration(genReq *GenerationRequest, 
 	if err != nil {
 		log.Printf("Chat generation failed: %v", err)
 		_ = s.updateStatus(genReq.ID, "failed", fmt.Sprintf("Text generation failed: %v", err))
-		// Возвращаем квоту
-		if s.quotaService != nil {
-			user, err := s.quotaService.GetByID(genReq.UserID)
-			if err == nil {
-				refundID := user.ID
-				if user.TelegramID != nil {
-					refundID = *user.TelegramID
-				}
-				if req.PrimaryUsed > 0 {
-					_ = s.quotaService.AddPrimaryQuota(refundID, models.QuotaCategoryText, req.PrimaryUsed)
-				}
-				if req.ExtraUsed > 0 {
-					_ = s.quotaService.AddExtraQuota(refundID, models.QuotaCategoryText, req.ExtraUsed)
-				}
-			}
-		}
 		return
 	}
 
