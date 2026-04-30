@@ -2538,6 +2538,18 @@ func (b *Bot) processAudioMessage(msg *tgmodels.Message, modelOpt ModelOption) {
 		return
 	}
 
+	// ConsumeQuotaDetailed мог создать пользователя — обновим userRec, чтобы LogRequest получил корректный users.id
+	if userRec == nil {
+		userRec, _ = b.userService.GetUserByTelegramID(userID)
+	}
+	if userRec == nil {
+		log.Printf("processAudioMessage: failed to resolve userRec for telegram_id=%d after ConsumeQuotaDetailed", userID)
+		_ = b.userService.RefundQuota(userID, models.QuotaCategoryMusic, primaryUsed, extraUsed)
+		b.sendErrorMessage(chatID, "Ошибка при подготовке запроса. Попробуйте ещё раз.")
+		return
+	}
+	internalUserID := userRec.ID
+
 	modeLine := "Режим: с голосом"
 	if instrumental {
 		modeLine = "Режим: инструментал (без голоса)"
@@ -2593,7 +2605,7 @@ func (b *Bot) processAudioMessage(msg *tgmodels.Message, modelOpt ModelOption) {
 			resultURL, err = b.generationService.GenerateAudio(text, apiModel, modelOpt.TaskType, "")
 		}
 		if err != nil {
-			req, logErr := b.generationService.LogRequest(userID, services.LogRequestOptions{
+			req, logErr := b.generationService.LogRequest(internalUserID, services.LogRequestOptions{
 				Username:          username,
 				ModelType:         string(modelOpt.Category),
 				Model:             apiModel,
@@ -2618,7 +2630,7 @@ func (b *Bot) processAudioMessage(msg *tgmodels.Message, modelOpt ModelOption) {
 		}
 
 		if resultURL != "" {
-			if _, logErr := b.generationService.LogRequest(userID, services.LogRequestOptions{
+			if _, logErr := b.generationService.LogRequest(internalUserID, services.LogRequestOptions{
 				Username:          username,
 				ModelType:         string(modelOpt.Category),
 				Model:             apiModel,
@@ -2637,7 +2649,7 @@ func (b *Bot) processAudioMessage(msg *tgmodels.Message, modelOpt ModelOption) {
 		}
 
 		if taskID != "" {
-			req, logErr := b.generationService.LogRequest(userID, services.LogRequestOptions{
+			req, logErr := b.generationService.LogRequest(internalUserID, services.LogRequestOptions{
 				Username:          username,
 				ModelType:         string(modelOpt.Category),
 				Model:             apiModel,
@@ -2671,7 +2683,7 @@ func (b *Bot) processAudioMessage(msg *tgmodels.Message, modelOpt ModelOption) {
 
 		// На всякий случай, если нет ни URL, ни taskId
 		b.sendErrorMessage(chatID, "Сервис не вернул ссылку и taskId. Попробуйте позже.")
-		req, logErr := b.generationService.LogRequest(userID, services.LogRequestOptions{
+		req, logErr := b.generationService.LogRequest(internalUserID, services.LogRequestOptions{
 			Username:          username,
 			ModelType:         string(modelOpt.Category),
 			Model:             apiModel,
