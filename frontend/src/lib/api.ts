@@ -235,6 +235,10 @@ export const adminApi = {
     api.put<any>(`/admin/promo-codes/${id}`, data),
   deletePromoCode: (id: number) =>
     api.delete<any>(`/admin/promo-codes/${id}`),
+  getMaintenanceStatus: () =>
+    api.get<{ enabled: boolean; message: string }>('/admin/maintenance'),
+  setMaintenanceMode: (enabled: boolean, message: string) =>
+    api.post<{ message: string }>('/admin/maintenance', { enabled, message }),
 }
 
 export const promoApi = {

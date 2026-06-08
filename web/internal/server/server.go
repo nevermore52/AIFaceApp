@@ -59,6 +59,7 @@ func New(cfg *config.Config, db *sql.DB) *Server {
 	paymentRepo := repository.NewPaymentRepository(db)
 	sessionRepo := repository.NewSessionRepository(db)
 	promoRepo := repository.NewPromoRepository(db)
+	settingsRepo := repository.NewSettingsRepository(db)
 
 	authService := services.NewAuthService(cfg, userRepo, sessionRepo)
 	userService := services.NewUserService(userRepo, quotaRepo)
@@ -85,9 +86,9 @@ func New(cfg *config.Config, db *sql.DB) *Server {
 	authTokenRepo := repository.NewAuthTokenRepository(db)
 	authHandler := handlers.NewAuthHandler(authService, cfg, authTokenRepo)
 	userHandler := handlers.NewUserHandler(userService, cfg.TelegramBotToken)
-	generationHandler := handlers.NewGenerationHandler(generationService, webGenerationService, cfg.UploadDir, cfg.WebBaseURL)
+	generationHandler := handlers.NewGenerationHandler(generationService, webGenerationService, settingsRepo, cfg.UploadDir, cfg.WebBaseURL)
 	paymentHandler := handlers.NewPaymentHandler(paymentService, webPaymentService)
-	adminHandler := handlers.NewAdminHandler(userService, generationService, paymentService, webPaymentService)
+	adminHandler := handlers.NewAdminHandler(userService, generationService, paymentService, webPaymentService, settingsRepo)
 	promoHandler := handlers.NewPromoHandler(promoRepo, userService)
 
 	// Используем middleware с userService для обновления информации о подписке при каждом запросе
@@ -186,10 +187,9 @@ func New(cfg *config.Config, db *sql.DB) *Server {
 			admin.POST("/upload", generationHandler.AdminUploadImage)
 			admin.POST("/upload-video", generationHandler.AdminUploadVideo)
 
-			admin.GET("/promo-codes", promoHandler.AdminList)
-			admin.POST("/promo-codes", promoHandler.AdminCreate)
-			admin.PUT("/promo-codes/:id", promoHandler.AdminUpdate)
-			admin.DELETE("/promo-codes/:id", promoHandler.AdminDelete)
+			// Maintenance mode management
+			admin.GET("/maintenance", adminHandler.GetMaintenanceStatus)
+			admin.POST("/maintenance", adminHandler.SetMaintenanceMode)
 		}
 	}
 

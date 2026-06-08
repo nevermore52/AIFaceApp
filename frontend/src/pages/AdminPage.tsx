@@ -6,7 +6,7 @@ import { adminApi, generationApi } from '../lib/api'
 import { Card, CardContent, CardHeader, CardTitle } from '../components/ui/card'
 import { Button } from '../components/ui/button'
 
-type Tab = 'stats' | 'users' | 'top_users' | 'generations' | 'payments' | 'gallery_ideas' | 'trends' | 'promo_codes'
+type Tab = 'stats' | 'users' | 'top_users' | 'generations' | 'payments' | 'gallery_ideas' | 'trends' | 'promo_codes' | 'maintenance'
 
 const TABS: { id: Tab; label: string }[] = [
   { id: 'stats', label: '📊 Статистика' },
@@ -17,6 +17,7 @@ const TABS: { id: Tab; label: string }[] = [
   { id: 'gallery_ideas', label: '💡 Идеи' },
   { id: 'trends', label: '🔥 Тренды' },
   { id: 'promo_codes', label: '🎁 Промокоды' },
+  { id: 'maintenance', label: '🔧 Техработы' },
 ]
 
 function StatCard({ label, value }: { label: string; value: string | number }) {
@@ -1404,6 +1405,100 @@ function PromoCodesTab() {
   )
 }
 
+// ─── Maintenance Tab ──────────────────────────────────────────────────────────
+function MaintenanceTab() {
+  const [loading, setLoading] = useState(false)
+  const [enabled, setEnabled] = useState(false)
+  const [message, setMessage] = useState('')
+  const [saving, setSaving] = useState(false)
+
+  useEffect(() => {
+    loadStatus()
+  }, [])
+
+  const loadStatus = async () => {
+    setLoading(true)
+    try {
+      const res = await adminApi.getMaintenanceStatus()
+      setEnabled(res.enabled)
+      setMessage(res.message || 'Сервис временно недоступен. Ведутся технические работы.')
+    } catch (err) {
+      console.error('Failed to load maintenance status:', err)
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  const handleSave = async () => {
+    setSaving(true)
+    try {
+      await adminApi.setMaintenanceMode(enabled, message)
+      alert(enabled ? 'Режим техработ включен' : 'Режим техработ выключен')
+    } catch (err) {
+      alert('Ошибка сохранения: ' + err)
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  if (loading) return <div className="text-white/40">Загрузка...</div>
+
+  return (
+    <div className="space-y-6">
+      <div className="p-4 rounded-xl border border-white/5 bg-white/[0.03]">
+        <h3 className="text-lg font-semibold text-white mb-4">Режим технических работ</h3>
+        
+        <div className="space-y-4">
+          <div className="flex items-center gap-3">
+            <label className="relative inline-flex items-center cursor-pointer">
+              <input
+                type="checkbox"
+                checked={enabled}
+                onChange={(e) => setEnabled(e.target.checked)}
+                className="sr-only peer"
+              />
+              <div className="w-11 h-6 bg-zinc-700 peer-focus:outline-none peer-focus:ring-2 peer-focus:ring-blue-500 rounded-full peer peer-checked:after:translate-x-full rtl:peer-checked:after:-translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:start-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-600"></div>
+            </label>
+            <span className="text-white font-medium">
+              {enabled ? '🔴 Техработы включены' : '🟢 Сервис работает'}
+            </span>
+          </div>
+
+          <div>
+            <label className="block text-sm text-white/60 mb-2">
+              Сообщение для пользователей
+            </label>
+            <textarea
+              value={message}
+              onChange={(e) => setMessage(e.target.value)}
+              rows={4}
+              className="w-full px-4 py-3 rounded-xl bg-white/5 border border-white/10 text-white placeholder:text-white/30 focus:outline-none focus:ring-2 focus:ring-blue-500"
+              placeholder="Сервис временно недоступен. Ведутся технические работы."
+            />
+          </div>
+
+          <Button
+            onClick={handleSave}
+            disabled={saving}
+            className="w-full bg-blue-600 hover:bg-blue-700 text-white font-semibold py-3 rounded-xl"
+          >
+            {saving ? 'Сохранение...' : 'Сохранить'}
+          </Button>
+        </div>
+
+        {enabled && (
+          <div className="mt-4 p-4 rounded-lg bg-red-500/10 border border-red-500/20">
+            <p className="text-red-400 text-sm">
+              ⚠️ Внимание: При включенном режиме техработ все генерации в боте и на сайте будут заблокированы.
+              Пользователи увидят сообщение выше.
+            </p>
+          </div>
+        )}
+      </div>
+    </div>
+  )
+}
+
 // ─── Main Page ────────────────────────────────────────────────────────────────
 export function AdminPage() {
   const { user } = useAuthStore()
@@ -1455,6 +1550,7 @@ export function AdminPage() {
           {tab === 'gallery_ideas' && <GalleryIdeasTab />}
           {tab === 'trends' && <TrendsTab />}
           {tab === 'promo_codes' && <PromoCodesTab />}
+          {tab === 'maintenance' && <MaintenanceTab />}
         </CardContent>
       </Card>
     </div>

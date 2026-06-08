@@ -30,6 +30,7 @@ type Bot struct {
 	userService       *services.UserService
 	generationService *services.GenerationService
 	paymentService    *services.PaymentService
+	settingsService   *services.SettingsService
 	server            *http.Server
 	shutdownOnce      sync.Once
 	cfg               *config.Config
@@ -42,6 +43,7 @@ func NewBot(cfg *config.Config, db *sql.DB) (*Bot, error) {
 	}
 
 	userService := services.NewUserService(db)
+	settingsService := services.NewSettingsService(db)
 	openRouterClient := openrouter.NewClient(cfg.OpenRouter)
 	generationService := services.NewGenerationService(db, openRouterClient)
 	generationService.SetUserService(userService)
@@ -54,7 +56,7 @@ func NewBot(cfg *config.Config, db *sql.DB) (*Bot, error) {
 	paymentProvider := payments.NewPaymentProvider(cfg.Payment)
 	paymentService := services.NewPaymentService(paymentProvider, userService, redisClient)
 
-	tgBot, err := telegram.NewBot(cfg.TelegramToken, userService, generationService, paymentService, redisClient, cfg, db)
+	tgBot, err := telegram.NewBot(cfg.TelegramToken, userService, generationService, paymentService, settingsService, redisClient, cfg, db)
 	if err != nil {
 		return nil, err
 	}
@@ -68,6 +70,7 @@ func NewBot(cfg *config.Config, db *sql.DB) (*Bot, error) {
 		userService:       userService,
 		generationService: generationService,
 		paymentService:    paymentService,
+		settingsService:   settingsService,
 		cfg:               cfg,
 	}, nil
 }

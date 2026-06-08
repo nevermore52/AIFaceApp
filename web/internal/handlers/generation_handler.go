@@ -10,6 +10,7 @@ import (
 
 	"telegram-ai-face-bot/web/internal/kieapi"
 	"telegram-ai-face-bot/web/internal/models"
+	"telegram-ai-face-bot/web/internal/repository"
 	"telegram-ai-face-bot/web/internal/services"
 
 	"github.com/gin-gonic/gin"
@@ -18,6 +19,7 @@ import (
 type GenerationHandler struct {
 	generationService    *services.GenerationService
 	webGenerationService *services.WebGenerationService
+	settingsRepo         *repository.SettingsRepository
 	uploadDir            string
 	webBaseURL           string
 }
@@ -29,10 +31,11 @@ func min(a, b int) int {
 	return b
 }
 
-func NewGenerationHandler(generationService *services.GenerationService, webGenerationService *services.WebGenerationService, uploadDir, webBaseURL string) *GenerationHandler {
+func NewGenerationHandler(generationService *services.GenerationService, webGenerationService *services.WebGenerationService, settingsRepo *repository.SettingsRepository, uploadDir, webBaseURL string) *GenerationHandler {
 	return &GenerationHandler{
 		generationService:    generationService,
 		webGenerationService: webGenerationService,
+		settingsRepo:         settingsRepo,
 		uploadDir:            uploadDir,
 		webBaseURL:           webBaseURL,
 	}
@@ -188,10 +191,10 @@ func (h *GenerationHandler) GetPublicGallery(c *gin.Context) {
 	}
 
 	type galleryItem struct {
-		ID       int64   `json:"id"`
-		Model    string  `json:"model"`
-		Output   *string `json:"output"`
-		Prompt   string  `json:"prompt"`
+		ID     int64   `json:"id"`
+		Model  string  `json:"model"`
+		Output *string `json:"output"`
+		Prompt string  `json:"prompt"`
 	}
 	items := make([]galleryItem, 0, len(generations))
 	for _, g := range generations {
@@ -231,6 +234,19 @@ func (h *GenerationHandler) CreateGeneration(c *gin.Context) {
 	if h.webGenerationService == nil {
 		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "Generation service not available"})
 		return
+	}
+
+	// Проверка режима техработ
+	if h.settingsRepo != nil {
+		maintenanceMode, err := h.settingsRepo.IsMaintenanceMode()
+		if err == nil && maintenanceMode {
+			message, _ := h.settingsRepo.GetMaintenanceMessage()
+			if message == "" {
+				message = "Сервис временно недоступен. Ведутся технические работы."
+			}
+			c.JSON(http.StatusServiceUnavailable, gin.H{"error": message})
+			return
+		}
 	}
 
 	user, exists := c.Get("user")

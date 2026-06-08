@@ -41,6 +41,7 @@ type Bot struct {
 	userService       *services.UserService
 	generationService *services.GenerationService
 	paymentService    *services.PaymentService
+	settingsService   *services.SettingsService
 	redisClient       *redis.Client
 	cfg               *config.Config
 	db                *sql.DB // for channel→gallery sync (shared DB with web-backend)
@@ -1238,7 +1239,7 @@ var modelOptions = []ModelOption{
 var modelCategories = []ModelCategory{ModelCategoryPhoto, ModelCategoryVideo, ModelCategoryMusic, ModelCategoryChat}
 var adminModelCategories = []ModelCategory{ModelCategoryPhoto, ModelCategoryVideo, ModelCategoryMusic, ModelCategoryChat}
 
-func NewBot(token string, userService *services.UserService, generationService *services.GenerationService, paymentService *services.PaymentService, redisClient *redis.Client, cfg *config.Config, db *sql.DB) (*Bot, error) {
+func NewBot(token string, userService *services.UserService, generationService *services.GenerationService, paymentService *services.PaymentService, settingsService *services.SettingsService, redisClient *redis.Client, cfg *config.Config, db *sql.DB) (*Bot, error) {
 	ctx, cancel := context.WithCancel(context.Background())
 
 	bot := &Bot{
@@ -1247,6 +1248,7 @@ func NewBot(token string, userService *services.UserService, generationService *
 		userService:       userService,
 		generationService: generationService,
 		paymentService:    paymentService,
+		settingsService:   settingsService,
 		redisClient:       redisClient,
 		cfg:               cfg,
 		db:                db,
@@ -1551,18 +1553,27 @@ func (b *Bot) handleMessage(msg *tgmodels.Message) {
 
 	// Обрабатываем фото
 	if msg.Photo != nil {
+		if b.checkMaintenanceMode(msg.Chat.ID) {
+			return
+		}
 		b.handlePhoto(msg)
 		return
 	}
 
 	// Обрабатываем видео (опорное видео для motion-control)
 	if msg.Video != nil || msg.Animation != nil {
+		if b.checkMaintenanceMode(msg.Chat.ID) {
+			return
+		}
 		b.handleVideoMessage(msg)
 		return
 	}
 
 	// Обрабатываем документы как изображения (если это картинка)
 	if msg.Document != nil {
+		if b.checkMaintenanceMode(msg.Chat.ID) {
+			return
+		}
 		b.handleDocument(msg)
 		return
 	}
@@ -3688,6 +3699,10 @@ func (b *Bot) processVideoGenerationMultiPhoto(chatID int64, userID int64, photo
 
 // processVideoGeneration обрабатывает видео-генерацию из фото (image_to_video)
 func (b *Bot) processVideoGeneration(chatID int64, userID int64, photoURL string, prompt string, modelOpt ModelOption) {
+	if b.checkMaintenanceMode(chatID) {
+		return
+	}
+
 	if !b.ensureCategoryEnabled(chatID, ModelCategoryVideo) {
 		return
 	}
@@ -4843,6 +4858,11 @@ func (b *Bot) handleTextMessage(msg *tgmodels.Message) {
 
 	// Чат-модель: выдаём ответ с учётом системного промпта (пока локально)
 	if ok && modelOpt.Category == ModelCategoryChat {
+		// Проверка режима техработ
+		if b.checkMaintenanceMode(msg.Chat.ID) {
+			return
+		}
+
 		// Сохраняем сообщение в контекст (до 5 последних) только для текстовых моделей
 		b.saveMessageToContext(msg.From.ID, loc.UserPrefix+" "+userText)
 		if !b.isChatModelAllowed(msg.From.ID, modelOpt) {
@@ -7145,4 +7165,25 @@ func notifyWebAppAboutSunoCompletion(taskID string, audioURLs []string) error {
 
 	log.Printf("Web app notified about Suno completion: taskID=%s", taskID)
 	return nil
+}
+
+// checkMaintenanceMode проверяет режим техработ и отправляет сообщение пользователю
+// Возвращает true если техработы включены
+func (b *Bot) checkMaintenanceMode(chatID int64) bool {
+	if b.settingsService == nil {
+		return false
+	}
+
+	enabled, err := b.settingsService.IsMaintenanceMode()
+	if err != nil || !enabled {
+		return false
+	}
+
+	message, _ := b.settingsService.GetMaintenanceMessage()
+	if message == "" {
+		message = "⚠️ Сервис временно недоступен. Ведутся технические работы.\n\nПожалуйста, попробуйте позже."
+	}
+
+	b.sendText(chatID, message)
+	return true
 }

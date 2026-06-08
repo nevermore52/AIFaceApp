@@ -10,6 +10,7 @@ import (
 	"strings"
 	"time"
 
+	"telegram-ai-face-bot/web/internal/repository"
 	"telegram-ai-face-bot/web/internal/services"
 
 	"github.com/gin-gonic/gin"
@@ -20,6 +21,7 @@ type AdminHandler struct {
 	generationService *services.GenerationService
 	paymentService    *services.PaymentService
 	webPaymentService *services.WebPaymentService
+	settingsRepo      *repository.SettingsRepository
 	botWebhookURL     string
 }
 
@@ -28,12 +30,14 @@ func NewAdminHandler(
 	generationService *services.GenerationService,
 	paymentService *services.PaymentService,
 	webPaymentService *services.WebPaymentService,
+	settingsRepo *repository.SettingsRepository,
 ) *AdminHandler {
 	return &AdminHandler{
 		userService:       userService,
 		generationService: generationService,
 		paymentService:    paymentService,
 		webPaymentService: webPaymentService,
+		settingsRepo:      settingsRepo,
 		botWebhookURL:     os.Getenv("BOT_WEBHOOK_URL"),
 	}
 }
@@ -462,4 +466,43 @@ func (h *AdminHandler) GetTrendPriorities(c *gin.Context) {
 		taken = []int{}
 	}
 	c.JSON(http.StatusOK, gin.H{"taken": taken})
+}
+
+// GetMaintenanceStatus возвращает текущий статус режима техработ
+func (h *AdminHandler) GetMaintenanceStatus(c *gin.Context) {
+	enabled, err := h.settingsRepo.IsMaintenanceMode()
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to get maintenance status"})
+		return
+	}
+
+	message, err := h.settingsRepo.GetMaintenanceMessage()
+	if err != nil {
+		message = "Сервис временно недоступен. Ведутся технические работы."
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"enabled": enabled,
+		"message": message,
+	})
+}
+
+// SetMaintenanceMode включает/выключает режим техработ
+func (h *AdminHandler) SetMaintenanceMode(c *gin.Context) {
+	var req struct {
+		Enabled bool   `json:"enabled"`
+		Message string `json:"message"`
+	}
+
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid request"})
+		return
+	}
+
+	if err := h.settingsRepo.SetMaintenanceMode(req.Enabled, req.Message); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to set maintenance mode"})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{"message": "Maintenance mode updated"})
 }
