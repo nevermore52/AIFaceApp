@@ -11,6 +11,7 @@ import (
 	"telegram-ai-face-bot/web/internal/handlers"
 	"telegram-ai-face-bot/web/internal/kieapi"
 	"telegram-ai-face-bot/web/internal/middleware"
+	"telegram-ai-face-bot/web/internal/models"
 	"telegram-ai-face-bot/web/internal/repository"
 	"telegram-ai-face-bot/web/internal/services"
 
@@ -127,6 +128,35 @@ func New(cfg *config.Config, db *sql.DB) *Server {
 
 		protected := api.Group("")
 		protected.Use(authMiddleware.RequireAuth())
+		// Middleware для проверки режима техработ (кроме админов)
+		protected.Use(func(c *gin.Context) {
+			// Проверяем является ли пользователь админом
+			user, exists := c.Get("user")
+			if !exists {
+				c.Next()
+				return
+			}
+
+			u, ok := user.(*models.User)
+			if !ok || u.IsAdmin {
+				c.Next()
+				return
+			}
+
+			// Для обычных пользователей проверяем режим техработ
+			enabled, err := settingsRepo.IsMaintenanceMode()
+			if err == nil && enabled {
+				message, _ := settingsRepo.GetMaintenanceMessage()
+				if message == "" {
+					message = "Сервис временно недоступен. Ведутся технические работы."
+				}
+				c.JSON(http.StatusServiceUnavailable, gin.H{"error": message})
+				c.Abort()
+				return
+			}
+
+			c.Next()
+		})
 		{
 			protected.GET("/me", userHandler.GetCurrentUser)
 			protected.PUT("/me", userHandler.UpdateProfile)

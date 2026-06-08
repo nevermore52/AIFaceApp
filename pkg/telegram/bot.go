@@ -1491,6 +1491,22 @@ func (b *Bot) handleMessage(msg *tgmodels.Message) {
 		return
 	}
 
+	// Проверка режима техработ для всех пользователей кроме админов
+	if b.settingsService != nil {
+		isAdmin, _ := b.userService.IsUserAdmin(user.ID)
+		if !isAdmin {
+			enabled, err := b.settingsService.IsMaintenanceMode()
+			if err == nil && enabled {
+				message, _ := b.settingsService.GetMaintenanceMessage()
+				if message == "" {
+					message = "⚠️ Сервис временно недоступен. Ведутся технические работы.\n\nПожалуйста, попробуйте позже."
+				}
+				b.sendText(msg.Chat.ID, message)
+				return
+			}
+		}
+	}
+
 	// Channel sync: if admin forwarded a channel post — import it as a gallery idea.
 	if b.TryHandleForwardedChannelPost(msg) {
 		return
@@ -1553,27 +1569,18 @@ func (b *Bot) handleMessage(msg *tgmodels.Message) {
 
 	// Обрабатываем фото
 	if msg.Photo != nil {
-		if b.checkMaintenanceMode(msg.Chat.ID) {
-			return
-		}
 		b.handlePhoto(msg)
 		return
 	}
 
 	// Обрабатываем видео (опорное видео для motion-control)
 	if msg.Video != nil || msg.Animation != nil {
-		if b.checkMaintenanceMode(msg.Chat.ID) {
-			return
-		}
 		b.handleVideoMessage(msg)
 		return
 	}
 
 	// Обрабатываем документы как изображения (если это картинка)
 	if msg.Document != nil {
-		if b.checkMaintenanceMode(msg.Chat.ID) {
-			return
-		}
 		b.handleDocument(msg)
 		return
 	}
@@ -3699,10 +3706,6 @@ func (b *Bot) processVideoGenerationMultiPhoto(chatID int64, userID int64, photo
 
 // processVideoGeneration обрабатывает видео-генерацию из фото (image_to_video)
 func (b *Bot) processVideoGeneration(chatID int64, userID int64, photoURL string, prompt string, modelOpt ModelOption) {
-	if b.checkMaintenanceMode(chatID) {
-		return
-	}
-
 	if !b.ensureCategoryEnabled(chatID, ModelCategoryVideo) {
 		return
 	}
@@ -4858,11 +4861,6 @@ func (b *Bot) handleTextMessage(msg *tgmodels.Message) {
 
 	// Чат-модель: выдаём ответ с учётом системного промпта (пока локально)
 	if ok && modelOpt.Category == ModelCategoryChat {
-		// Проверка режима техработ
-		if b.checkMaintenanceMode(msg.Chat.ID) {
-			return
-		}
-
 		// Сохраняем сообщение в контекст (до 5 последних) только для текстовых моделей
 		b.saveMessageToContext(msg.From.ID, loc.UserPrefix+" "+userText)
 		if !b.isChatModelAllowed(msg.From.ID, modelOpt) {
@@ -6232,6 +6230,26 @@ func (b *Bot) handleAdminCommand(msg *tgmodels.Message) {
 			return
 		}
 		b.handleAdminBroadcastTest(msg.Chat.ID, messageText)
+	case "maintenance":
+		// /admin maintenance - показать статус
+		// /admin maintenance on [сообщение] - включить
+		// /admin maintenance off - выключить
+		if len(parts) < 2 {
+			b.handleAdminMaintenanceStatus(msg.Chat.ID)
+			return
+		}
+		action := parts[1]
+		if action == "on" {
+			message := "Сервис временно недоступен. Ведутся технические работы.\nПожалуйста, попробуйте позже."
+			if len(parts) > 2 {
+				message = strings.Join(parts[2:], " ")
+			}
+			b.handleAdminMaintenanceOn(msg.Chat.ID, message)
+		} else if action == "off" {
+			b.handleAdminMaintenanceOff(msg.Chat.ID)
+		} else {
+			b.handleAdminMaintenanceStatus(msg.Chat.ID)
+		}
 	case "sub_set":
 		if len(parts) < 4 {
 			b.sendErrorMessage(msg.Chat.ID, "Использование: /admin sub_set <user_id> <mini|start|pro> <days>")
@@ -7186,4 +7204,83 @@ func (b *Bot) checkMaintenanceMode(chatID int64) bool {
 
 	b.sendText(chatID, message)
 	return true
+}
+
+// handleAdminMaintenanceStatus показывает текущий статус режима техработ
+func (b *Bot) handleAdminMaintenanceStatus(chatID int64) {
+	if b.settingsService == nil {
+		b.sendText(chatID, "❌ Settings service не доступен")
+		return
+	}
+
+	enabled, err := b.settingsService.IsMaintenanceMode()
+	if err != nil {
+		b.sendErrorMessage(chatID, fmt.Sprintf("Ошибка получения статуса: %v", err))
+		return
+	}
+
+	message, _ := b.settingsService.GetMaintenanceMessage()
+
+	status := "🟢 Выключен"
+	if enabled {
+		status = "🔴 Включен"
+	}
+
+	text := fmt.Sprintf("**Режим технических работ**\n\nСтатус: %s\n\nСообщение:\n%s\n\n**Управление:**\n/admin maintenance on [сообщение] - включить\n/admin maintenance off - выключить", status, message)
+	b.sendText(chatID, text)
+}
+
+// handleAdminMaintenanceOn включает режим техработ
+func (b *Bot) handleAdminMaintenanceOn(chatID int64, message string) {
+	if b.settingsService == nil {
+		b.sendText(chatID, "❌ Settings service не доступен")
+		return
+	}
+
+	// Используем прямое обращение к БД
+	_, err := b.db.Exec(`
+		INSERT INTO system_settings (key, value, updated_at) 
+		VALUES ('maintenance_mode', 'true', NOW())
+		ON CONFLICT (key) 
+		DO UPDATE SET value = 'true', updated_at = NOW()
+	`)
+	if err != nil {
+		b.sendErrorMessage(chatID, fmt.Sprintf("Ошибка включения: %v", err))
+		return
+	}
+
+	if message != "" {
+		_, err = b.db.Exec(`
+			INSERT INTO system_settings (key, value, updated_at) 
+			VALUES ('maintenance_message', $1, NOW())
+			ON CONFLICT (key) 
+			DO UPDATE SET value = $1, updated_at = NOW()
+		`, message)
+		if err != nil {
+			log.Printf("Failed to update maintenance message: %v", err)
+		}
+	}
+
+	b.sendText(chatID, "🔴 Режим техработ **ВКЛЮЧЕН**\n\nБот и сайт теперь недоступны для обычных пользователей.\n\nСообщение:\n"+message)
+}
+
+// handleAdminMaintenanceOff выключает режим техработ
+func (b *Bot) handleAdminMaintenanceOff(chatID int64) {
+	if b.settingsService == nil {
+		b.sendText(chatID, "❌ Settings service не доступен")
+		return
+	}
+
+	_, err := b.db.Exec(`
+		INSERT INTO system_settings (key, value, updated_at) 
+		VALUES ('maintenance_mode', 'false', NOW())
+		ON CONFLICT (key) 
+		DO UPDATE SET value = 'false', updated_at = NOW()
+	`)
+	if err != nil {
+		b.sendErrorMessage(chatID, fmt.Sprintf("Ошибка выключения: %v", err))
+		return
+	}
+
+	b.sendText(chatID, "🟢 Режим техработ **ВЫКЛЮЧЕН**\n\nБот и сайт снова доступны для всех пользователей.")
 }
