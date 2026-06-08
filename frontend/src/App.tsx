@@ -13,7 +13,10 @@ import { PaymentsPage } from './pages/PaymentsPage'
 import { ProfilePage } from './pages/ProfilePage'
 import { AdminPage } from './pages/AdminPage'
 import { AuthCallbackPage } from './pages/AuthCallbackPage'
+import { PrivacyPage } from './pages/PrivacyPage'
+import { TermsPage } from './pages/TermsPage'
 import { Toaster } from './components/ui/toaster'
+import { CookieBanner } from './components/CookieBanner'
 
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
   const isAuthenticated = useAuthStore((state) => state.isAuthenticated)
@@ -118,6 +121,8 @@ function App() {
         <Routes>
           <Route path="/login" element={<LoginPage />} />
           <Route path="/auth/callback" element={<AuthCallbackPage />} />
+          <Route path="/privacy" element={<PrivacyPage />} />
+          <Route path="/terms" element={<TermsPage />} />
           <Route path="/" element={<Layout />}>
             <Route index element={<DashboardPage />} />
             <Route path="ideas" element={<IdeasPage />} />
@@ -172,6 +177,7 @@ function App() {
           </Route>
         </Routes>
         <Toaster />
+        <CookieBanner />
         </TelegramDeepLinkRedirect>
       </TelegramWebAppAuth>
     </BrowserRouter>
