@@ -200,7 +200,7 @@ export function TermsPage() {
               </ul>
               <p className="leading-relaxed mt-4">
                 <strong>8.2.</strong> Для запроса возврата средств обратитесь в службу поддержки по адресу 
-                support@aifaceapp.ru с указанием причины и приложением подтверждающих документов.
+                TG - @aifaceapps с указанием причины и приложением подтверждающих документов.
               </p>
               <p className="leading-relaxed">
                 <strong>8.3.</strong> Возврат средств не производится, если услуга была частично или 

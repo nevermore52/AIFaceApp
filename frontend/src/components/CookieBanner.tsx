@@ -1,11 +1,18 @@
 import { useState, useEffect } from 'react'
+import { useLocation } from 'react-router-dom'
 import { X } from 'lucide-react'
 
 export function CookieBanner() {
   const [isVisible, setIsVisible] = useState(false)
   const [showDetails, setShowDetails] = useState(false)
+  const location = useLocation()
 
   useEffect(() => {
+    // Не показываем баннер на странице /generate
+    if (location.pathname === '/generate') {
+      return
+    }
+    
     const consent = localStorage.getItem('cookie-consent')
     if (!consent) {
       setIsVisible(true)
@@ -13,7 +20,7 @@ export function CookieBanner() {
       // Если есть согласие, загружаем трекеры
       loadTrackers()
     }
-  }, [])
+  }, [location.pathname])
 
   const loadTrackers = () => {
     // Здесь можно добавить загрузку Яндекс.Метрики, Google Analytics и т.д.
@@ -94,8 +101,7 @@ export function CookieBanner() {
                   <h4 className="font-semibold text-white mb-2">Оператор персональных данных:</h4>
                   <div className="text-xs space-y-1">
                     <p><strong>Название:</strong> AIFACEAPP</p>
-                    <p><strong>Email:</strong> support@aifaceapp.ru</p>
-                    <p><strong>Telegram:</strong> @aifaceapp_support</p>
+                    <p><strong>Telegram:</strong> @aifaceapps</p>
                   </div>
                 </div>
 

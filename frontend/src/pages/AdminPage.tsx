@@ -6,7 +6,7 @@ import { adminApi, generationApi } from '../lib/api'
 import { Card, CardContent, CardHeader, CardTitle } from '../components/ui/card'
 import { Button } from '../components/ui/button'
 
-type Tab = 'stats' | 'users' | 'top_users' | 'generations' | 'payments' | 'gallery_ideas' | 'trends' | 'promo_codes' | 'maintenance'
+type Tab = 'stats' | 'users' | 'top_users' | 'generations' | 'payments' | 'gallery_ideas' | 'trends' | 'promo_codes' | 'maintenance' | 'api_balance'
 
 const TABS: { id: Tab; label: string }[] = [
   { id: 'stats', label: '📊 Статистика' },
@@ -18,6 +18,7 @@ const TABS: { id: Tab; label: string }[] = [
   { id: 'trends', label: '🔥 Тренды' },
   { id: 'promo_codes', label: '🎁 Промокоды' },
   { id: 'maintenance', label: '🔧 Техработы' },
+  { id: 'api_balance', label: '💰 Баланс API' },
 ]
 
 function StatCard({ label, value }: { label: string; value: string | number }) {
@@ -117,12 +118,13 @@ function UsersTab() {
   const [subDays, setSubDays] = useState(30)
   const [saving, setSaving] = useState(false)
   const [msg, setMsg] = useState('')
+  const [search, setSearch] = useState('')
   const limit = 20
 
-  const load = useCallback(async (off: number) => {
+  const load = useCallback(async (off: number, searchQuery: string) => {
     setLoading(true)
     try {
-      const res = await adminApi.getUsers(limit, off)
+      const res = await adminApi.getUsers(limit, off, searchQuery)
       setUsers(res.data ?? [])
       setTotal(res.total ?? 0)
     } finally {
@@ -130,15 +132,20 @@ function UsersTab() {
     }
   }, [])
 
-  useEffect(() => { load(offset) }, [offset, load])
+  useEffect(() => { load(offset, search) }, [offset, search, load])
+
+  const handleSearch = (value: string) => {
+    setSearch(value)
+    setOffset(0) // Reset to first page on search
+  }
 
   const toggleAdmin = async (u: any) => {
     await adminApi.updateUser(u.id, { is_admin: !u.is_admin })
-    load(offset)
+    load(offset, search)
   }
   const toggleBlocked = async (u: any) => {
     await adminApi.updateUser(u.id, { is_blocked: !u.is_blocked })
-    load(offset)
+    load(offset, search)
   }
   const setSub = async () => {
     if (!editUser) return
@@ -146,7 +153,7 @@ function UsersTab() {
     try {
       await adminApi.setSubscription(editUser.id, subPlan, subDays)
       setMsg(`✅ Подписка ${subPlan} на ${subDays} дней выдана`)
-      load(offset)
+      load(offset, search)
     } catch (e: any) {
       setMsg(`❌ ${e.message}`)
     } finally {
@@ -155,12 +162,21 @@ function UsersTab() {
   }
   const removeSub = async (u: any) => {
     await adminApi.removeSubscription(u.id)
-    load(offset)
+    load(offset, search)
   }
 
   return (
     <div className="space-y-4">
-      <p className="text-white/40 text-sm">Всего: {total}</p>
+      <div className="flex items-center justify-between">
+        <p className="text-white/40 text-sm">Всего: {total}</p>
+        <input
+          type="text"
+          placeholder="Поиск по имени или username..."
+          value={search}
+          onChange={(e) => handleSearch(e.target.value)}
+          className="px-4 py-2 rounded-lg bg-white/5 border border-white/10 text-white placeholder:text-white/30 focus:outline-none focus:ring-2 focus:ring-blue-500 w-80"
+        />
+      </div>
 
       {loading ? <div className="text-white/40 text-sm">Загрузка...</div> : (
         <div className="overflow-x-auto">
@@ -1405,6 +1421,119 @@ function PromoCodesTab() {
   )
 }
 
+// ─── API Balance Tab ──────────────────────────────────────────────────────────
+function APIBalanceTab() {
+  const [loading, setLoading] = useState(false)
+  const [balances, setBalances] = useState<{
+    suno?: { balance: number; status: string }
+    defapi?: { balance: number; status: string }
+    kieapi?: { balance: number; status: string }
+  }>({})
+
+  useEffect(() => {
+    loadBalances()
+  }, [])
+
+  const loadBalances = async () => {
+    setLoading(true)
+    try {
+      const res = await adminApi.getAPIBalances()
+      setBalances(res)
+    } catch (err) {
+      console.error('Failed to load API balances:', err)
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  if (loading) return <div className="text-white/40">Загрузка...</div>
+
+  return (
+    <div className="space-y-6">
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+        {/* Suno API */}
+        <div className="p-6 rounded-xl border border-white/5 bg-white/[0.03]">
+          <div className="flex items-center gap-3 mb-4">
+            <div className="w-12 h-12 rounded-full bg-purple-500/20 flex items-center justify-center">
+              <span className="text-2xl">🎵</span>
+            </div>
+            <div>
+              <h3 className="text-lg font-semibold text-white">Suno API</h3>
+              <p className="text-xs text-white/40">Генерация музыки</p>
+            </div>
+          </div>
+          <div className="space-y-2">
+            <div className="flex justify-between items-baseline">
+              <span className="text-white/60 text-sm">Баланс:</span>
+              <span className="text-2xl font-bold text-white">
+                {balances.suno?.balance !== undefined ? `$${balances.suno.balance.toFixed(2)}` : '—'}
+              </span>
+            </div>
+            <div className="text-xs text-white/30">
+              {balances.suno?.status || 'Нет данных'}
+            </div>
+          </div>
+        </div>
+
+        {/* DefAPI */}
+        <div className="p-6 rounded-xl border border-white/5 bg-white/[0.03]">
+          <div className="flex items-center gap-3 mb-4">
+            <div className="w-12 h-12 rounded-full bg-blue-500/20 flex items-center justify-center">
+              <span className="text-2xl">🎨</span>
+            </div>
+            <div>
+              <h3 className="text-lg font-semibold text-white">DefAPI</h3>
+              <p className="text-xs text-white/40">Генерация изображений</p>
+            </div>
+          </div>
+          <div className="space-y-2">
+            <div className="flex justify-between items-baseline">
+              <span className="text-white/60 text-sm">Баланс:</span>
+              <span className="text-2xl font-bold text-white">
+                {balances.defapi?.balance !== undefined ? `$${balances.defapi.balance.toFixed(5)}` : '—'}
+              </span>
+            </div>
+            <div className="text-xs text-white/30">
+              {balances.defapi?.status || 'Нет данных'}
+            </div>
+          </div>
+        </div>
+
+        {/* KieAPI */}
+        <div className="p-6 rounded-xl border border-white/5 bg-white/[0.03]">
+          <div className="flex items-center gap-3 mb-4">
+            <div className="w-12 h-12 rounded-full bg-green-500/20 flex items-center justify-center">
+              <span className="text-2xl">🎬</span>
+            </div>
+            <div>
+              <h3 className="text-lg font-semibold text-white">KieAPI</h3>
+              <p className="text-xs text-white/40">Генерация видео</p>
+            </div>
+          </div>
+          <div className="space-y-2">
+            <div className="flex justify-between items-baseline">
+              <span className="text-white/60 text-sm">Баланс:</span>
+              <span className="text-2xl font-bold text-white">
+                {balances.kieapi?.balance !== undefined ? `$${balances.kieapi.balance.toFixed(2)}` : '—'}
+              </span>
+            </div>
+            <div className="text-xs text-white/30">
+              {balances.kieapi?.status || 'Нет данных'}
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <button
+        onClick={loadBalances}
+        className="w-full px-4 py-3 rounded-xl bg-white/5 hover:bg-white/10 text-white font-semibold transition-colors"
+      >
+        🔄 Обновить балансы
+      </button>
+    </div>
+  )
+}
+
 // ─── Maintenance Tab ──────────────────────────────────────────────────────────
 function MaintenanceTab() {
   const [loading, setLoading] = useState(false)
@@ -1551,6 +1680,7 @@ export function AdminPage() {
           {tab === 'trends' && <TrendsTab />}
           {tab === 'promo_codes' && <PromoCodesTab />}
           {tab === 'maintenance' && <MaintenanceTab />}
+          {tab === 'api_balance' && <APIBalanceTab />}
         </CardContent>
       </Card>
     </div>

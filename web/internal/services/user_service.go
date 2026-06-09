@@ -57,8 +57,8 @@ func (s *UserService) ConsumeQuota(telegramID int64, category models.QuotaCatego
 	return s.quotaRepo.Consume(telegramID, category, amount)
 }
 
-func (s *UserService) GetAll(limit, offset int) ([]*models.User, int, error) {
-	return s.userRepo.GetAll(limit, offset)
+func (s *UserService) GetAll(limit, offset int, search string) ([]*models.User, int, error) {
+	return s.userRepo.GetAll(limit, offset, search)
 }
 
 func (s *UserService) GetStats() (map[string]interface{}, error) {

@@ -220,6 +220,9 @@ func New(cfg *config.Config, db *sql.DB) *Server {
 			// Maintenance mode management
 			admin.GET("/maintenance", adminHandler.GetMaintenanceStatus)
 			admin.POST("/maintenance", adminHandler.SetMaintenanceMode)
+
+			// API Balances
+			admin.GET("/api-balances", adminHandler.GetAPIBalances)
 		}
 	}
 

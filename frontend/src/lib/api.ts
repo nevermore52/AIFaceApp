@@ -191,8 +191,8 @@ export const generationApi = {
 export const adminApi = {
   getStats: (period = 'all') =>
     api.get<any>(`/admin/stats?period=${period}`),
-  getUsers: (limit = 20, offset = 0) =>
-    api.get<any>(`/admin/users?limit=${limit}&offset=${offset}`),
+  getUsers: (limit = 20, offset = 0, search = '') =>
+    api.get<any>(`/admin/users?limit=${limit}&offset=${offset}&search=${encodeURIComponent(search)}`),
   updateUser: (id: number, data: { is_admin?: boolean; is_blocked?: boolean }) =>
     api.put<any>(`/admin/users/${id}`, data),
   setSubscription: (id: number, plan: string, days: number) =>
@@ -239,6 +239,8 @@ export const adminApi = {
     api.get<{ enabled: boolean; message: string }>('/admin/maintenance'),
   setMaintenanceMode: (enabled: boolean, message: string) =>
     api.post<{ message: string }>('/admin/maintenance', { enabled, message }),
+  getAPIBalances: () =>
+    api.get<{ suno?: { balance: number; status: string }; defapi?: { balance: number; status: string }; kieapi?: { balance: number; status: string } }>('/admin/api-balances'),
 }
 
 export const promoApi = {

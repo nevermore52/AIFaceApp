@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
 	"os"
 	"strconv"
@@ -89,7 +90,9 @@ func (h *AdminHandler) GetUsers(c *gin.Context) {
 		limit = 100
 	}
 
-	users, total, err := h.userService.GetAll(limit, offset)
+	search := c.DefaultQuery("search", "")
+
+	users, total, err := h.userService.GetAll(limit, offset, search)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to get users"})
 		return
@@ -505,4 +508,77 @@ func (h *AdminHandler) SetMaintenanceMode(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusOK, gin.H{"message": "Maintenance mode updated"})
+}
+
+// GetAPIBalances возвращает балансы всех API
+func (h *AdminHandler) GetAPIBalances(c *gin.Context) {
+	result := gin.H{}
+
+	// Получаем балансы из переменных окружения для API ключей
+	// Вызываем API напрямую
+
+	// Suno API
+	if sunoKey := os.Getenv("SUNO_API_KEY"); sunoKey != "" {
+		client := &http.Client{Timeout: 10 * time.Second}
+		req, _ := http.NewRequest("GET", "https://api.acedata.cloud/suno/audios/user_info", nil)
+		req.Header.Set("Authorization", "Bearer "+sunoKey)
+		if resp, err := client.Do(req); err == nil {
+			defer resp.Body.Close()
+			var data map[string]interface{}
+			if json.NewDecoder(resp.Body).Decode(&data) == nil {
+				if balance, ok := data["data"].(float64); ok {
+					result["suno"] = gin.H{
+						"balance": balance,
+						"status":  fmt.Sprintf("HTTP %d", resp.StatusCode),
+					}
+				}
+			}
+		}
+	}
+
+	// DefAPI
+	if defKey := os.Getenv("DEFAPI_API_KEY"); defKey != "" {
+		defURL := os.Getenv("DEFAPI_BASE_URL")
+		if defURL == "" {
+			defURL = "https://api.defapi.com"
+		}
+		client := &http.Client{Timeout: 10 * time.Second}
+		req, _ := http.NewRequest("GET", defURL+"/balance", nil)
+		req.Header.Set("Authorization", "Bearer "+defKey)
+		if resp, err := client.Do(req); err == nil {
+			defer resp.Body.Close()
+			body, _ := io.ReadAll(resp.Body)
+			if balance, err := strconv.ParseFloat(strings.TrimSpace(string(body)), 64); err == nil {
+				result["defapi"] = gin.H{
+					"balance": balance,
+					"status":  fmt.Sprintf("HTTP %d", resp.StatusCode),
+				}
+			}
+		}
+	}
+
+	// KieAPI
+	if kieKey := os.Getenv("KIEAPI_API_KEY"); kieKey != "" {
+		kieURL := os.Getenv("KIEAPI_BASE_URL")
+		if kieURL == "" {
+			kieURL = "https://api.klingai.com"
+		}
+		client := &http.Client{Timeout: 10 * time.Second}
+		req, _ := http.NewRequest("POST", kieURL+"/v1/users/credit", nil)
+		req.Header.Set("Authorization", "Bearer "+kieKey)
+		if resp, err := client.Do(req); err == nil {
+			defer resp.Body.Close()
+			var data map[string]interface{}
+			if json.NewDecoder(resp.Body).Decode(&data) == nil {
+				if dataField, ok := data["data"].(float64); ok {
+					result["kieapi"] = gin.H{
+						"balance": dataField,
+						"status":  fmt.Sprintf("HTTP %d", resp.StatusCode),
+					}
+				}
+			}
+		}
+	}
+
+	c.JSON(http.StatusOK, result)
 }

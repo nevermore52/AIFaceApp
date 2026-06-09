@@ -6670,6 +6670,9 @@ func (b *Bot) handleAdminHelp(chatID int64) {
   Премиум эмодзи: [emoji:ID] — ID узнать через /emoji
 /admin sub_set <user_id> <mini|start|pro> <days> - Выдать подписку
 /admin sub_remove <user_id> - Убрать подписку
+/admin maintenance - Показать статус техработ
+/admin maintenance on [сообщение] - Включить техработы
+/admin maintenance off - Выключить техработы
 /admin help - Эта справка
 
 /admin photo_discount_set 50 3600     # 50% на 1 час

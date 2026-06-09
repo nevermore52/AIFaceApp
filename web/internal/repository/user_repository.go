@@ -277,21 +277,41 @@ func (r *UserRepository) IsAdmin(userID int64) (bool, error) {
 	return isAdmin, err
 }
 
-func (r *UserRepository) GetAll(limit, offset int) ([]*models.User, int, error) {
-	var total int
-	err := r.db.QueryRow(`SELECT COUNT(*) FROM users`).Scan(&total)
-	if err != nil {
-		return nil, 0, err
+func (r *UserRepository) GetAll(limit, offset int, search string) ([]*models.User, int, error) {
+	// Построение WHERE условия для поиска
+	whereClause := ""
+	args := []interface{}{}
+	argIndex := 1
+
+	if search != "" {
+		whereClause = fmt.Sprintf(" WHERE LOWER(username) LIKE LOWER($%d) OR LOWER(first_name) LIKE LOWER($%d) OR LOWER(last_name) LIKE LOWER($%d)", argIndex, argIndex, argIndex)
+		args = append(args, "%"+search+"%")
+		argIndex++
 	}
 
-	query := `
+	var total int
+	countQuery := "SELECT COUNT(*) FROM users" + whereClause
+	if len(args) > 0 {
+		err := r.db.QueryRow(countQuery, args[0]).Scan(&total)
+		if err != nil {
+			return nil, 0, err
+		}
+	} else {
+		err := r.db.QueryRow(countQuery).Scan(&total)
+		if err != nil {
+			return nil, 0, err
+		}
+	}
+
+	query := fmt.Sprintf(`
 		SELECT id, telegram_id, email, username, first_name, last_name, avatar_url,
 			   language_code, is_premium, is_admin, referrer_id, referral_code,
 			   referrals_count, subscription_type, subscription_started_at, subscription_end,
 			   created_at, updated_at, is_blocked
-		FROM users ORDER BY created_at DESC LIMIT $1 OFFSET $2`
+		FROM users%s ORDER BY created_at DESC LIMIT $%d OFFSET $%d`, whereClause, argIndex, argIndex+1)
 
-	rows, err := r.db.Query(query, limit, offset)
+	args = append(args, limit, offset)
+	rows, err := r.db.Query(query, args...)
 	if err != nil {
 		return nil, 0, err
 	}
