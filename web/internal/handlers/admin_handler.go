@@ -518,28 +518,42 @@ func (h *AdminHandler) GetAPIBalances(c *gin.Context) {
 	// Suno API
 	if sunoKey := os.Getenv("SUNO_API_KEY"); sunoKey != "" {
 		client := &http.Client{Timeout: 10 * time.Second}
-		req, _ := http.NewRequest("GET", "https://api.acedata.cloud/suno/audios/user_info", nil)
+		req, _ := http.NewRequest("GET", "https://api.sunoapi.org/api/v1/generate/credit", nil)
 		req.Header.Set("Authorization", "Bearer "+sunoKey)
+		req.Header.Set("Accept", "application/json")
 		if resp, err := client.Do(req); err == nil {
 			defer resp.Body.Close()
 			body, _ := io.ReadAll(resp.Body)
 			log.Printf("Suno API response: status=%d body=%s", resp.StatusCode, string(body))
-			var data map[string]interface{}
-			if json.Unmarshal(body, &data) == nil {
-				if balance, ok := data["data"].(float64); ok {
-					result["suno"] = gin.H{
-						"balance": balance,
-						"status":  fmt.Sprintf("HTTP %d", resp.StatusCode),
-					}
-				} else {
-					log.Printf("Suno: data field not float64, data=%v", data)
+
+			var payload interface{}
+			balanceStr := ""
+			if json.Unmarshal(body, &payload) == nil {
+				if num, ok := findNumberByKeys(payload, "credit", "credits", "balance", "available_credits"); ok {
+					balanceStr = fmt.Sprintf("%.0f", num)
+				} else if s, ok := findStringByKeys(payload, "credit", "credits", "balance", "available_credits"); ok {
+					balanceStr = s
+				}
+			}
+
+			if balanceStr != "" {
+				result["suno"] = gin.H{
+					"balance": balanceStr,
+					"status":  fmt.Sprintf("HTTP %d", resp.StatusCode),
+				}
+			} else {
+				result["suno"] = gin.H{
+					"raw":    string(body),
+					"status": fmt.Sprintf("HTTP %d", resp.StatusCode),
 				}
 			}
 		} else {
 			log.Printf("Suno API error: %v", err)
+			result["suno"] = gin.H{"error": err.Error()}
 		}
 	} else {
 		log.Printf("Suno API key not set")
+		result["suno"] = gin.H{"error": "API key not set"}
 	}
 
 	// DefAPI
@@ -548,26 +562,44 @@ func (h *AdminHandler) GetAPIBalances(c *gin.Context) {
 		if defURL == "" {
 			defURL = "https://api.defapi.com"
 		}
+		defURL = strings.TrimRight(defURL, "/")
 		client := &http.Client{Timeout: 10 * time.Second}
-		req, _ := http.NewRequest("GET", defURL+"/balance", nil)
+		req, _ := http.NewRequest("GET", defURL+"/api/user", nil)
 		req.Header.Set("Authorization", "Bearer "+defKey)
+		req.Header.Set("Accept", "application/json")
 		if resp, err := client.Do(req); err == nil {
 			defer resp.Body.Close()
 			body, _ := io.ReadAll(resp.Body)
 			log.Printf("DefAPI response: status=%d body=%s", resp.StatusCode, string(body))
-			if balance, err := strconv.ParseFloat(strings.TrimSpace(string(body)), 64); err == nil {
+
+			var payload interface{}
+			balanceStr := ""
+			if json.Unmarshal(body, &payload) == nil {
+				if s, ok := findStringByKeys(payload, "credit"); ok {
+					balanceStr = s
+				} else if num, ok := findNumberByKeys(payload, "credit"); ok {
+					balanceStr = fmt.Sprintf("%.8f", num)
+				}
+			}
+
+			if balanceStr != "" {
 				result["defapi"] = gin.H{
-					"balance": balance,
+					"balance": balanceStr,
 					"status":  fmt.Sprintf("HTTP %d", resp.StatusCode),
 				}
 			} else {
-				log.Printf("DefAPI parse error: %v", err)
+				result["defapi"] = gin.H{
+					"raw":    string(body),
+					"status": fmt.Sprintf("HTTP %d", resp.StatusCode),
+				}
 			}
 		} else {
 			log.Printf("DefAPI error: %v", err)
+			result["defapi"] = gin.H{"error": err.Error()}
 		}
 	} else {
 		log.Printf("DefAPI key not set")
+		result["defapi"] = gin.H{"error": "API key not set"}
 	}
 
 	// KieAPI
@@ -576,30 +608,114 @@ func (h *AdminHandler) GetAPIBalances(c *gin.Context) {
 		if kieURL == "" {
 			kieURL = "https://api.klingai.com"
 		}
+		kieURL = strings.TrimRight(kieURL, "/")
 		client := &http.Client{Timeout: 10 * time.Second}
-		req, _ := http.NewRequest("POST", kieURL+"/v1/users/credit", nil)
+		req, _ := http.NewRequest("GET", kieURL+"/api/v1/chat/credit", nil)
 		req.Header.Set("Authorization", "Bearer "+kieKey)
+		req.Header.Set("Accept", "application/json")
 		if resp, err := client.Do(req); err == nil {
 			defer resp.Body.Close()
 			body, _ := io.ReadAll(resp.Body)
 			log.Printf("KieAPI response: status=%d body=%s", resp.StatusCode, string(body))
-			var data map[string]interface{}
-			if json.Unmarshal(body, &data) == nil {
-				if dataField, ok := data["data"].(float64); ok {
-					result["kieapi"] = gin.H{
-						"balance": dataField,
-						"status":  fmt.Sprintf("HTTP %d", resp.StatusCode),
-					}
-				} else {
-					log.Printf("KieAPI: data field not float64, data=%v", data)
+
+			var payload interface{}
+			balanceStr := ""
+			if json.Unmarshal(body, &payload) == nil {
+				if s, ok := findStringByKeys(payload, "credit", "credits", "balance", "available_credits", "available"); ok {
+					balanceStr = s
+				} else if num, ok := findNumberByKeys(payload, "credit", "credits", "balance", "available_credits", "available"); ok {
+					balanceStr = fmt.Sprintf("%.8f", num)
+				}
+			}
+
+			if balanceStr != "" {
+				result["kieapi"] = gin.H{
+					"balance": balanceStr,
+					"status":  fmt.Sprintf("HTTP %d", resp.StatusCode),
+				}
+			} else {
+				result["kieapi"] = gin.H{
+					"raw":    string(body),
+					"status": fmt.Sprintf("HTTP %d", resp.StatusCode),
 				}
 			}
 		} else {
 			log.Printf("KieAPI error: %v", err)
+			result["kieapi"] = gin.H{"error": err.Error()}
 		}
 	} else {
 		log.Printf("KieAPI key not set")
+		result["kieapi"] = gin.H{"error": "API key not set"}
 	}
 
 	c.JSON(http.StatusOK, result)
+}
+
+// findStringByKeys ищет первое строковое значение по ключам
+func findStringByKeys(v interface{}, keys ...string) (string, bool) {
+	switch val := v.(type) {
+	case map[string]interface{}:
+		for _, k := range keys {
+			if raw, ok := val[k]; ok {
+				if s, ok2 := raw.(string); ok2 && s != "" {
+					return s, true
+				}
+			}
+		}
+		for _, vv := range val {
+			if res, ok := findStringByKeys(vv, keys...); ok {
+				return res, true
+			}
+		}
+	case []interface{}:
+		for _, vv := range val {
+			if res, ok := findStringByKeys(vv, keys...); ok {
+				return res, true
+			}
+		}
+	}
+	return "", false
+}
+
+// findNumberByKeys ищет первое числовое значение по ключам (float64/числовая строка)
+func findNumberByKeys(v interface{}, keys ...string) (float64, bool) {
+	switch val := v.(type) {
+	case map[string]interface{}:
+		for _, k := range keys {
+			if raw, ok := val[k]; ok {
+				if n, okNum := toFloat(raw); okNum {
+					return n, true
+				}
+			}
+		}
+		for _, vv := range val {
+			if n, ok := findNumberByKeys(vv, keys...); ok {
+				return n, true
+			}
+		}
+	case []interface{}:
+		for _, vv := range val {
+			if n, ok := findNumberByKeys(vv, keys...); ok {
+				return n, true
+			}
+		}
+	}
+	return 0, false
+}
+
+// toFloat конвертирует interface{} в float64
+func toFloat(v interface{}) (float64, bool) {
+	switch val := v.(type) {
+	case float64:
+		return val, true
+	case int:
+		return float64(val), true
+	case int64:
+		return float64(val), true
+	case string:
+		if f, err := strconv.ParseFloat(strings.TrimSpace(val), 64); err == nil {
+			return f, true
+		}
+	}
+	return 0, false
 }
