@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"log"
 	"net/http"
 	"os"
 	"strconv"
@@ -514,9 +515,6 @@ func (h *AdminHandler) SetMaintenanceMode(c *gin.Context) {
 func (h *AdminHandler) GetAPIBalances(c *gin.Context) {
 	result := gin.H{}
 
-	// Получаем балансы из переменных окружения для API ключей
-	// Вызываем API напрямую
-
 	// Suno API
 	if sunoKey := os.Getenv("SUNO_API_KEY"); sunoKey != "" {
 		client := &http.Client{Timeout: 10 * time.Second}
@@ -524,16 +522,24 @@ func (h *AdminHandler) GetAPIBalances(c *gin.Context) {
 		req.Header.Set("Authorization", "Bearer "+sunoKey)
 		if resp, err := client.Do(req); err == nil {
 			defer resp.Body.Close()
+			body, _ := io.ReadAll(resp.Body)
+			log.Printf("Suno API response: status=%d body=%s", resp.StatusCode, string(body))
 			var data map[string]interface{}
-			if json.NewDecoder(resp.Body).Decode(&data) == nil {
+			if json.Unmarshal(body, &data) == nil {
 				if balance, ok := data["data"].(float64); ok {
 					result["suno"] = gin.H{
 						"balance": balance,
 						"status":  fmt.Sprintf("HTTP %d", resp.StatusCode),
 					}
+				} else {
+					log.Printf("Suno: data field not float64, data=%v", data)
 				}
 			}
+		} else {
+			log.Printf("Suno API error: %v", err)
 		}
+	} else {
+		log.Printf("Suno API key not set")
 	}
 
 	// DefAPI
@@ -548,13 +554,20 @@ func (h *AdminHandler) GetAPIBalances(c *gin.Context) {
 		if resp, err := client.Do(req); err == nil {
 			defer resp.Body.Close()
 			body, _ := io.ReadAll(resp.Body)
+			log.Printf("DefAPI response: status=%d body=%s", resp.StatusCode, string(body))
 			if balance, err := strconv.ParseFloat(strings.TrimSpace(string(body)), 64); err == nil {
 				result["defapi"] = gin.H{
 					"balance": balance,
 					"status":  fmt.Sprintf("HTTP %d", resp.StatusCode),
 				}
+			} else {
+				log.Printf("DefAPI parse error: %v", err)
 			}
+		} else {
+			log.Printf("DefAPI error: %v", err)
 		}
+	} else {
+		log.Printf("DefAPI key not set")
 	}
 
 	// KieAPI
@@ -568,16 +581,24 @@ func (h *AdminHandler) GetAPIBalances(c *gin.Context) {
 		req.Header.Set("Authorization", "Bearer "+kieKey)
 		if resp, err := client.Do(req); err == nil {
 			defer resp.Body.Close()
+			body, _ := io.ReadAll(resp.Body)
+			log.Printf("KieAPI response: status=%d body=%s", resp.StatusCode, string(body))
 			var data map[string]interface{}
-			if json.NewDecoder(resp.Body).Decode(&data) == nil {
+			if json.Unmarshal(body, &data) == nil {
 				if dataField, ok := data["data"].(float64); ok {
 					result["kieapi"] = gin.H{
 						"balance": dataField,
 						"status":  fmt.Sprintf("HTTP %d", resp.StatusCode),
 					}
+				} else {
+					log.Printf("KieAPI: data field not float64, data=%v", data)
 				}
 			}
+		} else {
+			log.Printf("KieAPI error: %v", err)
 		}
+	} else {
+		log.Printf("KieAPI key not set")
 	}
 
 	c.JSON(http.StatusOK, result)
