@@ -529,9 +529,9 @@ func (h *AdminHandler) GetAPIBalances(c *gin.Context) {
 			var payload interface{}
 			balanceStr := ""
 			if json.Unmarshal(body, &payload) == nil {
-				if num, ok := findNumberByKeys(payload, "credit", "credits", "balance", "available_credits"); ok {
+				if num, ok := findNumberByKeys(payload, "data", "credit", "credits", "balance", "available_credits"); ok {
 					balanceStr = fmt.Sprintf("%.0f", num)
-				} else if s, ok := findStringByKeys(payload, "credit", "credits", "balance", "available_credits"); ok {
+				} else if s, ok := findStringByKeys(payload, "data", "credit", "credits", "balance", "available_credits"); ok {
 					balanceStr = s
 				}
 			}
@@ -621,10 +621,10 @@ func (h *AdminHandler) GetAPIBalances(c *gin.Context) {
 			var payload interface{}
 			balanceStr := ""
 			if json.Unmarshal(body, &payload) == nil {
-				if s, ok := findStringByKeys(payload, "credit", "credits", "balance", "available_credits", "available"); ok {
+				if s, ok := findStringByKeys(payload, "data", "credit", "credits", "balance", "available_credits", "available"); ok {
 					balanceStr = s
-				} else if num, ok := findNumberByKeys(payload, "credit", "credits", "balance", "available_credits", "available"); ok {
-					balanceStr = fmt.Sprintf("%.8f", num)
+				} else if num, ok := findNumberByKeys(payload, "data", "credit", "credits", "balance", "available_credits", "available"); ok {
+					balanceStr = fmt.Sprintf("%.2f", num)
 				}
 			}
 
