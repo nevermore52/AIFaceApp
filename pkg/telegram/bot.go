@@ -6323,6 +6323,40 @@ func (b *Bot) handleAdminCommand(msg *tgmodels.Message) {
 			return
 		}
 		b.sendText(msg.Chat.ID, "✅ Скидка на фото удалена")
+	case "get_user":
+		if len(parts) < 2 {
+			b.sendErrorMessage(msg.Chat.ID, "Использование: /admin get_user <telegram_id>")
+			return
+		}
+		telegramID, err := strconv.ParseInt(parts[1], 10, 64)
+		if err != nil {
+			b.sendErrorMessage(msg.Chat.ID, "Некорректный telegram_id")
+			return
+		}
+		b.handleAdminGetUser(msg.Chat.ID, telegramID)
+	case "give_user":
+		// Usage: /admin give_user <telegram_id> <category> <qty>
+		// Example: /admin give_user 123456 image 10
+		if len(parts) < 4 {
+			b.sendErrorMessage(msg.Chat.ID, "Использование: /admin give_user <telegram_id> <image|video|music|text> <qty>\nПример: /admin give_user 123456 image 10")
+			return
+		}
+		telegramID, err := strconv.ParseInt(parts[1], 10, 64)
+		if err != nil {
+			b.sendErrorMessage(msg.Chat.ID, "Некорректный telegram_id")
+			return
+		}
+		category := strings.ToLower(parts[2])
+		if category != "image" && category != "video" && category != "music" && category != "text" {
+			b.sendErrorMessage(msg.Chat.ID, "Категория должна быть: image, video, music или text")
+			return
+		}
+		qty, err := strconv.Atoi(parts[3])
+		if err != nil || qty <= 0 {
+			b.sendErrorMessage(msg.Chat.ID, "Количество должно быть положительным числом")
+			return
+		}
+		b.handleAdminGiveUser(msg.Chat.ID, telegramID, category, qty)
 	case "help":
 		b.handleAdminHelp(msg.Chat.ID)
 	default:
@@ -6370,6 +6404,112 @@ func formatDuration(d time.Duration) string {
 		return fmt.Sprintf("%dм %dс", minutes, seconds)
 	}
 	return fmt.Sprintf("%dс", seconds)
+}
+
+func (b *Bot) handleAdminGetUser(chatID int64, telegramID int64) {
+	user, err := b.userService.GetUserByTelegramID(telegramID)
+	if err != nil {
+		b.sendErrorMessage(chatID, fmt.Sprintf("Пользователь с telegram_id %d не найден", telegramID))
+		return
+	}
+
+	quota, err := b.userService.GetQuota(telegramID)
+	if err != nil {
+		b.sendErrorMessage(chatID, fmt.Sprintf("Ошибка получения квот: %v", err))
+		return
+	}
+
+	var username string
+	if user.Username != "" {
+		username = "@" + user.Username
+	} else {
+		username = "—"
+	}
+
+	var subscription string
+	if user.Subscription != "" {
+		subscription = strings.ToUpper(user.Subscription)
+		if user.SubEnd != nil {
+			subscription += fmt.Sprintf(" (до %s)", user.SubEnd.Format("02.01.2006"))
+		}
+	} else {
+		subscription = "Нет"
+	}
+
+	text := fmt.Sprintf(
+		"👤 <b>Информация о пользователе</b>\n\n"+
+			"🆔 ID: <code>%d</code>\n"+
+			"📱 Telegram ID: <code>%d</code>\n"+
+			"👤 Имя: %s %s\n"+
+			"🔖 Username: %s\n"+
+			"💎 Подписка: %s\n\n"+
+			"📊 <b>Остаток генераций:</b>\n"+
+			"📸 Фото: %d (базовые: %d, доп: %d)\n"+
+			"🎬 Видео: %d (базовые: %d, доп: %d)\n"+
+			"🎵 Музыка: %d (базовые: %d, доп: %d)\n"+
+			"💬 Текст: %d (базовые: %d, доп: %d)",
+		user.ID,
+		telegramID,
+		user.FirstName,
+		user.LastName,
+		username,
+		subscription,
+		quota.ImageWeekly+quota.ImageExtra, quota.ImageWeekly, quota.ImageExtra,
+		quota.VideoWeekly+quota.VideoExtra, quota.VideoWeekly, quota.VideoExtra,
+		quota.MusicWeekly+quota.MusicExtra, quota.MusicWeekly, quota.MusicExtra,
+		quota.TextDaily+quota.TextExtra, quota.TextDaily, quota.TextExtra,
+	)
+
+	msg := newMessageConfig(chatID, text)
+	msg.ParseMode = tgbotapi.ModeHTML
+	b.sendMsg(msg)
+}
+
+func (b *Bot) handleAdminGiveUser(chatID int64, telegramID int64, category string, qty int) {
+	user, err := b.userService.GetUserByTelegramID(telegramID)
+	if err != nil {
+		b.sendErrorMessage(chatID, fmt.Sprintf("Пользователь с telegram_id %d не найден", telegramID))
+		return
+	}
+
+	var categoryName string
+	var quotaCategory models.QuotaCategory
+	switch category {
+	case "image":
+		categoryName = "📸 фото"
+		quotaCategory = models.QuotaCategoryImage
+	case "video":
+		categoryName = "🎬 видео"
+		quotaCategory = models.QuotaCategoryVideo
+	case "music":
+		categoryName = "🎵 музыку"
+		quotaCategory = models.QuotaCategoryMusic
+	case "text":
+		categoryName = "💬 текст"
+		quotaCategory = models.QuotaCategoryText
+	}
+
+	if err := b.userService.AddExtraQuota(telegramID, quotaCategory, qty); err != nil {
+		b.sendErrorMessage(chatID, fmt.Sprintf("Ошибка начисления: %v", err))
+		return
+	}
+
+	var username string
+	if user.Username != "" {
+		username = "@" + user.Username
+	} else {
+		username = user.FirstName + " " + user.LastName
+	}
+
+	text := fmt.Sprintf("✅ Начислено %d генераций (%s)\n\nПользователь: %s\nTelegram ID: <code>%d</code>", qty, categoryName, username, telegramID)
+	msg := newMessageConfig(chatID, text)
+	msg.ParseMode = tgbotapi.ModeHTML
+	b.sendMsg(msg)
+
+	// Уведомляем пользователя
+	notifyText := fmt.Sprintf("🎁 Вам начислено %d генераций (%s)", qty, categoryName)
+	notifyMsg := newMessageConfig(telegramID, notifyText)
+	b.sendMsg(notifyMsg)
 }
 
 func (b *Bot) handleAdminBroadcast(chatID int64, text string) {
@@ -6673,13 +6813,20 @@ func (b *Bot) handleAdminHelp(chatID int64) {
 /admin maintenance - Показать статус техработ
 /admin maintenance on [сообщение] - Включить техработы
 /admin maintenance off - Выключить техработы
-/admin help - Эта справка
 
-/admin photo_discount_set 50 3600     # 50% на 1 час
-/admin photo_discount_set 30 86400    # 30% на 24 часа
-/admin photo_discount_set 25 604800   # 25% на неделю
-/admin photo_discount_remove          # Удалить скидку
-/admin photo_discount                 # Статус скидки
+👤 Управление пользователями:
+/admin get_user <telegram_id> - Информация о пользователе
+/admin give_user <telegram_id> <category> <qty> - Начислить генерации
+  Категории: image, video, music, text
+  Пример: /admin give_user 123456 image 10
+
+💰 Управление скидками:
+/admin photo_discount_set 50 24     # 50% на 24 часа
+/admin photo_discount_set 30 168    # 30% на неделю
+/admin photo_discount_remove        # Удалить скидку
+/admin photo_discount               # Статус скидки
+
+/admin help - Эта справка
 `
 
 	msg := newMessageConfig(chatID, text)

@@ -223,6 +223,11 @@ func New(cfg *config.Config, db *sql.DB) *Server {
 
 			// API Balances
 			admin.GET("/api-balances", adminHandler.GetAPIBalances)
+
+			// User quota management
+			admin.GET("/users/telegram/:telegram_id", adminHandler.GetUserByTelegramID)
+			admin.GET("/users/:id/quota", adminHandler.GetUserQuotaBalance)
+			admin.POST("/users/:id/quota", adminHandler.AddUserQuota)
 		}
 	}
 

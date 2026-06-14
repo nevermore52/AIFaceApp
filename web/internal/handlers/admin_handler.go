@@ -657,3 +657,81 @@ func (h *AdminHandler) GetAPIBalances(c *gin.Context) {
 
 	c.JSON(http.StatusOK, result)
 }
+
+// GetUserByTelegramID получает пользователя по telegram_id
+func (h *AdminHandler) GetUserByTelegramID(c *gin.Context) {
+	telegramIDStr := c.Param("telegram_id")
+	telegramID, err := strconv.ParseInt(telegramIDStr, 10, 64)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid telegram_id"})
+		return
+	}
+
+	user, err := h.userService.GetByTelegramID(telegramID)
+	if err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "User not found"})
+		return
+	}
+
+	c.JSON(http.StatusOK, user)
+}
+
+// GetUserQuotaBalance получает баланс генераций пользователя
+func (h *AdminHandler) GetUserQuotaBalance(c *gin.Context) {
+	id, err := strconv.ParseInt(c.Param("id"), 10, 64)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid ID"})
+		return
+	}
+
+	balance, err := h.userService.GetUserQuotaBalance(id)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": fmt.Sprintf("Failed to get quota balance: %v", err)})
+		return
+	}
+
+	c.JSON(http.StatusOK, balance)
+}
+
+// AddUserQuota добавляет генерации пользователю
+func (h *AdminHandler) AddUserQuota(c *gin.Context) {
+	id, err := strconv.ParseInt(c.Param("id"), 10, 64)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid ID"})
+		return
+	}
+
+	var req struct {
+		Category string `json:"category" binding:"required"`
+		Amount   int    `json:"amount" binding:"required"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid request"})
+		return
+	}
+
+	if req.Amount <= 0 {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Amount must be positive"})
+		return
+	}
+
+	validCategories := []string{"image", "video", "music", "text"}
+	valid := false
+	for _, cat := range validCategories {
+		if req.Category == cat {
+			valid = true
+			break
+		}
+	}
+	if !valid {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid category. Must be: image, video, music, or text"})
+		return
+	}
+
+	if err := h.userService.AddUserQuota(id, req.Category, req.Amount); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": fmt.Sprintf("Failed to add quota: %v", err)})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{"message": "Quota added successfully"})
+}

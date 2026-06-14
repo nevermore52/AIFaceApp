@@ -241,6 +241,12 @@ export const adminApi = {
     api.post<{ message: string }>('/admin/maintenance', { enabled, message }),
   getAPIBalances: () =>
     api.get<{ suno?: { balance: number; status: string }; defapi?: { balance: number; status: string }; kieapi?: { balance: number; status: string } }>('/admin/api-balances'),
+  getUserByTelegramId: (telegramId: string) =>
+    api.get<any>(`/admin/users/telegram/${telegramId}`),
+  getUserQuotaBalance: (userId: number) =>
+    api.get<any>(`/admin/users/${userId}/quota`),
+  addUserQuota: (userId: number, category: string, amount: number) =>
+    api.post<{ message: string }>(`/admin/users/${userId}/quota`, { category, amount }),
 }
 
 export const promoApi = {

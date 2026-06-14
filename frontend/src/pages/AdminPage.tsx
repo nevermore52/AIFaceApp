@@ -119,6 +119,13 @@ function UsersTab() {
   const [saving, setSaving] = useState(false)
   const [msg, setMsg] = useState('')
   const [search, setSearch] = useState('')
+  const [telegramSearch, setTelegramSearch] = useState('')
+  const [searchedUser, setSearchedUser] = useState<any>(null)
+  const [quotaUser, setQuotaUser] = useState<any>(null)
+  const [quotaBalance, setQuotaBalance] = useState<any>(null)
+  const [addQuotaCategory, setAddQuotaCategory] = useState('image')
+  const [addQuotaAmount, setAddQuotaAmount] = useState(10)
+  const [quotaLoading, setQuotaLoading] = useState(false)
   const limit = 20
 
   const load = useCallback(async (off: number, searchQuery: string) => {
@@ -137,6 +144,49 @@ function UsersTab() {
   const handleSearch = (value: string) => {
     setSearch(value)
     setOffset(0) // Reset to first page on search
+  }
+
+  const searchByTelegramId = async () => {
+    if (!telegramSearch.trim()) return
+    setLoading(true)
+    try {
+      const res = await adminApi.getUserByTelegramId(telegramSearch)
+      setSearchedUser(res)
+      setUsers([res])
+      setTotal(1)
+    } catch (e) {
+      alert('Пользователь не найден')
+      setSearchedUser(null)
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  const loadQuotaBalance = async (user: any) => {
+    setQuotaUser(user)
+    setQuotaLoading(true)
+    try {
+      const balance = await adminApi.getUserQuotaBalance(user.id)
+      setQuotaBalance(balance)
+    } catch (e: any) {
+      alert(`Ошибка: ${e.message}`)
+    } finally {
+      setQuotaLoading(false)
+    }
+  }
+
+  const addQuota = async () => {
+    if (!quotaUser) return
+    setQuotaLoading(true)
+    try {
+      await adminApi.addUserQuota(quotaUser.id, addQuotaCategory, addQuotaAmount)
+      await loadQuotaBalance(quotaUser)
+      setMsg(`✅ Добавлено ${addQuotaAmount} ${addQuotaCategory} генераций`)
+    } catch (e: any) {
+      setMsg(`❌ ${e.message}`)
+    } finally {
+      setQuotaLoading(false)
+    }
   }
 
   const toggleAdmin = async (u: any) => {
@@ -167,15 +217,35 @@ function UsersTab() {
 
   return (
     <div className="space-y-4">
-      <div className="flex items-center justify-between">
+      <div className="flex items-center justify-between gap-4 flex-wrap">
         <p className="text-white/40 text-sm">Всего: {total}</p>
-        <input
-          type="text"
-          placeholder="Поиск по имени или username..."
-          value={search}
-          onChange={(e) => handleSearch(e.target.value)}
-          className="px-4 py-2 rounded-lg bg-white/5 border border-white/10 text-white placeholder:text-white/30 focus:outline-none focus:ring-2 focus:ring-blue-500 w-80"
-        />
+        <div className="flex gap-2 flex-1 max-w-2xl">
+          <input
+            type="text"
+            placeholder="Поиск по имени или username..."
+            value={search}
+            onChange={(e) => handleSearch(e.target.value)}
+            className="flex-1 px-4 py-2 rounded-lg bg-white/5 border border-white/10 text-white placeholder:text-white/30 focus:outline-none focus:ring-2 focus:ring-blue-500"
+          />
+          <div className="flex gap-2">
+            <input
+              type="text"
+              placeholder="Telegram ID..."
+              value={telegramSearch}
+              onChange={(e) => setTelegramSearch(e.target.value)}
+              onKeyPress={(e) => e.key === 'Enter' && searchByTelegramId()}
+              className="w-40 px-4 py-2 rounded-lg bg-white/5 border border-white/10 text-white placeholder:text-white/30 focus:outline-none focus:ring-2 focus:ring-blue-500"
+            />
+            <Button size="sm" onClick={searchByTelegramId} disabled={!telegramSearch.trim()}>
+              🔍
+            </Button>
+            {searchedUser && (
+              <Button size="sm" variant="outline" onClick={() => { setSearchedUser(null); load(offset, search) }} className="border-white/10">
+                Сбросить
+              </Button>
+            )}
+          </div>
+        </div>
       </div>
 
       {loading ? <div className="text-white/40 text-sm">Загрузка...</div> : (
@@ -184,6 +254,7 @@ function UsersTab() {
             <thead>
               <tr className="text-left text-white/30 text-xs uppercase tracking-wider border-b border-white/5">
                 <th className="pb-2 pr-4">ID</th>
+                <th className="pb-2 pr-4">Telegram ID</th>
                 <th className="pb-2 pr-4">Имя / Username</th>
                 <th className="pb-2 pr-4">Подписка</th>
                 <th className="pb-2 pr-4">Статус</th>
@@ -194,6 +265,9 @@ function UsersTab() {
               {users.map((u) => (
                 <tr key={u.id} className="border-b border-white/[0.03] hover:bg-white/[0.02]">
                   <td className="py-2 pr-4 text-white/40">{u.id}</td>
+                  <td className="py-2 pr-4">
+                    <div className="text-white/60 text-xs font-mono">{u.telegram_id || '—'}</div>
+                  </td>
                   <td className="py-2 pr-4">
                     <div className="font-medium text-white/80">{u.first_name} {u.last_name}</div>
                     <div className="text-white/30 text-xs">@{u.username || '—'}</div>
@@ -241,6 +315,12 @@ function UsersTab() {
                           - Подп
                         </button>
                       )}
+                      <button
+                        onClick={() => { loadQuotaBalance(u); setMsg('') }}
+                        className="px-2 py-1 rounded text-[10px] font-bold bg-green-500/20 text-green-400 hover:bg-green-500/30 transition-all"
+                      >
+                        Квота
+                      </button>
                     </div>
                   </td>
                 </tr>
@@ -295,6 +375,79 @@ function UsersTab() {
                 Закрыть
               </Button>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* Quota modal */}
+      {quotaUser && (
+        <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50 p-4">
+          <div className="bg-[#0e0e0e] border border-white/10 rounded-2xl p-6 w-full max-w-md space-y-4">
+            <h3 className="text-lg font-bold text-white">Управление квотами - {quotaUser.first_name}</h3>
+            {msg && <p className="text-sm text-white/60">{msg}</p>}
+            
+            {quotaLoading ? (
+              <div className="text-white/40 text-sm">Загрузка...</div>
+            ) : quotaBalance && (
+              <div className="space-y-3">
+                <div className="grid grid-cols-2 gap-3">
+                  <div className="p-3 rounded-lg bg-white/5 border border-white/10">
+                    <p className="text-xs text-white/40 uppercase mb-1">📸 Фото</p>
+                    <p className="text-xl font-bold text-white">{quotaBalance.image?.total ?? 0}</p>
+                    <p className="text-[10px] text-white/30">Базовые: {quotaBalance.image?.primary ?? 0} | Доп: {quotaBalance.image?.extra ?? 0}</p>
+                  </div>
+                  <div className="p-3 rounded-lg bg-white/5 border border-white/10">
+                    <p className="text-xs text-white/40 uppercase mb-1">🎬 Видео</p>
+                    <p className="text-xl font-bold text-white">{quotaBalance.video?.total ?? 0}</p>
+                    <p className="text-[10px] text-white/30">Базовые: {quotaBalance.video?.primary ?? 0} | Доп: {quotaBalance.video?.extra ?? 0}</p>
+                  </div>
+                  <div className="p-3 rounded-lg bg-white/5 border border-white/10">
+                    <p className="text-xs text-white/40 uppercase mb-1">🎵 Музыка</p>
+                    <p className="text-xl font-bold text-white">{quotaBalance.music?.total ?? 0}</p>
+                    <p className="text-[10px] text-white/30">Базовые: {quotaBalance.music?.primary ?? 0} | Доп: {quotaBalance.music?.extra ?? 0}</p>
+                  </div>
+                  <div className="p-3 rounded-lg bg-white/5 border border-white/10">
+                    <p className="text-xs text-white/40 uppercase mb-1">💬 Текст</p>
+                    <p className="text-xl font-bold text-white">{quotaBalance.text?.total ?? 0}</p>
+                    <p className="text-[10px] text-white/30">Базовые: {quotaBalance.text?.primary ?? 0} | Доп: {quotaBalance.text?.extra ?? 0}</p>
+                  </div>
+                </div>
+
+                <div className="border-t border-white/10 pt-3 space-y-3">
+                  <p className="text-sm font-bold text-white/80">Добавить генерации</p>
+                  <div>
+                    <label className="text-xs text-white/40 uppercase tracking-wider">Категория</label>
+                    <select
+                      value={addQuotaCategory}
+                      onChange={(e) => setAddQuotaCategory(e.target.value)}
+                      className="w-full mt-1 px-3 py-2 rounded-xl bg-white/5 border border-white/10 text-white text-sm"
+                    >
+                      <option value="image">📸 Фото</option>
+                      <option value="video">🎬 Видео</option>
+                      <option value="music">🎵 Музыка</option>
+                      <option value="text">💬 Текст</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label className="text-xs text-white/40 uppercase tracking-wider">Количество</label>
+                    <input
+                      type="number"
+                      value={addQuotaAmount}
+                      onChange={(e) => setAddQuotaAmount(Number(e.target.value))}
+                      min={1}
+                      className="w-full mt-1 px-3 py-2 rounded-xl bg-white/5 border border-white/10 text-white text-sm"
+                    />
+                  </div>
+                  <Button onClick={addQuota} disabled={quotaLoading} className="w-full">
+                    {quotaLoading ? 'Добавляем...' : 'Добавить генерации'}
+                  </Button>
+                </div>
+              </div>
+            )}
+
+            <Button variant="outline" onClick={() => { setQuotaUser(null); setQuotaBalance(null); setMsg('') }} className="w-full border-white/10">
+              Закрыть
+            </Button>
           </div>
         </div>
       )}
