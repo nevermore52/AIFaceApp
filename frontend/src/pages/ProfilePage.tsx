@@ -142,9 +142,10 @@ export function ProfilePage() {
     }
   }
 
-  const handleLinkGoogle = () => {
-    window.location.href = `${API_BASE_URL}/auth/google?link_token=${accessToken}`
-  }
+  // Google OAuth временно отключен (новый закон РФ)
+  // const handleLinkGoogle = () => {
+  //   window.location.href = `${API_BASE_URL}/auth/google?link_token=${accessToken}`
+  // }
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()

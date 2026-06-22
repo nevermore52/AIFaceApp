@@ -103,10 +103,11 @@ export function LoginPage() {
     }
   }
 
-  const handleGoogleLogin = () => {
-    sessionStorage.setItem('post_login_redirect', redirectTo)
-    window.location.href = `${API_BASE_URL}/auth/google`
-  }
+  // Google OAuth временно отключен (новый закон РФ)
+  // const handleGoogleLogin = () => {
+  //   sessionStorage.setItem('post_login_redirect', redirectTo)
+  //   window.location.href = `${API_BASE_URL}/auth/google`
+  // }
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-[#030303] relative overflow-hidden p-4">
