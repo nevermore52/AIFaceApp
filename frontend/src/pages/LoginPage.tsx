@@ -200,6 +200,8 @@ export function LoginPage() {
             </p>
           )}
           
+          {/* Google OAuth временно отключен (новый закон РФ) */}
+          {/* 
           <div className="relative py-2">
             <div className="absolute inset-0 flex items-center">
               <span className="w-full border-t border-white/5" />
@@ -234,6 +236,7 @@ export function LoginPage() {
             </svg>
             Продолжить с Google
           </Button>
+          */}
 
           <p className="text-center text-[10px] text-white/20 px-6 leading-relaxed">
             Авторизуясь в сервисе, вы подтверждаете свое согласие с нашими 

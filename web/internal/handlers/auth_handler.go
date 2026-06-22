@@ -1,10 +1,7 @@
 package handlers
 
 import (
-	"context"
-	"encoding/json"
 	"net/http"
-	"strings"
 
 	"telegram-ai-face-bot/web/internal/config"
 	"telegram-ai-face-bot/web/internal/models"
@@ -12,33 +9,38 @@ import (
 	"telegram-ai-face-bot/web/internal/services"
 
 	"github.com/gin-gonic/gin"
-	"golang.org/x/oauth2"
-	"golang.org/x/oauth2/google"
+	// Google OAuth временно отключен (новый закон РФ)
+	// "context"
+	// "encoding/json"
+	// "strings"
+	// "golang.org/x/oauth2"
+	// "golang.org/x/oauth2/google"
 )
 
 type AuthHandler struct {
-	authService   *services.AuthService
-	cfg           *config.Config
-	googleOAuth   *oauth2.Config
+	authService *services.AuthService
+	cfg         *config.Config
+	// googleOAuth   *oauth2.Config
 	authTokenRepo *repository.AuthTokenRepository
 }
 
 func NewAuthHandler(authService *services.AuthService, cfg *config.Config, authTokenRepo *repository.AuthTokenRepository) *AuthHandler {
-	var googleOAuth *oauth2.Config
-	if cfg.GoogleClientID != "" && cfg.GoogleClientSecret != "" {
-		googleOAuth = &oauth2.Config{
-			ClientID:     cfg.GoogleClientID,
-			ClientSecret: cfg.GoogleClientSecret,
-			RedirectURL:  cfg.GoogleRedirectURL,
-			Scopes:       []string{"email", "profile"},
-			Endpoint:     google.Endpoint,
-		}
-	}
+	// var googleOAuth *oauth2.Config
+	// Google OAuth временно отключен (новый закон РФ)
+	// if cfg.GoogleClientID != "" && cfg.GoogleClientSecret != "" {
+	// 	googleOAuth = &oauth2.Config{
+	// 		ClientID:     cfg.GoogleClientID,
+	// 		ClientSecret: cfg.GoogleClientSecret,
+	// 		RedirectURL:  cfg.GoogleRedirectURL,
+	// 		Scopes:       []string{"email", "profile"},
+	// 		Endpoint:     google.Endpoint,
+	// 	}
+	// }
 
 	return &AuthHandler{
-		authService:   authService,
-		cfg:           cfg,
-		googleOAuth:   googleOAuth,
+		authService: authService,
+		cfg:         cfg,
+		// googleOAuth:   googleOAuth,
 		authTokenRepo: authTokenRepo,
 	}
 }
@@ -132,97 +134,94 @@ func (h *AuthHandler) TelegramMiniAppLogin(c *gin.Context) {
 	})
 }
 
+// Google OAuth временно отключен (новый закон РФ)
 func (h *AuthHandler) GoogleLogin(c *gin.Context) {
-	if h.googleOAuth == nil {
-		c.JSON(http.StatusNotImplemented, gin.H{"error": "Google OAuth not configured"})
-		return
-	}
+	c.JSON(http.StatusNotImplemented, gin.H{"error": "Google OAuth temporarily disabled"})
+	return
 
-	state := "login"
-	if linkToken := c.Query("link_token"); linkToken != "" {
-		state = "link:" + linkToken
-	}
-	url := h.googleOAuth.AuthCodeURL(state, oauth2.AccessTypeOffline)
-	c.Redirect(http.StatusTemporaryRedirect, url)
+	// if h.googleOAuth == nil {
+	// 	c.JSON(http.StatusNotImplemented, gin.H{"error": "Google OAuth not configured"})
+	// 	return
+	// }
+	// state := "login"
+	// if linkToken := c.Query("link_token"); linkToken != "" {
+	// 	state = "link:" + linkToken
+	// }
+	// url := h.googleOAuth.AuthCodeURL(state, oauth2.AccessTypeOffline)
+	// c.Redirect(http.StatusTemporaryRedirect, url)
 }
 
+// Google OAuth временно отключен (новый закон РФ)
 func (h *AuthHandler) GoogleCallback(c *gin.Context) {
-	if h.googleOAuth == nil {
-		c.JSON(http.StatusNotImplemented, gin.H{"error": "Google OAuth not configured"})
-		return
-	}
+	c.JSON(http.StatusNotImplemented, gin.H{"error": "Google OAuth temporarily disabled"})
+	return
 
-	code := c.Query("code")
-	if code == "" {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "Code is required"})
-		return
-	}
-
-	token, err := h.googleOAuth.Exchange(context.Background(), code)
-	if err != nil {
-		c.JSON(http.StatusUnauthorized, gin.H{"error": "Failed to exchange token"})
-		return
-	}
-
-	client := h.googleOAuth.Client(context.Background(), token)
-	resp, err := client.Get("https://www.googleapis.com/oauth2/v2/userinfo")
-	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to get user info"})
-		return
-	}
-	defer resp.Body.Close()
-
-	var userInfo struct {
-		Email      string `json:"email"`
-		Name       string `json:"name"`
-		GivenName  string `json:"given_name"`
-		FamilyName string `json:"family_name"`
-		Picture    string `json:"picture"`
-	}
-	if err := json.NewDecoder(resp.Body).Decode(&userInfo); err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to parse user info"})
-		return
-	}
-
-	var avatarURL *string
-	if userInfo.Picture != "" {
-		avatarURL = &userInfo.Picture
-	}
-
-	// Check if this is an account-linking flow
-	state := c.Query("state")
-	if strings.HasPrefix(state, "link:") {
-		linkToken := strings.TrimPrefix(state, "link:")
-		linkUser, err := h.authService.ValidateToken(linkToken)
-		if err != nil {
-			c.Redirect(http.StatusTemporaryRedirect, h.cfg.FrontendURL+"/profile?link_error=auth")
-			return
-		}
-		if err := h.authService.LinkGoogleAccount(linkUser.ID, userInfo.Email); err != nil {
-			c.Redirect(http.StatusTemporaryRedirect, h.cfg.FrontendURL+"/profile?link_error=conflict")
-			return
-		}
-		c.Redirect(http.StatusTemporaryRedirect, h.cfg.FrontendURL+"/profile?linked=google")
-		return
-	}
-
-	user, accessToken, refreshToken, err := h.authService.LoginWithGoogle(
-		userInfo.Email,
-		userInfo.GivenName,
-		userInfo.FamilyName,
-		avatarURL,
-		c.GetHeader("User-Agent"),
-		c.ClientIP(),
-	)
-	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Login failed", "details": err.Error()})
-		return
-	}
-
-	redirectURL := h.cfg.FrontendURL + "/auth/callback?token=" + accessToken + "&refresh=" + refreshToken
-	c.Redirect(http.StatusTemporaryRedirect, redirectURL)
-
-	_ = user
+	// if h.googleOAuth == nil {
+	// 	c.JSON(http.StatusNotImplemented, gin.H{"error": "Google OAuth not configured"})
+	// 	return
+	// }
+	// code := c.Query("code")
+	// if code == "" {
+	// 	c.JSON(http.StatusBadRequest, gin.H{"error": "Code is required"})
+	// 	return
+	// }
+	// token, err := h.googleOAuth.Exchange(context.Background(), code)
+	// if err != nil {
+	// 	c.JSON(http.StatusUnauthorized, gin.H{"error": "Failed to exchange token"})
+	// 	return
+	// }
+	// client := h.googleOAuth.Client(context.Background(), token)
+	// resp, err := client.Get("https://www.googleapis.com/oauth2/v2/userinfo")
+	// if err != nil {
+	// 	c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to get user info"})
+	// 	return
+	// }
+	// defer resp.Body.Close()
+	// var userInfo struct {
+	// 	Email      string `json:"email"`
+	// 	Name       string `json:"name"`
+	// 	GivenName  string `json:"given_name"`
+	// 	FamilyName string `json:"family_name"`
+	// 	Picture    string `json:"picture"`
+	// }
+	// if err := json.NewDecoder(resp.Body).Decode(&userInfo); err != nil {
+	// 	c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to parse user info"})
+	// 	return
+	// }
+	// var avatarURL *string
+	// if userInfo.Picture != "" {
+	// 	avatarURL = &userInfo.Picture
+	// }
+	// state := c.Query("state")
+	// if strings.HasPrefix(state, "link:") {
+	// 	linkToken := strings.TrimPrefix(state, "link:")
+	// 	linkUser, err := h.authService.ValidateToken(linkToken)
+	// 	if err != nil {
+	// 		c.Redirect(http.StatusTemporaryRedirect, h.cfg.FrontendURL+"/profile?link_error=auth")
+	// 		return
+	// 	}
+	// 	if err := h.authService.LinkGoogleAccount(linkUser.ID, userInfo.Email); err != nil {
+	// 		c.Redirect(http.StatusTemporaryRedirect, h.cfg.FrontendURL+"/profile?link_error=conflict")
+	// 		return
+	// 	}
+	// 	c.Redirect(http.StatusTemporaryRedirect, h.cfg.FrontendURL+"/profile?linked=google")
+	// 	return
+	// }
+	// user, accessToken, refreshToken, err := h.authService.LoginWithGoogle(
+	// 	userInfo.Email,
+	// 	userInfo.GivenName,
+	// 	userInfo.FamilyName,
+	// 	avatarURL,
+	// 	c.GetHeader("User-Agent"),
+	// 	c.ClientIP(),
+	// )
+	// if err != nil {
+	// 	c.JSON(http.StatusInternalServerError, gin.H{"error": "Login failed", "details": err.Error()})
+	// 	return
+	// }
+	// redirectURL := h.cfg.FrontendURL + "/auth/callback?token=" + accessToken + "&refresh=" + refreshToken
+	// c.Redirect(http.StatusTemporaryRedirect, redirectURL)
+	// _ = user
 }
 
 type RefreshRequest struct {
@@ -441,30 +440,29 @@ func (h *AuthHandler) CreateLinkToken(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"token": t.Token})
 }
 
-// LinkGoogleAccount links a Google account to the current authenticated user
+// LinkGoogleAccount временно отключен (новый закон РФ)
 func (h *AuthHandler) LinkGoogleAccount(c *gin.Context) {
-	user, exists := c.Get("user")
-	if !exists {
-		c.JSON(http.StatusUnauthorized, gin.H{"error": "Not authenticated"})
-		return
-	}
+	c.JSON(http.StatusNotImplemented, gin.H{"error": "Google OAuth temporarily disabled"})
+	return
 
-	u := user.(*models.User)
-
-	var req struct {
-		Email string `json:"email" binding:"required"`
-	}
-	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid request"})
-		return
-	}
-
-	if err := h.authService.LinkGoogleAccount(u.ID, req.Email); err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to link Google account", "details": err.Error()})
-		return
-	}
-
-	c.JSON(http.StatusOK, gin.H{
-		"message": "Google account linked successfully",
-	})
+	// user, exists := c.Get("user")
+	// if !exists {
+	// 	c.JSON(http.StatusUnauthorized, gin.H{"error": "Not authenticated"})
+	// 	return
+	// }
+	// u := user.(*models.User)
+	// var req struct {
+	// 	Email string `json:"email" binding:"required"`
+	// }
+	// if err := c.ShouldBindJSON(&req); err != nil {
+	// 	c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid request"})
+	// 	return
+	// }
+	// if err := h.authService.LinkGoogleAccount(u.ID, req.Email); err != nil {
+	// 	c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to link Google account", "details": err.Error()})
+	// 	return
+	// }
+	// c.JSON(http.StatusOK, gin.H{
+	// 	"message": "Google account linked successfully",
+	// })
 }

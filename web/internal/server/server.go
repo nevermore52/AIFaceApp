@@ -120,8 +120,9 @@ func New(cfg *config.Config, db *sql.DB) *Server {
 			auth.POST("/telegram/web-token", authHandler.CreateWebToken)
 			auth.GET("/telegram/web-token/:token/status", authHandler.GetWebTokenStatus)
 			auth.POST("/telegram/web-token/confirm", authHandler.ConfirmWebToken)
-			auth.GET("/google", authHandler.GoogleLogin)
-			auth.GET("/google/callback", authHandler.GoogleCallback)
+			// Google OAuth временно отключен (новый закон РФ)
+			// auth.GET("/google", authHandler.GoogleLogin)
+			// auth.GET("/google/callback", authHandler.GoogleCallback)
 			auth.POST("/refresh", authHandler.RefreshToken)
 			auth.POST("/logout", authMiddleware.RequireAuth(), authHandler.Logout)
 		}

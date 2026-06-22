@@ -389,7 +389,8 @@ export function ProfilePage() {
                     {tgLinkStatus === 'error' && <p className="text-[10px] text-red-400/70 mt-2">Время вышло. Попробуйте ещё раз.</p>}
                   </div>
 
-                  {/* Google */}
+                  {/* Google OAuth временно отключен (новый закон РФ) */}
+                  {/* 
                   <div className="p-4 rounded-2xl border border-white/5 bg-white/[0.03] hover:bg-white/[0.05] transition-all group">
                     <div className="flex items-center justify-between">
                       <div className="flex items-center gap-3">
@@ -413,6 +414,7 @@ export function ProfilePage() {
                       )}
                     </div>
                   </div>
+                  */}
                 </CardContent>
               </Card>
             </div>
