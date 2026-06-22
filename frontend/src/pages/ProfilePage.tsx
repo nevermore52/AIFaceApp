@@ -1,6 +1,8 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
 import { useAuthStore } from '../store/auth'
-import { userApi, authApi, promoApi, API_BASE_URL } from '../lib/api'
+import { userApi, authApi, promoApi } from '../lib/api'
+// Google OAuth временно отключен (новый закон РФ)
+// import { API_BASE_URL } from '../lib/api'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../components/ui/card'
 import { Button } from '../components/ui/button'
 import { Copy, Check, Users, Shield, FileImage, Music, Video, MessageSquare, ChevronRight, ChevronLeft, History } from 'lucide-react'
@@ -28,7 +30,9 @@ interface Generation {
 type Tab = 'profile' | 'history' | 'partnership' | 'promo'
 
 export function ProfilePage() {
-  const { user, updateUser, accessToken } = useAuthStore()
+  const { user, updateUser } = useAuthStore()
+  // Google OAuth временно отключен (новый закон РФ)
+  // const { accessToken } = useAuthStore()
   const [searchParams, setSearchParams] = useSearchParams()
   const navigate = useNavigate()
 
